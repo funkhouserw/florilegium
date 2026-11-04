@@ -435,10 +435,30 @@ Preview without TeX: `lua5.4 svg.lua --theme cattree --seed N [--textend 100mm]`
 PNGs via `tools/cattree/render.sh` / `montage.sh` (headless Chrome). Lua 5.4 is
 `/opt/homebrew/opt/lua@5.4/bin/lua5.4`; fontTools is in `scratch/venv`.
 
+## Pieces shown regularly (done 2026-11-04, uncommitted)
+
+Stairs, ramps, rings, condo variety and cats in bubbles now appear often; a walkway's foot may rest on its
+start. The user loves the busy zigzag climbs (keep them), wanted far fewer railings (capped at one a page,
+two on wide pages), and is fine with fewer hexagons. Count with a wrapper over `C.stairs` etc. across seeds.
+
+## Pinned: old cats (2026-11-04)
+
+`theme-oldcats.lua` (poses, genes, styles fur / wash / gesture, tools/oldcats/) is kept but paused. The
+user finds the cats "chunky": every cat is built from tubes. The proposed fix, not started: trace 20-40
+generated or hand-made drawings into silhouette and region curves as templates, and drive the styles from
+those. Do not trace the reference artists' work (scratch/oldcats-refs).
+
 ## Later (not started)
 
-- **Trees with cats in them** (next, ideas discussed 2026-11-04): big barky oaks, very verdant, lots
-  of layered foliage with things peeking out from behind it. Not started.
+- **Trees with cats in them** (started 2026-11-04, `theme-oak.lua`): one huge oak first, later the baobab and the
+  paper birch copse were cancelled by the user (2026-11-04). Character over species
+  accuracy; very verdant, layered foliage, things peeking from behind it.
+  Green is the default, blue one setting away. So far: `M.skeleton` (space colonization, pipe model),
+  `M.limb` (lit plates, knots, burls in the bark), `M.clump`, `M.nest`, `M.sprig`, `M.tree`;
+  `lua5.4 tools/trees/oak.lua NAME W H SEED [green|blue]`. To do: file size (about 10 MB of drawing,
+  bark about half), roots below the ground line, back foliage's blobby edge, cat contrast, keep-outs
+  and the studio.
+- **Studio exports:** images, SVG and PDF, with selectable text in the PDF if possible.
 - **Vector PDF from the studio:** ink.lua already writes PDF operators, so the gym's streams could
   go straight into a page with pdf-lib (ExtGState for opacity and multiply) instead of images.
   Not tried.

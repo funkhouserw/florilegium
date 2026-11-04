@@ -2,7 +2,7 @@
 // requires) in wasmoon, Lua 5.4 compiled to WebAssembly, as web/worker.js does for the playground.
 const WASMOON = 'https://cdn.jsdelivr.net/npm/wasmoon@1.16.0/dist/'
 importScripts(WASMOON + 'index.js')
-const MODULES = ['ink', 'flora', 'svg', 'theme-cattree', 'scene']
+const MODULES = ['ink', 'flora', 'svg', 'theme-cattree', 'theme-oak', 'theme-oldcats', 'grow', 'scene']
 
 const ready = (async () => {
   const factory = new self.wasmoon.LuaFactory(WASMOON + 'glue.wasm')
@@ -22,7 +22,8 @@ const num = (v) => (Number.isFinite(v) ? String(v) : '0')
 function literal(o) {
   const keep = (o.keepouts || []).map((q) => '{ ' + q.map(num).join(', ') + ' }').join(', ')
   return `{ w = ${num(o.w)}, h = ${num(o.h)}, seed = ${num(Math.round(o.seed))}, cats = ${num(Math.round(o.cats))},
-    size = ${num(o.size)}, density = ${num(o.density)}, id = "p${num(Math.round(o.index))}-", keepouts = { ${keep} } }`
+    size = ${num(o.size)}, density = ${num(o.density)}, id = "p${num(Math.round(o.index))}-",
+    grows = "${o.grows === 'oak' ? 'oak' : o.grows === 'cats' ? 'cats' : 'gym'}", ink = "${o.ink === 'blue' ? 'blue' : 'green'}", keepouts = { ${keep} } }`
 }
 
 self.onmessage = async (e) => {

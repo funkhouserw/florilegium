@@ -190,6 +190,7 @@ function M.get_lift() return lift end
 -- paint everything paler: tone t -> t + (1-t)*v, accents mixed toward white as much.
 -- Only the color: the level of detail still follows the ghost's lift alone.
 function M.set_pale(v) local old = pale pale = v return old end
+function M.get_pale() return pale end
 
 -- ---------------------------------------------------------------- transforms
 -- an affine map {a,b,c,d,e,f}: x' = a x + c y + e,  y' = b x + d y + f

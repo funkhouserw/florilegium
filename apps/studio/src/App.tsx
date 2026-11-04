@@ -39,6 +39,8 @@ export function App() {
   const [seed, setSeed] = useState(3)
   const [cats, setCats] = useState(2)
   const [pieces, setPieces] = useState(1.4)
+  const [grows, setGrows] = useState<'gym' | 'oak' | 'cats'>('gym')
+  const [inkName, setInkName] = useState<'green' | 'blue'>('blue')
   const S = SIZES[sizeKey]
   const W = S.w * CM, H = S.h * CM
   const [drawn, setDrawn] = useState<Box[][]>(() => [[startBox(W, H)]])
@@ -66,7 +68,7 @@ export function App() {
 
   // the gym's keep-outs: each box as far down as its text reaches, in cm, y up
   const requests = useMemo(() => pages.map((p, index) => ({
-    w: S.w, h: S.h, seed: seed + index * 101, cats, size: pieces, density: 1, index,
+    grows, ink: inkName, w: S.w, h: S.h, seed: seed + index * 101, cats, size: grows === 'gym' ? pieces : 1, density: 1, index,
     keepouts: p.boxes.map((b) => {
       const used = dragging ? b.h : p.lines.length ? (p.used.get(b.id) ?? 0) : b.h
       const h = used > 0 ? used : text.trim() === '' ? b.h : 0
@@ -74,7 +76,7 @@ export function App() {
       const pad = fontSize * 0.5                       // a little air around the text, and its descenders
       return [b.x - pad, H - (b.y + h + pad), b.x + b.w + pad, H - b.y + pad].map((v) => +(v / CM).toFixed(2))
     }).filter((q): q is number[] => q !== null),
-  })), [pages, S, seed, cats, pieces, H, text, dragging, fontSize])
+  })), [pages, S, seed, cats, pieces, H, text, dragging, fontSize, grows, inkName])
 
   const latest = useRef(requests)
   if (!dragging) latest.current = requests             // the gym regrows on release, not during a drag
@@ -92,7 +94,7 @@ export function App() {
           const svg = await growGym(r)
           if (!live) return
           setGyms((g) => ({ ...g, [r.index]: svg }))
-        } catch (e) { if (live) setError('The gym did not grow: ' + String(e)) }
+        } catch (e) { if (live) setError('It did not grow: ' + String(e)) }
       }
       if (live) setGrowing(false)
     }, 250)
@@ -121,9 +123,24 @@ export function App() {
   return (
     <div className="app">
       <aside className="panel">
-        <h1>Cat gym studio</h1>
+        <h1>Studio</h1>
         <label>Your post<textarea aria-label="Your post" value={text} onChange={(e) => setText(e.target.value)} /></label>
-        <p className="hint">Drag on a page to draw a text box. Drag a box to move it, its corner to resize. The gym regrows when you let go.</p>
+        <p className="hint">Drag on a page to draw a text box. Drag a box to move it, its corner to resize. It regrows when you let go.</p>
+        <div className="row">
+          <label>What grows
+            <select value={grows} onChange={(e) => { const g = e.target.value as 'gym' | 'oak' | 'cats'; setGrows(g); setInkName(g === 'oak' ? 'green' : 'blue') }}>
+              <option value="gym">Cat gym</option>
+              <option value="oak">One huge oak</option>
+              <option value="cats">Old cats</option>
+            </select>
+          </label>
+          <label>Ink
+            <select value={inkName} onChange={(e) => setInkName(e.target.value as 'green' | 'blue')}>
+              <option value="green">Green</option>
+              <option value="blue">Delft blue</option>
+            </select>
+          </label>
+        </div>
         <label>Size
           <select value={sizeKey} onChange={(e) => changeSize(e.target.value as SizeKey)}>
             {Object.entries(SIZES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -140,7 +157,7 @@ export function App() {
           <label>Piece size<input type="number" min={0.8} max={2.5} step={0.1} value={pieces} onChange={(e) => setPieces(Math.max(0.8, Math.min(2.5, +e.target.value || 1)))} /></label>
           <label>Seed<input type="number" min={1} value={seed} onChange={(e) => setSeed(Math.max(1, Math.round(+e.target.value) || 1))} /></label>
         </div>
-        <button onClick={() => setSeed((s) => s + 1)}>Grow another gym</button>
+        <button onClick={() => setSeed((s) => s + 1)}>Grow another</button>
         <button className="primary" disabled={!!busy} onClick={exportPngs}>Download PNGs</button>
         <button disabled={!!busy} onClick={exportPdf}>Download PDF</button>
         <p className="hint">{busy || `${pages.length} page${pages.length === 1 ? '' : 's'}. In the PDF the pages are images, so the text can't be selected.`}</p>

@@ -1,5 +1,6 @@
 // gym.ts -- asks the worker for a page's cat gym; one page at a time, the same request only once.
 export type GymRequest = {
+  grows: 'gym' | 'oak' | 'cats'; ink: 'green' | 'blue'
   w: number; h: number; seed: number; cats: number; size: number; density: number; index: number
   keepouts: number[][]
 }

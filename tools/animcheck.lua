@@ -24,6 +24,8 @@ local CASES = {
   { name = "density 0.05", density = 0.05 },
   { name = "math, marks", theme = "math", marks = { { kind = "heading", arg = 1, y = 20 }, { kind = "bloom", arg = "knot", y = 9 } } },
   { name = "math, mirrored, density 0.3", theme = "math", mirror = true, density = 0.3 },
+  { name = "oldcats, marks", theme = "oldcats", marks = { { kind = "heading", arg = 1, y = 20 }, { kind = "bloom", arg = "", y = 9 } } },
+  { name = "oldcats, mirrored, density 0.4", theme = "oldcats", mirror = true, density = 0.4 },
   { name = "cattree", theme = "cattree" },
   { name = "cattree, mirrored, density 0.4", theme = "cattree", mirror = true, density = 0.4 },
 }
