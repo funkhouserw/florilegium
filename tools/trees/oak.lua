@@ -12,7 +12,9 @@ ink.set_ink(INK[col][1] / 255, INK[col][2] / 255, INK[col][3] / 255)
 ink.set_transform(ink.page_transform())
 ink.record(true)
 local t0 = os.clock()
-local stats = O.tree(ink.rng(seed * 7919 + 13), { w = W, h = H, crown = os.getenv("CROWN"), bare = os.getenv("BARE") ~= nil, cats = os.getenv("BARE") and 0 or nil, eyes = os.getenv("BARE") and 0 or nil, nests = os.getenv("BARE") and 0 or nil, sprigs = os.getenv("BARE") and 0 or nil })
+local stats = O.tree(ink.rng(seed * 7919 + 13), { w = W, h = H, crown = os.getenv("CROWN"), season = os.getenv("SEASON"), spanishmoss = os.getenv("SPANISH") ~= nil, ink = col, bare = os.getenv("BARE") ~= nil, cats = os.getenv("BARE") and 0 or nil, eyes = os.getenv("BARE") and 0 or nil, nests = os.getenv("BARE") and 0 or nil, sprigs = os.getenv("BARE") and 0 or nil })
+for _, n in ipairs(O.last_stumps or {}) do io.stderr:write(string.format("stump at %.1f %.1f w %.2f\n", n.x, n.y, n.stump_w)) end
+io.stderr:write("snowman=" .. tostring(stats.snowman) .. " birds=" .. tostring(stats.birds) .. " swing=" .. tostring(stats.swing) .. " heart=" .. tostring(stats.heart) .. "\n")
 local rec = ink.take_recording()
 local sizes = {}
 for _, k in ipairs(rec.keys) do sizes[#sizes + 1] = k .. ":" .. (#table.concat(rec.layers[k], "\n") // 1024) .. "K" end

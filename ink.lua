@@ -147,6 +147,9 @@ function M.set_ink(r, g, b)
   build_ramp()
 end
 M.set_ink(0x24 / 255, 0x56 / 255, 0xC4 / 255)
+-- the current ramp, to come back to after painting in another hue
+function M.get_ramp() local r = {} for i = 0, 100 do r[i] = ramp[i] end return r end
+function M.use_ramp(r) ramp = r end
 
 local accent = { 0.71, 0.40, 0.18 }
 function M.set_accent(r, g, b) accent = { r, g, b } end

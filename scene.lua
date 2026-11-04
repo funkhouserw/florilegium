@@ -8,7 +8,7 @@
 -- w, h: the page in cm; keepouts: boxes the gym stays out of, in page cm, y up; size: how
 -- large the pieces are (the gym is planned in a frame 1/size as large and scaled up, so
 -- larger pieces also mean fewer of them); density 0..1; background "rrggbb", or none;
--- grows: "gym" (default), "oak" (one huge oak) or "cats" (old cats, filling it); ink: "green" or "blue" (oak: green by default); crown: "lush" (default) or "open" (oak: limbs show).
+-- grows: "gym" (default), "oak" (one huge oak) or "cats" (old cats, filling it); ink: "green" or "blue" (oak: green by default); crown: "lush" (default) or "open" (oak: limbs show); season: "spring", "summer", "autumn", "winter" or "dead"; spanishmoss; swing, heart = false to leave out; stumps: how many cut limbs.
 local M = {}
 
 function M.page(o)
@@ -36,7 +36,7 @@ function M.page(o)
       return
     end
     if o.grows == "oak" then
-      require("theme-oak").tree(ink.rng((o.seed or 1) * 7919 + 13), { w = fw, h = fh, keepouts = keep, cats = o.cats, eyes = o.cats == 0 and 0 or nil, crown = o.crown })
+      require("theme-oak").tree(ink.rng((o.seed or 1) * 7919 + 13), { w = fw, h = fh, keepouts = keep, cats = o.cats, eyes = o.cats == 0 and 0 or nil, crown = o.crown, season = o.season, spanishmoss = o.spanishmoss, extras = o.extras, swing = o.swing, heart = o.heart, stumps = o.stumps, ink = o.ink })
       ink.flush()
       return
     end

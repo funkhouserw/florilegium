@@ -472,3 +472,7 @@ those. Do not trace the reference artists' work (scratch/oldcats-refs).
 - How many standard sizes for cross-sections (2 or 3)?
 - Should the footer always be a bridge, or vary with the family?
 - Cat colors (later): all cobalt, or tabby, black and calico in tones of blue?
+
+## Oak settings
+
+`scene.page{ grows = "oak", ... }`: `crown` = lush | open; `season` = spring | summer | autumn | winter | dead (each with its own extras: pumpkins, bats and wind; icicles, robins, holly, snow piles and a snowman; crows and bats); `spanishmoss`; `swing = false`, `heart = false`, `extras = false`, `stumps = n`. A cut limb is drawn side-on, like everything else: a rolled collar and a sliver of the cut, never rings facing the viewer.

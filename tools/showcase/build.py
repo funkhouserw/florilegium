@@ -130,7 +130,23 @@ h2 { font-size: 17pt; line-height: 1.2; margin: 0 0 0.6em; font-weight: bold }
 .letter { aspect-ratio: 1 }
 .thumb { position: relative; aspect-ratio: 8.5 / 11; outline: 0.5pt solid #b9bfd4 }
 """
-for name, pages in (('cat-trees', gym_pdf()), ('oak-trees', oak_pdf())):
+def seasons_pdf():
+    P = []
+    for sv, cap in (('sn-spring', 'Spring'), ('sn-summer', 'Summer'), ('sn-autumn', 'Autumn'), ('sn-winter', 'Winter'), ('sn-dead', 'Dead'),
+                    ('sn-moss', 'Spanish moss'), ('sn-moss-open', 'Spanish moss, open crown'), ('sn-moss-winter', 'Spanish moss in winter'), ('sn-moss-dead', 'Spanish moss on the dead tree'),
+                    ('sn-autumn-open', 'Autumn, open crown'), ('sn-autumn-blue', 'Autumn, in Delft blue'), ('sn-winter-blue', 'Winter, in Delft blue'), ('sn-dead-blue', 'Dead, in Delft blue')):
+        P.append(page(art(sv), caption(cap), cls='plain'))
+    cm = 72 / 2.54
+    def crop(sv, x, top, w, cap):
+        return page(art(sv, viewbox=f'{x * cm:.1f} {top * cm:.1f} {w * cm:.1f} {w * 1.294 * cm:.1f}'), caption(cap), cls='plain')
+    P.append(crop('sn-winter', 1.2, 9, 7, 'Close up: a limb cut long ago, wound wood rolling in, shoots going straight up'))
+    P.append(crop('sn-winter', 11.7, 15.5, 9.6, 'Close up: a snowman, and icicles on the swing'))
+    P.append(crop('sn-winter', 0, 15.5, 9.6, 'Close up: holly in the snow'))
+    P.append(crop('sn-autumn', 0, 15.5, 9.6, 'Close up: pumpkins, one carved, and fallen leaves'))
+    P.append(crop('sn-summer', 5, 15, 9.6, 'Close up: the swing, and a heart in the bark'))
+    P.append(crop('sn-dead', 3, 15, 9.6, 'Close up: bark falling away, shelf fungus'))
+    return P
+for name, pages in (('cat-trees', gym_pdf()), ('oak-trees', oak_pdf()), ('oak-seasons', seasons_pdf())):
     html = f'<!doctype html><html><head><meta charset="utf-8"><title>{name}</title><style>{STYLE}</style></head><body>{"".join(pages)}</body></html>'
     (ROOT / f'build/showcase/{name}.html').write_text(html)
     print(name, len(pages), 'pages', len(html) // (1024 * 1024), 'MB html')
