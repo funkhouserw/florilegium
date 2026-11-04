@@ -1189,6 +1189,227 @@ function M.beard(rng, x, y, L, w)
   end
 end
 
+-- ---------------------------------------------------------------- seasonal letters
+-- Set the ink for a season (a blue page stays blue). Call it before initial.draw, so tile and letter agree.
+function M.season_ink(season, blue)
+  local S = M.SEASONS[season or "summer"] or M.SEASONS.summer
+  local c = S.bark and not blue and S.bark or (blue and { 0x24, 0x56, 0xC4 } or { 0x2F, 0x6B, 0x4F })
+  ink.set_ink(c[1] / 255, c[2] / 255, c[3] / 255)
+end
+-- A decorate hook for initial.draw: the letter is the tree. Its shape is filled with the oak's bark,
+-- a crown (or bare twigs) grows from its top, and the season dresses it as it dresses the big tree.
+-- o: blue, moss.
+function M.initial_for(season, o)
+  o = o or {}
+  season = season or "summer"
+  local S = M.SEASONS[season] or M.SEASONS.summer
+  return function(c)
+    local rng, TS, m, cell = c.rng, c.S, c.m, c.cell
+    local function U(k) return k * TS end
+    local bark_ramp = ink.get_ramp()
+    local function ramp_of(col)
+      ink.use_ramp(ink.get_ramp())
+      ink.set_ink(col[1] / 255, col[2] / 255, col[3] / 255)
+      local r = ink.get_ramp()
+      ink.use_ramp(bark_ramp)
+      return r
+    end
+    local hues = {}
+    if not o.blue or season == "autumn" then
+      for i, col in ipairs(S.leaves or {}) do hues[i] = ramp_of(col) end
+    end
+    local function leaf_ramp() if hues[1] then ink.use_ramp(hues[rng.int(1, #hues)]) end end
+    local old = ink.layer(5)
+    -- bark, inside the letter
+    c.trace() ink.clip()
+    M.limb(rng.fork(), { { U(0.5), -U(0.1) }, { U(0.5), U(0.5) }, { U(0.5), U(1.1) } }, function() return U(1.3) end,
+      { plate = U(0.034), stretch = 3.2, rough = 0.01, moss = 0.04, detail = 9, tone = 0.5, peel = S.peel, flat = false })
+    ink.unclip()
+    c.trace() ink.stroke(tone(0.04), 0.5, 0.85)
+    -- the letter's top edge, column by column, and the undersides of its strokes
+    local cols, under = {}, {}
+    local N = 36
+    for i = 0, N - 1 do
+      local x = (i + 0.5) * cell
+      local was = false
+      for j = N - 1, 0, -1 do
+        local y = (j + 0.5) * cell
+        local now = c.inside(x, y)
+        if now and not was and not cols[i] then cols[i] = y + cell * 0.5 end
+        if was and not now then under[#under + 1] = { x, y + cell * 0.5, i } end
+        was = now
+      end
+    end
+    local tops = {}
+    for i = 0, N - 1 do if cols[i] then tops[#tops + 1] = { (i + 0.5) * cell, cols[i], i } end end
+    -- stay inside the tile's frame
+    local f = m * 0.5
+    ink.poly({ { f, f }, { TS - f, f }, { TS - f, TS - f }, { f, TS - f } }, true) ink.clip()
+    local foot = U(0.135)
+    -- twigs from the top of the letter, up into the crown
+    local function twig(x, y, a, L, w, depth)
+      local x1, y1 = x + L * cos(a), y + L * sin(a)
+      local b = rng.sym(L * 0.14)
+      streak3(x, y, x + L * 0.33 * cos(a) - b * sin(a), y + L * 0.33 * sin(a) + b * cos(a), x + L * 0.66 * cos(a) + b * sin(a), y + L * 0.66 * sin(a) - b * cos(a), x1, y1, w, w * 0.5, tone(0.12))
+      if depth > 0 then
+        twig(x1, y1, a + rng.range(0.25, 0.6), L * rng.range(0.6, 0.8), w * 0.62, depth - 1)
+        twig(x1, y1, a - rng.range(0.25, 0.6), L * rng.range(0.6, 0.8), w * 0.62, depth - 1)
+      end
+    end
+    local leafless = S.bare
+    local nt = #tops
+    if nt > 0 then
+      local groups = {}
+      for k = 1, 5 do groups[k] = tops[max(1, min(nt, floor(nt * (k - 0.5) / 5) + 1))] end
+      for k, q in ipairs(groups) do
+        local a = pi / 2 + (k - 3) * 0.26 + rng.sym(0.12)
+        local depth = S.snap and 1 or (leafless and 3 or 2)
+        twig(q[1], q[2] - U(0.01), a, U(rng.range(0.06, 0.09)), U(0.012), depth)
+      end
+      if not leafless then
+        -- the crown: masses over the letter, back to front
+        local xs0, xs1 = tops[1][1], tops[nt][1]
+        local yt = 0
+        for _, q in ipairs(tops) do yt = max(yt, q[2]) end
+        for _, depth in ipairs({ "back", "mid", "front" }) do
+          local k_ = depth == "back" and 5 or (depth == "mid" and 5 or 4)
+          for i = 1, k_ do
+            local x_ = lerp(max(f + U(0.06), xs0 - U(0.06)), min(TS - f - U(0.06), xs1 + U(0.06)), (i - 0.5) / k_) + rng.sym(U(0.03))
+            local y_ = yt + U(depth == "back" and 0.12 or (depth == "mid" and 0.08 or 0.09)) + rng.sym(U(0.03))
+            leaf_ramp()
+            ink.push() ink.translate(x_, y_)
+            M.clump(rng.fork(), U(0.075) * (S.size or 1), depth, { n = (depth == "back" and 0.5 or 0.72) * (S.fill or 1), leaf = U(0.042) * (S.leaf or 1) })
+            ink.pop()
+            ink.use_ramp(bark_ramp)
+          end
+        end
+      end
+    end
+    -- the ground at the foot
+    if not S.snow then
+      for _ = 1, floor(26 * (S.grass or 1)) do
+        local x = rng.range(f, TS - f)
+        local h = U(rng.range(0.012, 0.035))
+        streak3(x, foot - U(0.02), x, foot - U(0.02) + h * 0.4, x + rng.sym(U(0.006)), foot - U(0.02) + h * 0.8, x + rng.sym(U(0.012)), foot - U(0.02) + h, U(0.006), U(0.0012), tone(rng.range(0.22, 0.6)))
+      end
+    end
+    -- a spot on the ground either side of the letter, if there is one
+    local function beside(r)
+      local xa, xb = TS, 0
+      for _, q in ipairs(tops) do xa, xb = min(xa, q[1]), max(xb, q[1]) end
+      local opts = {}
+      local xl = f + r + U(0.01)
+      local xr_ = TS - f - r - U(0.01)
+      if not c.inside(xl + r, foot + r) and not c.inside(xl, foot + r) then opts[#opts + 1] = xl end
+      if not c.inside(xr_ - r, foot + r) and not c.inside(xr_, foot + r) then opts[#opts + 1] = xr_ end
+      if #opts == 0 then return nil end
+      return opts[rng.int(1, #opts)]
+    end
+    if season == "spring" then
+      for _ = 1, 8 do
+        local x = rng.range(f + U(0.02), TS - f - U(0.02))
+        local h = U(rng.range(0.03, 0.055))
+        streak3(x, foot - U(0.02), x, foot, x, foot + h * 0.5, x, foot - U(0.02) + h, U(0.006), U(0.002), tone(0.3))
+        local col = rng.chance(0.5) and white or { 0.86, 0.72, 0.26 }
+        for k = 1, 5 do
+          local a = 2 * pi * k / 5
+          ink.circle(x + U(0.009) * cos(a), foot - U(0.02) + h + U(0.009) * sin(a), U(0.008)) ink.fill(col)
+          ink.circle(x + U(0.009) * cos(a), foot - U(0.02) + h + U(0.009) * sin(a), U(0.008)) ink.stroke(tone(0.4), 0.12)
+        end
+      end
+    elseif season == "summer" then
+      local q = rng.pick(tops)
+      for k = -1, 1 do
+        ink.push() ink.translate(q[1] + k * U(0.1), TS * 0.74) ink.rotate(rng.sym(14)) M.sprig(rng.fork(), U(0.05), { acorns = 2 }) ink.pop()
+      end
+    elseif season == "autumn" then
+      -- leaves on the ground and in the air, a pumpkin
+      for _ = 1, 16 do
+        leaf_ramp()
+        ink.push() ink.translate(rng.range(f, TS - f), foot - U(0.012) + rng.sym(U(0.008))) ink.rotate(rng.range(60, 120)) M.leaf(rng, U(0.038), { tone = rng.range(0.3, 0.62) }) ink.pop()
+        ink.use_ramp(bark_ramp)
+      end
+      for _ = 1, 8 do
+        local x_, y_ = rng.range(f + U(0.03), TS - f - U(0.03)), rng.range(foot + U(0.05), U(0.66))
+        if not c.inside(x_, y_) then
+          leaf_ramp()
+          ink.push() ink.translate(x_, y_) ink.rotate(rng.range(0, 360)) M.leaf(rng, U(0.036), { tone = rng.range(0.3, 0.62) }) ink.pop()
+          ink.use_ramp(bark_ramp)
+        end
+      end
+      local px = beside(U(0.055))
+      if px then
+        local orange = ramp_of({ 0xCC, 0x6E, 0x1C })
+        ink.use_ramp(orange)
+        ink.push() ink.translate(px, foot - U(0.03)) M.pumpkin(rng, U(0.055), rng.chance(0.6)) ink.pop()
+        ink.use_ramp(bark_ramp)
+      end
+    elseif season == "winter" then
+      -- snow along every level run of the letter's top, icicles under its strokes
+      local run = {}
+      local function flush_()
+        if #run >= 3 then
+          local top = {}
+          for i, q in ipairs(run) do
+            local e = max(0, sin(pi * (i - 1) / (#run - 1))) ^ 0.6
+            top[#top + 1] = { q[1], q[2] + U(0.03) * e }
+          end
+          local out = {}
+          for _, q in ipairs(top) do out[#out + 1] = q end
+          for i = #run, 1, -1 do out[#out + 1] = { run[i][1], run[i][2] - U(0.006) } end
+          ink.poly(out, true) ink.fill(white)
+          ink.smooth(top, false) ink.stroke(tone(0.62), 0.3)
+        end
+        run = {}
+      end
+      for i, q in ipairs(tops) do
+        if tops[i - 1] and abs(q[2] - tops[i - 1][2]) > cell * 1.4 then flush_() end
+        run[#run + 1] = q
+      end
+      flush_()
+      for _, q in ipairs(under) do
+        if q[2] > foot + U(0.03) and rng.chance(0.5) then
+          M.icicles(rng, q[1] - U(0.006), q[1] + U(0.006), q[2], U(0.05))
+        end
+      end
+      local top = {}
+      for i = 0, 16 do top[#top + 1] = { f + (TS - 2 * f) * i / 16, foot + U(0.012) * sin(i * 0.9) } end
+      local out = { { f, f } }
+      for _, q in ipairs(top) do out[#out + 1] = q end
+      out[#out + 1] = { TS - f, f }
+      ink.smooth(out, true) ink.fill(white)
+      ink.smooth(top, false) ink.stroke(tone(0.6), 0.35)
+      local hx = beside(U(0.075))
+      if hx then
+        local leafy = o.blue and bark_ramp or ramp_of({ 0x1F, 0x5C, 0x3A })
+        ink.use_ramp(leafy)
+        ink.push() ink.translate(hx, foot - U(0.005)) M.holly(rng, U(0.07), o.blue and ink.accent(0) or { 0.73, 0.1, 0.12 }) ink.pop()
+        ink.use_ramp(bark_ramp)
+      end
+      local q = tops[max(1, floor(nt * rng.range(0.25, 0.75)))]
+      if q then ink.push() ink.translate(q[1], q[2] + U(0.03)) M.perched(rng, U(0.13), rng.chance(0.5) and 1 or -1, "robin") ink.pop() end
+    elseif season == "dead" then
+      local q = tops[max(1, floor(nt * rng.range(0.25, 0.75)))]
+      if q then ink.push() ink.translate(q[1], q[2]) M.perched(rng, U(0.15), rng.chance(0.5) and 1 or -1, "crow") ink.pop() end
+      for _ = 1, 2 do
+        ink.push() ink.translate(rng.range(f + U(0.1), TS - f - U(0.1)), rng.range(U(0.8), TS - f - U(0.05))) ink.rotate(rng.sym(18)) M.bat(rng, U(0.11), rng.sym(1)) ink.pop()
+      end
+    end
+    -- Spanish moss from the undersides of the strokes
+    if o.moss then
+      local gm = ramp_of(o.blue and { 0x24, 0x56, 0xC4 } or { 0x6F, 0x7E, 0x70 })
+      ink.use_ramp(gm)
+      for _, q in ipairs(under) do
+        if q[2] > U(0.25) and rng.chance(0.55) then M.beard(rng, q[1], q[2], U(rng.range(0.08, 0.17)), U(0.022)) end
+      end
+      ink.use_ramp(bark_ramp)
+    end
+    ink.unclip()
+    ink.layer(old)
+    ink.use_ramp(bark_ramp)
+  end
+end
+
 -- a root running out from the flare, sinking into the ground
 local function O_root(M_, rng, x, y, sd, L, w, y0_, peel)
   local g_ = y0_ or y

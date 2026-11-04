@@ -720,6 +720,33 @@ local function hexpts(R)
   for k = 0, 5 do local a = k * 60 * rad p[#p + 1] = { R * cos(a), R * sin(a) } end
   return p
 end
+-- half the width of a doorway between hexagons: wide enough for a cat
+function M.hexdoor() return real(7.5) end
+-- The hexagons of a cluster, sh = { {x, y}, ... }: for number i, the walls it shares with its
+-- neighbors (a door in each, so a cat can walk the whole cluster) and one way out on a free side wall.
+function M.hex_ways(sh, i, Rh)
+  local doors, c = {}, sh[i]
+  for j, q in ipairs(sh) do
+    if j ~= i then
+      local dx, dy = q[1] - c[1], q[2] - c[2]
+      if dx * dx + dy * dy < (1.8 * Rh) ^ 2 * 1.05 then
+        doors[floor(((math.atan(dy, dx) / rad - 30) % 360) / 60 + 0.5) % 6] = true
+      end
+    end
+  end
+  local exits, best, score = {}, nil, -1
+  for k = 0, 5 do
+    if not doors[k] and k ~= 1 and k ~= 4 then
+      local clear = 9
+      for d = 0, 5 do
+        if doors[d] then clear = min(clear, min((k - d) % 6, (d - k) % 6)) end
+      end
+      if clear > score then best, score = k, clear end
+    end
+  end
+  if best then exits[best] = true end
+  return doors, exits
+end
 local WALL = { [0] = 0.64, 0.46, 0.52, 0.6, 0.8, 0.72 }   -- wall k runs from vertex k to k+1 (k=1 top, k=4 floor)
 function M.hex(rng, o)
   o = o or {}
@@ -731,11 +758,15 @@ function M.hex(rng, o)
   local fi, bk = hexpts(Ri), hexpts(Rb)
   plush(rng, bk, 0.86, { smooth = false, size = Rb * 0.5 })
   local cuts = rng.chance(0.5) and { [0] = true, [3] = true } or { [2] = true, [5] = true }
+  local doors = o.doors or {}
+  if o.doors then cuts = o.exits or {} end
   for k = 0, 5 do
     local i, j = k + 1, (k + 1) % 6 + 1
     local quad = { fi[i], fi[j], bk[j], bk[i] }
     plush(rng, quad, WALL[k] + rng.sym(0.03), { smooth = false, size = (Ri - Rb) * 0.6 })
-    if cuts[k] then
+    if doors[k] then
+      -- a doorway into the next hexagon: drawn with the frame, below (the wall only darkens toward it)
+    elseif cuts[k] then
       local cx = (fi[i][1] + fi[j][1] + bk[i][1] + bk[j][1]) / 4
       local cy = (fi[i][2] + fi[j][2] + bk[i][2] + bk[j][2]) / 4
       local ex, ey = fi[j][1] - fi[i][1], fi[j][2] - fi[i][2]
@@ -746,12 +777,35 @@ function M.hex(rng, o)
       ink.pop()
     end
   end
-  -- the cushion, along the floor near the back
+  -- the cushion, along the floor near the back (not over a way down)
   local fy = (fi[5][2] + bk[5][2]) / 2
-  plush(rng, soft(rng, 0, fy + 0.04 * u, (Ri + Rb) / 2 * 0.62, 0.25 * u, 0.05, 14), 0.93, { size = 0.1 * u })
+  if not doors[4] then plush(rng, soft(rng, 0, fy + 0.04 * u, (Ri + Rb) / 2 * 0.62, 0.25 * u, 0.05, 14), 0.93, { size = 0.1 * u }) end
   -- the front frame (the inner hexagon wound backward: a ring)
   plush(rng, { hexpts(R), reversed(fi) }, o.tone or 0.66, { smooth = false, size = b * 2, top = true })
   ink.poly(hexpts(R), true) ink.stroke(tone(0.12), 0.35, 0.6)
+  -- each doorway goes on through the frame, to the shared edge, where the neighbor's half meets it
+  for k = 0, 5 do
+    if doors[k] then
+      local a = (k * 60 + 30) * rad
+      local nx, ny, tx, ty = cos(a), sin(a), -sin(a), cos(a)
+      local d0, d1 = 0.866 * (Ri - (Ri - Rb) * 0.22), 0.866 * R + 0.01
+      local hw = M.hexdoor()
+      local function P(d, t) return { nx * d + tx * t, ny * d + ty * t } end
+      local dr = (Ri - Rb) * 0.26
+      -- the rounded inner end of the opening, on the wall
+      ink.push() ink.translate(nx * d0, ny * d0) ink.rotate(a / rad + 90) ink.scale(hw, dr)
+      ink.circle(0, 0, 1) ink.fill(tone(0.36))
+      ink.pop()
+      ink.poly({ P(d0, -hw), P(d1, -hw), P(d1, hw), P(d0, hw) }, true) ink.fill(tone(0.36))
+      -- the thickness of the wall: dark on the shaded side, catching the light on the other
+      local lit = (tx * -0.6 + ty * 0.8) > 0 and -hw or hw
+      ink.poly({ P(d0, lit), P(d1, lit), P(d1, lit * 0.8), P(d0, lit * 0.8) }, true) ink.fill(tone(0.62))
+      ink.poly({ P(d0, -lit), P(d1, -lit), P(d1, -lit * 0.86), P(d0, -lit * 0.86) }, true) ink.fill(tone(0.2))
+      ink.moveto(P(d0, -hw)[1], P(d0, -hw)[2]) ink.lineto(P(d1, -hw)[1], P(d1, -hw)[2])
+      ink.moveto(P(d0, hw)[1], P(d0, hw)[2]) ink.lineto(P(d1, hw)[1], P(d1, hw)[2])
+      ink.stroke(tone(0.12), 0.3, 0.6)
+    end
+  end
   local ports = {}
   for k = 0, 5 do
     local a = (k * 60 + 30) * rad
@@ -1682,8 +1736,9 @@ function M.compose(C, ink, seed, col, o)
           local yb = y + st
           if free(xs[i] + xa, y, xs[i] + xb, yb + h_ + ya, 0.02) then
             draw(4, at(xs[i], y, function(r) C.shelf(r, { kind = "bracket", w = 1.3 * Rh }) end))
-            for _, c_ in ipairs(sh) do
-              draw(4, at(xs[i] + c_[1], yb + h_ + c_[2], function(r) C.hex(r, { cluster = true }) end))
+            for ci_, c_ in ipairs(sh) do
+              local doors_, exits_ = C.hex_ways(sh, ci_, Rh)
+              draw(4, at(xs[i] + c_[1], yb + h_ + c_[2], function(r) C.hex(r, { doors = doors_, exits = exits_ }) end))
               spot(xs[i] + c_[1], yb + c_[2] + R_sit, { "sit" }, true)
             end
             reg(xs[i] + xa, y, xs[i] + xb, yb + h_ + ya, "hex")
@@ -2352,8 +2407,9 @@ function M.compose(C, ink, seed, col, o)
                 reg(q[1], q[2], q[3], q[4], "pl")
                 local ox, oy = left - xa, by + h_
                 plan[#plan + 1] = { kind = "cluster", draw = function()
-                  for _, c_ in ipairs(sh) do
-                    draw(3, at(ox + c_[1], oy + c_[2], function(r) C.hex(r, { cluster = true }) end))
+                  for ci_, c_ in ipairs(sh) do
+                    local doors_, exits_ = C.hex_ways(sh, ci_, Rh)
+                    draw(3, at(ox + c_[1], oy + c_[2], function(r) C.hex(r, { doors = doors_, exits = exits_ }) end))
                     spot(ox + c_[1], oy + c_[2] - h_ + R(3.5), { "sit" }, true)
                   end
                 end }

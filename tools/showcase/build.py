@@ -6,7 +6,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 SVG = ROOT / 'build/showcase/svg'
 EXTRA = {'specimen-1': ROOT / 'build/cattree/specimen-1.svg', 'specimen-2': ROOT / 'build/cattree/specimen-2.svg',
          'specimen-4': ROOT / 'build/cattree/specimen-4.svg', 'initials': ROOT / 'build/cattree/initials.svg',
-         'oak-parts': ROOT / 'build/trees/oak-green.svg'}
+         'oak-parts': ROOT / 'build/trees/oak-green.svg',
+         **{n: ROOT / f'build/trees/{n}.svg' for n in ('letters-sheet', 'letter-moss', 'letter-blue', 'drop-spring', 'drop-summer', 'drop-autumn', 'drop-winter', 'drop-dead')}}
 n = [0]
 def art(name, style='position:absolute;inset:0;width:100%;height:100%', viewbox=None):
     """a drawing, inline, its ids made unique to this use"""
@@ -211,7 +212,23 @@ def text_pdf():
     P.append(page(art('tx-moss'), tb(2, 2.5, 8.6, 13, 'Spanish moss')))
     P.append(page(art('tx-mossdead'), tb(11, 15, 8.8, 10.4, 'Spanish moss, dead tree')))
     return P
-for name, pages in (('cat-trees', gym_pdf()), ('oak-trees', oak_pdf()), ('oak-seasons', seasons_pdf()), ('oak-text', text_pdf())):
+def letters_pdf():
+    P = [page(art('letters-sheet'), cls='plain')]
+    n_ = [3]
+    def text(x, top, w, h, drop, first, size=10.5):
+        cap = art(drop, 'float:left;width:2.9cm;height:2.9cm;margin:0.1cm 0.4cm 0.1cm 0')
+        lines = max(0, h - 1.5)
+        body, n_[0] = fill(w, lines, n_[0], size)
+        return textbox(x, top, w, h, f'{cap}<p style="font-size:{size}pt;line-height:1.42">{first} {body}</p>')
+    P.append(page(art('lt-spring'), text(8.2, 2.5, 11.4, 11, 'drop-spring', 'pring is the shortest season for a big oak: the leaves come pale and small, and the limbs can still be seen through them.')))
+    P.append(page(art('lt-summer'), text(8.2, 2.5, 11.4, 22.9, 'drop-summer', 'ummer closes the crown. Whatever lives in the tree now has to be looked for, and the swing hangs in the only deep shade on the page.')))
+    P.append(page(art('lt-autumn'), text(2, 2.5, 11.4, 22.9, 'drop-autumn', 'utumn turns the crown a mass at a time, never all at once. The wind takes the leaves, and the bats have the open air to themselves.')))
+    P.append(page(art('lt-winter'), text(3, 2, 15.6, 8.5, 'drop-winter', 'inter shows what the tree has been doing all along. Every fork and every old cut is in plain sight, with snow along the top of anything level.')))
+    P.append(page(art('lt-dead'), text(11, 12, 8.8, 13.4, 'drop-dead', 'ead, it can stand for decades. The bark lets go in patches and the moss stays on, and the crows do not seem to mind at all.')))
+    grid = f'<div style="position:absolute;left:2cm;top:3cm;width:8cm;height:8cm">{art("letter-moss")}</div><div style="position:absolute;left:11.5cm;top:3cm;width:8cm;height:8cm">{art("letter-blue")}</div>'
+    P.append(page(grid, caption('Spanish moss on a letter, and winter in Delft blue'), cls='plain'))
+    return P
+for name, pages in (('cat-trees', gym_pdf()), ('oak-trees', oak_pdf()), ('oak-seasons', seasons_pdf()), ('oak-text', text_pdf()), ('oak-letters', letters_pdf())):
     html = f'<!doctype html><html><head><meta charset="utf-8"><title>{name}</title><style>{STYLE}</style></head><body>{"".join(pages)}</body></html>'
     (ROOT / f'build/showcase/{name}.html').write_text(html)
     print(name, len(pages), 'pages', len(html) // (1024 * 1024), 'MB html')

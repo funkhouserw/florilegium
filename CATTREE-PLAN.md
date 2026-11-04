@@ -475,4 +475,8 @@ those. Do not trace the reference artists' work (scratch/oldcats-refs).
 
 ## Oak settings
 
-`scene.page{ grows = "oak", ... }`: `crown` = lush | open; `season` = spring | summer | autumn | winter | dead (each with its own extras: pumpkins, bats and wind; icicles, robins, holly, snow piles and a snowman; crows and bats); `spanishmoss`; `swing = false`, `heart = false`, `extras = false`, `stumps = n`. A cut limb is drawn side-on, like everything else: a rolled collar and a sliver of the cut, never rings facing the viewer.
+`scene.page{ grows = "oak", ... }`: `crown` = lush | open; `season` = spring | summer | autumn | winter | dead (each with its own extras: pumpkins, bats and wind; icicles, robins, holly, snow piles and a snowman; crows and bats); `spanishmoss`; `swing = false`, `heart = false`, `extras = false`, `stumps = n`. Letters: `O.season_ink(season, blue)` then `initial.draw(rng, S, L, { decorate = O.initial_for(season, { moss, blue }) })`; preview with `tools/trees/letters.lua`. A cut limb is drawn side-on, like everything else: a rolled collar and a sliver of the cut, never rings facing the viewer.
+
+## TODO
+
+- **Kelp forest: next theme** (asked for 2026-11-04, not started).

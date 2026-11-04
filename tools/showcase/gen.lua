@@ -75,6 +75,12 @@ local TX = {
 for _, t in ipairs(TX) do
   oak(t[1], { seed = t[2], season = t[3], ink = t[4], keepouts = t[5], spanishmoss = t[6] })
 end
+-- beside the seasonal letters
+oak("lt-spring", { seed = 7, season = "spring", keepouts = { box(8.2, 2.5, 11.4, 11) } })
+oak("lt-summer", { seed = 4, season = "summer", keepouts = { box(8.2, 2.5, 11.4, 22.9) } })
+oak("lt-autumn", { seed = 2, season = "autumn", keepouts = { box(2, 2.5, 11.4, 22.9) } })
+oak("lt-winter", { seed = 2, season = "winter", keepouts = { box(3, 2, 15.6, 8.5) } })
+oak("lt-dead", { seed = 4, season = "dead", spanishmoss = true, keepouts = { box(11, 12, 8.8, 13.4) } })
 oak("oak-cover", { seed = 1, keepouts = { box(3.6, 2.2, 14.4, 5.6) } })
 oak("oak-box", { seed = 5, keepouts = { box(3, 2.2, 15.6, 8.8) } })
 oak("oak-two", { seed = 6, keepouts = { box(1.6, 2, 8.4, 7), box(13.2, 15, 7, 8) } })
