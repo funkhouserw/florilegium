@@ -214,7 +214,10 @@ M.initial_font = "lmroman10-bold.otf"
 function M.initial(letter, side, hang, cap)
   local bp = 72 / 72.27 / 65536
   ink.set_transform({ ink.CM, 0, 0, ink.CM, -hang * bp, (cap - side) * bp })
-  local ok, err = require("initial").draw(page_rng.fork(), side * SP_CM, letter, { font = M.initial_font })
+  -- a theme may decorate the tile its own way (theme-cattree: a cat on the letter)
+  local th = M.theme and M.theme ~= "" and M.theme ~= "flora" and require("theme-" .. M.theme)
+  local deco = type(th) == "table" and th.initial or nil
+  local ok, err = require("initial").draw(page_rng.fork(), side * SP_CM, letter, { font = M.initial_font, decorate = deco })
   if not ok then tex.error("florilegium: " .. tostring(err)) end
   ink.flush()
 end

@@ -24,6 +24,8 @@ local CASES = {
   { name = "density 0.05", density = 0.05 },
   { name = "math, marks", theme = "math", marks = { { kind = "heading", arg = 1, y = 20 }, { kind = "bloom", arg = "knot", y = 9 } } },
   { name = "math, mirrored, density 0.3", theme = "math", mirror = true, density = 0.3 },
+  { name = "cattree", theme = "cattree" },
+  { name = "cattree, mirrored, density 0.4", theme = "cattree", mirror = true, density = 0.4 },
 }
 local function geometry(seed, spill, case)
   local g = { pw = 21, ph = 29.7, textleft = 6.8, textright = 18.8, ytop = 25.4, ybot = 3.0 }

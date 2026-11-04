@@ -108,7 +108,8 @@ end
 function M.draw(rng, S, letter, o)
   o = o or {}
   local m = 0.07 * S                           -- the frame's inset
-  local cs, err = contours(o.font or "lmroman10-bold.otf", letter, S * 0.5, S * 0.47, S * 0.66, S * 0.7)
+  local lh = o.decorate and 0.58 or 0.66                -- leave room above the letter for what a theme puts there
+  local cs, err = contours(o.font or "lmroman10-bold.otf", letter, S * 0.5, S * (o.decorate and 0.43 or 0.47), S * lh, S * 0.7)
   if not cs then return nil, err end
   -- free space: a grid of the distance to the letter and the frame
   local N = 36
@@ -139,15 +140,20 @@ function M.draw(rng, S, letter, o)
   ink.poly({ { m * 0.5, m * 0.5 }, { S - m * 0.5, m * 0.5 }, { S - m * 0.5, S - m * 0.5 }, { m * 0.5, S - m * 0.5 } }, true)
   ink.stroke(tone(0.15), 0.3, 0.8)
 
+  -- a theme may decorate the tile itself (o.decorate, e.g. theme-cattree's cat):
+  -- then there is no vine, only the letter and what the theme draws around it
+  local deco = o.decorate
+  local pts, width = {}, nil
+  if not deco then
   -- the vine: from the lower-left corner up across the letter to the upper right
   local f = ink.fbm1(rng, 2)
   local ctrl = {
     { m * 1.2, m * 1.2 }, { S * rng.range(0.14, 0.22), S * rng.range(0.3, 0.4) }, { S * rng.range(0.32, 0.42), S * rng.range(0.5, 0.58) },
     { S * rng.range(0.58, 0.68), S * rng.range(0.42, 0.52) }, { S * rng.range(0.74, 0.82), S * rng.range(0.62, 0.72) }, { S - m * 1.6, S - m * 1.4 } }
-  local pts = ink.catmull(ctrl, 14)
+  pts = ink.catmull(ctrl, 14)
   for i, p in ipairs(pts) do local u = (i - 1) / (#pts - 1) p[2] = p[2] + 0.03 * S * f(u * 6) end
   local w0, w1 = 0.026 * S, 0.01 * S
-  local function width(i) return lerp(w0, w1, (i - 1) / (#pts - 1)) end
+  width = function(i) return lerp(w0, w1, (i - 1) / (#pts - 1)) end
   ink.layer(2)
   flora.stem(pts, w0, w1)
   -- where it crosses the letter, it goes over and under in turn
@@ -181,6 +187,7 @@ function M.draw(rng, S, letter, o)
     flora.bud(rng, 0.13 * S)
     ink.pop()
   end
+  end
 
   -- the letter: wash, granulation, pooled edges, light lifted out
   local t0 = o.tone or rng.range(0.16, 0.22)
@@ -197,6 +204,11 @@ function M.draw(rng, S, letter, o)
     trace(cs) ink.stroke(tone(0.04), 0.07 * S * ink.unit() * ink.CM, 0.45, true)
   ink.unclip()
   trace(cs) ink.stroke(tone(0.04), 0.35, 0.7)
+  if deco then
+    deco({ rng = rng, S = S, m = m, cs = cs, trace = function() trace(cs) end,
+      inside = function(x, y) return inside(cs, x, y) end, clearance = clearance, free = freecells, cell = cell })
+    return true
+  end
 
   -- leaves along the vine where they fit, alternating sides
   ink.layer(4)

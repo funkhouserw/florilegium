@@ -155,8 +155,25 @@ whatever space the page leaves, like the garden; `density` sets how much there i
 
 <img src="gallery/math.png" alt="a page with the math theme" width="500">
 
+**`theme=cattree`** is a cat gym (`theme-cattree.lua`), drawn at one twentieth of real size
+(a hexagon is 60 cm across, a post 9 cm thick), so a cat fits every hexagon and basket. It is
+heavy at the floor and lighter as it rises: a tower of posts in whole levels, the shorter ones
+holding up platforms the taller ones run through, with crossbeams, hammocks, condos, baskets
+on arms, rings and sisal tubes; then the wall (a route of boards, a rope bridge never steeper
+than 15 degrees, hexagons, a clear bubble); then a few half-moon shelves joined by floating
+steps, pegs and dots. Connectors follow the slope: floating steps when level, dots, pegs,
+gangway stairs or a sisal ramp on a slant, and going up a ladder hung flat on the wall, a pole
+with half-round steps, or nothing at all (staggered shelves a cat jumps). On a last page with room under the text it turns into an L along the
+floor, often a U with a bridge back to the tower. The free-space loop fills what is left,
+each new piece joined by a way a cat could climb, and one or two cats settle where they
+fit: lying, sitting, curled, meowing at a heading, stretching, scratching a post, draped over
+an edge, peeking out of a condo, walking across a bridge. `density` thins it all, down to the
+tower alone. `\florilegiuminitial` puts a cat on (or in) the letter.
+
+<img src="gallery/cattree-grow.gif" alt="a cat gym building itself in the margin" width="420">
+
 ```latex
-\usepackage[grown,theme=geometric]{florilegium}   % or theme=math; the whole document
+\usepackage[grown,theme=geometric]{florilegium}   % or theme=math, theme=cattree; the whole document
 \florilegiumtheme{math}                            % or from the page this stands on
 ```
 

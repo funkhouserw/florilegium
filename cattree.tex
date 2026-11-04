@@ -1,0 +1,65 @@
+%% cattree.tex -- "The cat gym": the theme=cattree margin describes itself. LuaLaTeX:
+%%   lualatex cattree.tex
+%% (Written without TeX at hand: the drawing was checked through svg.lua, the TeX not yet.)
+\documentclass[11pt,a4paper]{article}
+\renewcommand\rmdefault{cmr}\renewcommand\sfdefault{cmss}\renewcommand\ttdefault{cmtt}
+\usepackage[T1]{fontenc}
+\usepackage[a4paper,left=68mm,right=22mm,top=32mm,bottom=30mm,headsep=8mm]{geometry}
+\usepackage{fancyhdr}
+\usepackage[grown,sections,theme=cattree]{florilegium}
+
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[R]{\small\textsc{The cat gym}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand\headrulewidth{0pt}
+\newcommand\code[1]{\texttt{\small #1}}
+
+\begin{document}
+\section{A gym for every page}
+
+\florilegiuminitial[4]{T}{he} margin of this page is a cat gym, and the cat on the letter
+that opens this paragraph is the first of its residents. The package draws it with
+\code{theme=cattree}: the same ink as the flowering plant, washes of one blue from navy to
+mist with copper for the fine work, but the plant is replaced by posts wound with sisal,
+plush platforms, condos, hexagons, hammocks and rope bridges.
+
+Nothing is stored. Every piece is computed while the page is written, at one twentieth of
+its real size: a post is nine centimeters thick, a hexagon sixty across, a condo's door
+twenty. A gray cat of forty-five centimeters was the yardstick while the pieces were drawn,
+so that every hexagon and basket really holds a cat.
+
+\section{Heavy below, light above}
+
+The gym is built the way a cat would climb it. On the floor stands a tower of three to five
+posts, in whole levels about fifty centimeters apart. Where two neighbors meet, the shorter
+one holds up a platform and the taller one runs on through it. Crossbeams tie the posts
+together low down, hammocks hang under the high platforms, and condos, baskets on arms,
+rings and sisal tubes take what is left.
+
+Above the tower the gym goes onto the wall: a route of boards, a rope bridge to a half-moon
+shelf, never steeper than fifteen degrees and only ever between two raised points, a
+hexagon or two and a clear bubble. Near the top it thins out to a few half-moons, joined by
+floating steps, pegs and a line of dots growing smaller as they rise.
+
+\section{Filling the space}
+
+Then the program does what the garden does. It lays a grid over the margin, finds the
+largest empty space and puts something there, a hexagon or a half-moon, joined to the gym
+the way a cat would get there: floating steps when it is level, dots, pegs or a gangway on a
+slant, and going up a ladder hung flat on the wall, a pole with half-round steps, or nothing,
+the shelves staggered for a jump. Every piece keeps a few centimeters from every
+other, so nothing passes through anything. Each heading gets a cat on a shelf beside it,
+meowing.
+
+Last come the cats, one or two to a page, so that most of the gym stands ready for them.
+They settle where they fit: lying on a platform, curled in a hammock or a basket, sitting in a
+hexagon, stretching, scratching a post, draped over an edge, peeking out of a condo, walking
+across a bridge.
+
+\section{The last page}
+
+Where the text stops early, as it does here, the gym spreads along the floor under it, an
+L on posts of its own, and often a U: a second tall post at the far end with a bridge back
+to the tower.
+\florilegiumtextend
+\end{document}

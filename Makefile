@@ -2,7 +2,7 @@ LUALATEX = $(RUN) lualatex -interaction=nonstopmode -halt-on-error
 SEEDS   ?= 1 2 3 4 5 6
 # RUN=tools/in-docker builds inside the florilegium-tex image (see tools/Dockerfile)
 RUN     ?=
-LUA      = ink.lua flora.lua florilegium.lua initial.lua figures.lua theme-geometric.lua theme-math.lua
+LUA      = ink.lua flora.lua florilegium.lua initial.lua figures.lua theme-geometric.lua theme-math.lua theme-cattree.lua
 GS      ?= gs
 SEED    ?= 7
 
@@ -18,6 +18,8 @@ florilegium-grow.pdf: florilegium-grow.tex florilegium.sty grow.lua $(LUA) text-
 
 # initials, flowers at the headings, visitors and the seasons; two passes, because
 # the option aging reads the page count of the first one
+cattree.pdf: cattree.tex florilegium.sty grow.lua $(LUA)
+	$(LUALATEX) cattree.tex
 showcase.pdf: showcase.tex florilegium.sty grow.lua $(LUA)
 	$(LUALATEX) showcase.tex
 	$(LUALATEX) showcase.tex

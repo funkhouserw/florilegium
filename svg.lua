@@ -294,7 +294,7 @@ usage: texlua svg.lua [options] > page.svg      (lua 5.3 or 5.4 works too)
   --twoside         a two-sided document: the garden in the wider outer margin
   --textend LEN     the last page: the text ends LEN below the top of the text block
   --season S        spring, summer (default), autumn, or 0..1
-  --theme NAME      flora (default), geometric or math (math: its text needs TeX, left out)
+  --theme NAME      flora (default), geometric, math (its text needs TeX, left out) or cattree
   --density X       0.05..1 (default 1)      --intensity X   0..1 (default 1)
   --ink RRGGBB      (default 2456C4)         --accent RRGGBB (default B4662F)
   --novisitors      no butterflies, bees, snails or birds

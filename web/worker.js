@@ -6,7 +6,7 @@
 const WASMOON = 'https://cdn.jsdelivr.net/npm/wasmoon@1.16.0/dist/'
 importScripts(WASMOON + 'index.js')
 
-const MODULES = ['ink', 'flora', 'grow', 'florilegium', 'authored', 'figures', 'theme-geometric', 'theme-math', 'svg']
+const MODULES = ['ink', 'flora', 'grow', 'florilegium', 'authored', 'figures', 'theme-geometric', 'theme-math', 'theme-cattree', 'svg']
 
 // the published site has the .lua files beside this one; the repository has them one up
 async function fetchLua(name) {
