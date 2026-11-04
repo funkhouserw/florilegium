@@ -193,7 +193,7 @@ function M.limb(rng, spine, width, o)
   local wm = width(0.5)
   local pw = o.plate or max(0.1, min(0.24, wm * 0.075))
   local P, outline, total = tube(rng, spine, width, o.rough or 0.055,
-    o.torn and { teeth = max(4, floor(width(0) / pw * 0.75)), len = pw * (o.stretch or 5.5) * 1.1 } or nil)
+    o.torn and { teeth = max(4, floor(width(0) / pw * 0.75)), len = pw * (o.stretch or 5.5) * 0.6 } or nil)
   local cols = max(4, floor(wm * 1.15 / pw + 0.5))     -- the foreshortening makes the middle ones broader
   local plen = pw * (o.stretch or 5.5)
   local rows = max(3, floor(total / plen + 0.5))
@@ -803,7 +803,21 @@ local function chains(nodes)
     local n = start
     local list = { n }
     while #n.kids > 0 do
-      table.sort(n.kids, function(p, q) return p.r > q.r end)
+      -- the stem goes on the straightest way among the thick ones, so a trunk does not turn into a limb
+      local up = n.parent or n
+      local ax, ay = n.x - up.x, n.y - up.y
+      if up == n then ax, ay = 0, 1 end
+      local aL = sqrt(ax * ax + ay * ay) + 1e-9
+      local function score(k)
+        local dx, dy = k.x - n.x, k.y - n.y
+        local d = sqrt(dx * dx + dy * dy) + 1e-9
+        return k.r * (1 + 0.9 * (dx * ax + dy * ay) / (d * aL))
+      end
+      table.sort(n.kids, function(p, q)
+        local a_, b_ = score(p), score(q)
+        if a_ ~= b_ then return a_ > b_ end
+        return p.r > q.r
+      end)
       for i = 2, #n.kids do chain[#chain + 1] = { n, n.kids[i] } end
       n = n.kids[1]
       list[#list + 1] = n
@@ -848,48 +862,32 @@ function M.stump_end(rng, x, y, ang, w, snap)
     ink.pop()
     return
   end
-  -- Seen from the side, as everything here is: the limb ends in a thick collar of wound wood rolled
-  -- around the cut, lit like the bark, and of the cut itself only a thin sliver shows, past the far rim.
+  -- Seen from the side, as everything here is. The limb's own bark runs right up to the end (it is
+  -- only a little swollen there); all that is added is the cut: a thin ellipse exactly as wide as
+  -- the limb, and the lip of wound wood around it.
+  local rx, ry = w * 0.5, w * 0.15
+  local function oval(f, dy) return ellipse_(0, dy or 0, rx * f, ry * f) end
+  ink.smooth(oval(1.05), true) ink.fill(tone(0.06))
+  ink.smooth(oval(0.84, ry * 0.05), true) ink.fill(tone(0.56))
+  -- the shadow of the near lip across the wood, and one ring
+  ink.smooth({ { -rx * 0.84, 0 }, { 0, -ry * 0.82 }, { rx * 0.84, 0 }, { 0, -ry * 0.34 } }, true) ink.fill(tone(0.2), 0.5)
+  ink.smooth(oval(0.46, ry * 0.05), true) ink.stroke(tone(0.34), 0.25, 0.7)
+  -- the lip catches the light on its upper left, wherever the limb points
   local rot = ang * rad
-  local function lit_at(u)                             -- u -1..1 across the limb, on a cylinder
-    local sn, cs = sin(u * pi / 2), cos(u * pi / 2)
-    local nx, ny = cos(rot), sin(rot)
-    return max(0, min(1, nx * sn * -0.52 + ny * sn * 0.7 + cs * 0.49))
+  local arc = {}
+  for k = 0, 16 do
+    local t = 2 * pi * k / 16
+    local px, py = rx * 0.95 * cos(t), ry * 0.95 * sin(t)
+    arc[k + 1] = { px, py, px * cos(rot) - py * sin(rot), px * sin(rot) + py * cos(rot) }
   end
-  local c0, c1 = -w * 0.5, w * 0.06                    -- the collar, along the limb
-  local A = a * 1.12
-  ink.smooth({ { -a * 0.9, c0 - w * 0.08 }, { -A, c0 + w * 0.1 }, { -A * 1.02, lerp(c0, c1, 0.6) }, { -A * 0.86, c1 }, { A * 0.86, c1 }, { A * 1.02, lerp(c0, c1, 0.6) }, { A, c0 + w * 0.1 }, { a * 0.9, c0 - w * 0.08 } }, true)
-  ink.fill(tone(0.05))
-  -- rolls of new bark, running around the limb, so across it here; bowed, since it is round
-  local rows = 3
-  for r_ = 1, rows do
-    local yy = lerp(c0 + w * 0.05, c1 - w * 0.09, (r_ - 1) / (rows - 1))
-    local cells_ = max(4, floor(a * 9))
-    for i = 1, cells_ do
-      local u0, u1 = -1 + 2 * (i - 1) / cells_ + rng.sym(0.03), -1 + 2 * i / cells_ - 0.03 + rng.sym(0.03)
-      local um = (u0 + u1) / 2
-      local x0, x1 = A * sin(u0 * pi / 2) * 0.97, A * sin(u1 * pi / 2) * 0.97
-      local bow = function(u) return yy - w * 0.1 * cos(u * pi / 2) end
-      local th = w * rng.range(0.07, 0.1) * (0.55 + 0.45 * cos(um * pi / 2))
-      local xm = (x0 + x1) / 2
-      ink.smooth({ { x0, bow(u0) }, { xm, bow(um) + th }, { x1, bow(u1) }, { xm, bow(um) - th } }, true)
-      ink.fill(tone(max(0.05, (0.5 * lit_at(um) + 0.05) * rng.range(0.85, 1.12))))
+  for k = 1, 16 do
+    local q0, q1 = arc[k], arc[k + 1]
+    local l = (q0[3] * -0.6 + q0[4] * 0.8) / rx
+    if l > -0.15 then
+      ink.moveto(q0[1], q0[2]) ink.lineto(q1[1], q1[2])
+      ink.stroke(tone(0.34 + 0.2 * max(0, l)), max(0.3, w * 0.9), 0.9)
     end
   end
-  -- the cut: a thin sliver, sunk inside the far rim
-  local fy = c1 - w * 0.01
-  local ry = a * 0.2
-  ink.poly(ellipse_(0, fy, a * 0.98, ry * 1.2), true) ink.fill(tone(0.04))
-  local wood = tone(0.5 * lit_at(-0.2) + 0.32)
-  ink.poly(ellipse_(0, fy + ry * 0.12, a * 0.84, ry * 0.86), true) ink.fill(wood)
-  ink.smooth({ { -a * 0.84, fy + ry * 0.1 }, { 0, fy - ry * 0.72 }, { a * 0.84, fy + ry * 0.1 }, { 0, fy - ry * 0.3 } }, true)
-  ink.fill(tone(0.2), 0.45)                            -- the near rim's shadow on it
-  ink.poly(ellipse_(0, fy + ry * 0.12, a * 0.46, ry * 0.45), true) ink.stroke(tone(0.28), 0.25, 0.7)
-  -- the near rim of the roll, over the sliver
-  local rim = {}
-  for k = 0, 10 do local u = -1 + 2 * k / 10 rim[#rim + 1] = { A * 0.92 * sin(u * pi / 2), fy - ry * 0.9 * cos(u * pi / 2) } end
-  ink.smooth(rim, false) ink.stroke(tone(0.03), max(0.5, w * 2))
-  ink.smooth(rim, false) ink.stroke(tone(0.42), max(0.3, w * 0.7), 0.8)
   ink.pop()
 end
 
@@ -935,7 +933,7 @@ local ICE, ICE_EDGE = { 0.8, 0.88, 0.94 }, { 0.42, 0.56, 0.68 }
 function M.icicles(rng, x0, x1, y, L)
   local x = x0
   while x < x1 do
-    local w_, l = rng.range(0.035, 0.07), L * rng.range(0.35, 1)
+    local w_, l = rng.range(0.018, 0.04), L * rng.range(0.35, 1)
     ink.poly({ { x - w_, y + 0.02 }, { x + w_, y + 0.02 }, { x + rng.sym(0.01), y - l } }, true) ink.fill(ICE)
     ink.poly({ { x - w_, y + 0.02 }, { x + rng.sym(0.01), y - l }, { x + w_, y + 0.02 } }, false) ink.stroke(ICE_EDGE, 0.2)
     x = x + rng.range(0.1, 0.3)
@@ -966,12 +964,25 @@ end
 
 -- A bat in the air, centered, wings s across: flat black, flap -1..1.
 function M.bat(rng, s, flap)
-  local f = (flap or 0) * 0.22
-  local R = { { 0.09, 0.14 }, { 0.3, 0.2 + f }, { 0.5, 0.3 + f * 1.4 }, { 1, 0.22 + f * 2 }, { 0.78, -0.02 + f * 1.6 }, { 0.62, 0.04 + f * 1.2 }, { 0.46, -0.08 + f }, { 0.3, -0.01 + f * 0.6 }, { 0.14, -0.2 } }
-  local pts = { { 0, -0.34 } }
-  for i = #R, 1, -1 do pts[#pts + 1] = { R[i][1], R[i][2] } end
-  pts[#pts + 1] = { 0.1, 0.34 } pts[#pts + 1] = { 0.05, 0.24 } pts[#pts + 1] = { -0.05, 0.24 } pts[#pts + 1] = { -0.1, 0.34 }
-  for i = 1, #R do pts[#pts + 1] = { -R[i][1], R[i][2] } end
+  local f = (flap or 0) * 0.2
+  -- one wing, from the shoulder out along its top edge to the tip, then scalloped back between the fingers
+  local wing = { { 0.07, 0.1 }, { 0.2, 0.17 + f * 0.3 }, { 0.36, 0.28 + f * 0.8 }, { 0.42, 0.33 + f } }  -- to the wrist
+  for t = 1, 4 do wing[#wing + 1] = { 0.42 + 0.58 * t / 4, 0.33 + f + (0.02 - f * 0.15) * t - 0.02 * t * t } end
+  local tips_ = { { 1, 0.31 + f * 0.4 }, { 0.72, 0.02 + f * 0.5 }, { 0.48, -0.1 + f * 0.5 }, { 0.26, -0.18 + f * 0.2 }, { 0.06, -0.3 } }
+  for i = 1, #tips_ - 1 do
+    local a_, b_ = tips_[i], tips_[i + 1]
+    for t = 1, 5 do
+      local u = t / 5
+      local sag = 0.09 * sin(u * pi)
+      wing[#wing + 1] = { lerp(a_[1], b_[1], u), lerp(a_[2], b_[2], u) + sag }
+    end
+  end
+  local pts = {}
+  -- the head, with two small ears, between the wings
+  pts[#pts + 1] = { -0.07, 0.1 } pts[#pts + 1] = { -0.075, 0.25 } pts[#pts + 1] = { -0.035, 0.19 } pts[#pts + 1] = { 0.035, 0.19 } pts[#pts + 1] = { 0.075, 0.25 }
+  for i = 1, #wing do pts[#pts + 1] = wing[i] end
+  pts[#pts + 1] = { 0, -0.36 }
+  for i = #wing, 1, -1 do pts[#pts + 1] = { -wing[i][1], wing[i][2] } end
   for _, q in ipairs(pts) do q[1], q[2] = q[1] * s * 0.5, q[2] * s * 0.5 end
   ink.poly(pts, true) ink.fill(tone(0.03))
 end
@@ -1201,7 +1212,7 @@ function M.tree(rng, o)
   local rmax = nodes[1].r
   local function W_of(n)
     local w = trunkw * (n.r / rmax)
-    if n.stump then return w * 1.35 end                -- swollen where it was cut
+    if n.stump then return w * 1.14 end                -- a little swollen where it was cut
     -- the last few nodes of a branch run out to a point
     local up = n
     for k = 0, 3 do
@@ -1276,7 +1287,7 @@ function M.tree(rng, o)
           local sprout, prev_ = {}, nil
           -- from all along the roll, fanning a little: some long whips, some barely started
           local f = (i - 0.5) / count * 2 - 1
-          local x_, y_ = n.x + f * w * 0.62, n.y + w * 0.32 * (1 - f * f) + 0.05
+          local x_, y_ = n.x - (n.x - n.parent.x) * layout.range(0.1, 0.9) + f * w * 0.3, n.y - (n.y - n.parent.y) * 0.5 + w * 0.42
           local lean = f * 0.1 + layout.sym(0.05) + out_ * 0.02
           local steps_ = layout.chance(0.35) and layout.int(2, 4) or layout.int(5, 11)
           local base_w = layout.range(0.1, 0.17)
@@ -1315,6 +1326,7 @@ function M.tree(rng, o)
   ink.layer(2)
   -- a stretch of limb; a chain whose width changes a lot is painted in stretches, so that plates
   -- keep their size up a tapering trunk
+  local cur_chain
   local function stretch(sp, ws, isroot, joined, first)
     local dist = { 0 }
     for i = 2, #sp do dist[i] = dist[i - 1] + sqrt((sp[i][1] - sp[i - 1][1]) ^ 2 + (sp[i][2] - sp[i - 1][2]) ^ 2) end
@@ -1338,6 +1350,26 @@ function M.tree(rng, o)
       if wm > 0.8 and layout.chance(0.7) then kn[1] = { layout.range(-0.5, 0.45), layout.range(0.2, 0.8), layout.range(0.55, 0.95) } end
       if isroot then bl[1] = { -0.42 + layout.sym(0.15), 0.42, 2.6 } kn = { { 0.42, 0.66, 1.05 } } end
       if wm > 1.3 and not isroot and layout.chance(0.5) then bl[1] = { layout.range(-0.5, 0.5), layout.range(0.3, 0.7), 1.7 } end
+      -- a branch does not grow out of a knot, and bark near a cut runs straight
+      if cur_chain then
+        local function near_fork(v)
+          local d, i = v * total, 1
+          while i < #sp - 1 and dist[i + 1] < d do i = i + 1 end
+          for k = 1, #cur_chain do
+            local q = cur_chain[k][1]
+            if (q.x - sp[i][1]) ^ 2 + (q.y - sp[i][2]) ^ 2 < (wm * 1.3 + 0.8) ^ 2 then return true end
+          end
+          return false
+        end
+        local kept = {}
+        for _, q in ipairs(kn) do if not near_fork(q[2]) then kept[#kept + 1] = q end end
+        kn = kept
+        local tip_ = cur_chain.list and cur_chain.list[#cur_chain.list]
+        if tip_ and tip_.stump then
+          local e_ = sp[#sp]
+          if (e_[1] - tip_.x) ^ 2 + (e_[2] - tip_.y) ^ 2 < 0.01 then kn, bl = {}, {} end
+        end
+      end
       M.limb(rng.fork(), sp, width, { knots = kn, burls = bl, moss = wm > 1.1 and 0.5 or 0.08, rough = 0.05,
         plate = max(0.1, min(0.21, wm * 0.14)), stretch = wm > 1 and 4.6 or 4.2, detail = wm > 1.8 and 0.16 or 9, flat = wm < 0.7, torn = not isroot, peel = S.peel })
       -- level enough to lie on?
@@ -1356,21 +1388,60 @@ function M.tree(rng, o)
       local side = (a_ < b_) and 0.45 or -0.45          -- the side toward the light
       local lit = {}
       for j = 0, 8 do local x, y = P_(side, j / 8) lit[#lit + 1] = { x, y } end
-      ink.smooth(lit, false) ink.stroke(tone(0.42), max(0.25, wm * 0.3 * ink.unit() * ink.CM), 0.8)
+      ink.smooth(lit, false) ink.stroke(tone(0.28), max(0.2, wm * 0.2 * ink.unit() * ink.CM), 0.7)
     else
       ink.smooth(sp, false) ink.stroke(tone(0.12), max(0.3, wm * ink.CM * 0.8))
     end
   end
-  for ci, ch in ipairs(chs) do
+  -- winter: snow along the true top edge of a limb, where it is level enough to hold any;
+  -- painted with the limb, so that what is in front of the limb is in front of its snow too
+  local function snow_on(sp, ws)
+    local pts = ink.catmull(sp, 6)
+    local n = #pts
+    local function flush_(run)
+      if #run < 5 then return end
+      local top, under = {}, {}
+      for i, q in ipairs(run) do
+        local f = max(0, sin(pi * (i - 1) / (#run - 1))) ^ 0.7
+        top[i] = { q.x + q.nx * (q.w * 0.5 + q.t * f), q.y + q.ny * (q.w * 0.5 + q.t * f) }
+        under[i] = { q.x + q.nx * (q.w * 0.5 - 0.015), q.y + q.ny * (q.w * 0.5 - 0.015) }
+      end
+      local out = {}
+      for _, p_ in ipairs(top) do out[#out + 1] = p_ end
+      for i = #under, 1, -1 do out[#out + 1] = under[i] end
+      ink.poly(out, true) ink.fill(white)
+      if run[1].w > 0.2 then ink.smooth(top, false) ink.stroke(tone(0.78), 0.2) end
+    end
+    local run = {}
+    for i = 1, n do
+      local p_, q_ = pts[max(1, i - 1)], pts[min(n, i + 1)]
+      local tx, ty = q_[1] - p_[1], q_[2] - p_[2]
+      local L = sqrt(tx * tx + ty * ty) + 1e-9
+      local nx, ny = -ty / L, tx / L
+      if ny < 0 then nx, ny = -nx, -ny end
+      local fr = (i - 1) / max(1, n - 1) * (#sp - 1) + 1
+      local k = min(#ws - 1, floor(fr))
+      local w = lerp(ws[k], ws[k + 1], fr - k)
+      local slope = abs(ty) / (abs(tx) + 1e-6)
+      if w > 0.1 and slope < 0.9 then
+        run[#run + 1] = { x = pts[i][1], y = pts[i][2], nx = nx, ny = ny, w = w, t = min(0.26, 0.04 + w * 0.34) * (1.15 - slope * 0.75) }
+      else flush_(run) run = {} end
+    end
+    flush_(run)
+  end
+  -- children first: a limb comes out from behind its parent, so the parent's bark and outline stay whole
+  for ci = #chs, 1, -1 do
+    local ch = chs[ci]
     local list = ch.list
     local sp, ws = {}, {}
+    cur_chain = ch
     if ch.parent_prev then
       local pp = ch.parent_prev
       local back = pp.parent or pp
       local wp = W_of(pp)
       -- start back inside the parent, along its direction, as wide as the parent will take, so
       -- that the bark flows from one into the other
-      sp[1] = { lerp(pp.x, back.x, 0.8), lerp(pp.y, back.y, 0.8) } ws[1] = min(wp * 0.8, W_of(list[1]) * 2.1)
+      sp[1] = { lerp(pp.x, back.x, 0.45), lerp(pp.y, back.y, 0.45) } ws[1] = min(wp * 0.8, W_of(list[1]) * 2.1)
       sp[2] = { pp.x, pp.y } ws[2] = min(wp * 0.82, W_of(list[1]) * 1.55)
       if W_of(list[1]) < 0.3 then ws[1], ws[2] = W_of(list[1]) * 0.4, W_of(list[1]) * 1.2 end   -- a thin one grows out to a point inside it
       if W_of(list[1]) > 0.45 then forks[#forks + 1] = { x = pp.x, y = pp.y, w = W_of(list[1]), dx = list[1].x - pp.x, dy = list[1].y - pp.y } end
@@ -1381,6 +1452,18 @@ function M.tree(rng, o)
         sp[#sp + 1] = { n.x, n.y }
         ws[#ws + 1] = W_of(n)
       end
+    end
+    -- a bend in thick wood is wide: the inner edge must not fold over itself
+    for _ = 1, 4 do
+      local s2 = {}
+      for i = 2, #sp - 1 do
+        local mx_, my_ = (sp[i - 1][1] + sp[i + 1][1]) / 2, (sp[i - 1][2] + sp[i + 1][2]) / 2
+        local dev = sqrt((sp[i][1] - mx_) ^ 2 + (sp[i][2] - my_) ^ 2)
+        local chord = sqrt((sp[i + 1][1] - sp[i - 1][1]) ^ 2 + (sp[i + 1][2] - sp[i - 1][2]) ^ 2) * 0.5 + 1e-6
+        local radius = (chord * chord + dev * dev) / (2 * dev + 1e-6)
+        if radius < ws[i] * 1.1 then s2[i] = { lerp(sp[i][1], mx_, 0.6), lerp(sp[i][2], my_, 0.6) } end
+      end
+      for i = 2, #sp - 1 do if s2[i] then sp[i] = s2[i] end end
     end
     -- a limb narrows gradually past a fork, not all at once
     for _ = 1, 3 do
@@ -1409,51 +1492,20 @@ function M.tree(rng, o)
         first = false
         a = b
       end
+      if S.snow then snow_on(sp, ws) end
     end
   end
   -- the ends of the cut limbs
   for _, n in ipairs(stumps) do
-    local up = n.parent
+    local up = n.parent.parent or n.parent
     local ang = math.atan(n.y - up.y, n.x - up.x) / rad - 90
-    local w = n.stump_w * (S.snap and 1 or 1.35)
+    local w = S.snap and n.stump_w or W_of(n)
     for _, sprout in ipairs(n.shoots or {}) do
       local sp, ws = {}, {}
       for _, q in ipairs(sprout) do sp[#sp + 1] = { q.x, q.y } ws[#ws + 1] = W_of(q) end
       stretch(sp, ws, false, true, true)
     end
     M.stump_end(rng.fork(), n.x, n.y, ang, w, S.snap)
-  end
-  -- winter: snow lies on whatever is level enough to hold it
-  if S.snow then
-    for _, ch in ipairs(chs) do
-      local list = ch.list
-      local run = {}
-      local function flush_()
-        if #run >= 3 then
-          local top, under = {}, {}
-          for i, q in ipairs(run) do
-            local f = sin(pi * (i - 1) / (#run - 1))
-            top[#top + 1] = { q[1], q[2] + q[3] * 0.5 + 0.03 + q[4] * f }
-            under[#under + 1] = { q[1], q[2] + q[3] * 0.3 }
-          end
-          local out = {}
-          for _, p in ipairs(top) do out[#out + 1] = p end
-          for i = #under, 1, -1 do out[#out + 1] = under[i] end
-          ink.smooth(out, true) ink.fill(white)
-          if run[1][3] > 0.2 then ink.smooth(top, false) ink.stroke(tone(0.8), 0.25) end
-        end
-        run = {}
-      end
-      for i = 1, #list - 1 do
-        local a, b = list[i], list[i + 1]
-        local w = W_of(a)
-        local slope = abs(b.y - a.y) / (abs(b.x - a.x) + 1e-6)
-        if w > 0.08 and slope < 1.1 then
-          run[#run + 1] = { a.x, a.y, w, min(0.18, w * 0.32) * (1.15 - slope * 0.8) }
-        else flush_() end
-      end
-      flush_()
-    end
   end
   -- bare branches end in fine twigs
   if S.twigs then
@@ -1737,13 +1789,29 @@ function M.tree(rng, o)
     ink.layer(old)
     stats.beards = beards
   end
+  -- where the trunk is at a height, and whether a point is on it
+  local trunk_list = chs[1].list
+  local function trunk_at(y_)
+    for _, n in ipairs(trunk_list) do
+      if n.y >= y_ then
+        local flare = y_ < groundy + 3 and (groundy + 3 - y_) * 0.8 or 0
+        return n.x, W_of(n) * 0.5 + 0.35 + flare
+      end
+    end
+    local n = trunk_list[#trunk_list]
+    return n.x, W_of(n) * 0.5 + 0.35
+  end
+  local function on_trunk(x_, y_)
+    local c_, h_ = trunk_at(y_)
+    return abs(x_ - c_) < h_
+  end
   -- autumn: leaves in the air, on their way down
   if S.fall then
     local rg = rng.fork()
     local old = ink.layer(5)
     for _ = 1, floor(W * S.fall) do
       local x_, y_ = rg.range(0.5, W - 0.5), rg.range(groundy + 0.6, H * 0.55)
-      if not blocked(x_, y_, 0.4) and abs(x_ - nodes[1].x) > trunkw * 0.5 + 0.2 then
+      if not blocked(x_, y_, 0.4) and not on_trunk(x_, y_) then
         ink.use_ramp(hues[rg.int(1, #hues)])
         ink.push() ink.translate(x_, y_) ink.rotate(rg.range(0, 360)) M.leaf(rg, 0.34, { tone = rg.range(0.3, 0.6) }) ink.pop()
         ink.use_ramp(bark_ramp)
@@ -1753,6 +1821,19 @@ function M.tree(rng, o)
   end
   local extras = o.extras ~= false
   local xr = rng.fork()
+  -- open air: clear of limbs, trunk, leaves and text
+  local function open_air(x_, y_, r)
+    if blocked(x_, y_, r, "back") then return false end
+    if swing and abs(x_ - swing.x - (S.sway or 0) * 0.5 * (swing.x > nodes[1].x and 1 or -1)) < 1.3 + (S.sway or 0) * 0.5 + r then return false end
+    for _, n in ipairs(nodes) do
+      local d = W_of(n) * 0.5 + r
+      if (n.x - x_) ^ 2 + (n.y - y_) ^ 2 < d * d then return false end
+    end
+    if not leafless then
+      for _, b in ipairs(tips) do if (b.x - x_) ^ 2 + (b.y - y_) ^ 2 < (2.4 + r) ^ 2 then return false end end
+    end
+    return true
+  end
   -- wind: lines in the air, leaves strung along them
   if extras and S.wind then
     local dir = xr.chance(0.5) and 1 or -1
@@ -1761,14 +1842,22 @@ function M.tree(rng, o)
       local gy = groundy + xr.range(1.5, H * 0.32)
       local L = xr.range(5, 9)
       local gx = dir > 0 and xr.range(0.5, W * 0.4) or xr.range(W * 0.6, W - 0.5)
-      if not blocked(gx + dir * L * 0.5, gy, L * 0.55) then
+      -- all on one side of the trunk, the wider one at this height
+      local tc, th = trunk_at(gy)
+      local x0_, x1_
+      if tc > W / 2 then x0_, x1_ = 0.4, tc - th - 0.6 else x0_, x1_ = tc + th + 0.6, W - 0.4 end
+      L = min(L, (x1_ - x0_) / 1.12)
+      gx = dir > 0 and x0_ or x1_
+      if L > 3 and not blocked(gx + dir * L * 0.5, gy, L * 0.55) then
         M.gust(gx, gy, L, dir)
         for _ = 1, xr.int(6, 11) do
           local t = xr.u()
           local lx, ly = gx + dir * L * t, gy + 0.25 * sin(t * pi * 1.3) + xr.sym(0.35)
+          if not on_trunk(lx, ly) then
           ink.use_ramp(hues[xr.int(1, #hues)])
           ink.push() ink.translate(lx, ly) ink.rotate(-90 * dir + xr.sym(45)) M.leaf(xr, 0.32, { tone = xr.range(0.3, 0.6) }) ink.pop()
           ink.use_ramp(bark_ramp)
+          end
         end
       end
     end
@@ -1777,11 +1866,18 @@ function M.tree(rng, o)
   -- bats, a loose flock below and beside the crown
   if extras and S.bats then
     local old = ink.layer(5)
-    local cx, cy = xr.range(W * 0.2, W * 0.8), xr.range(H * 0.42, H * 0.55)
+    local cx, cy = xr.range(W * 0.2, W * 0.8), xr.range(H * 0.3, H * 0.6)
+    local flock = {}
     for _ = 1, S.bats do
-      local x_, y_ = cx + xr.sym(W * 0.32), cy + xr.sym(H * 0.13)
-      if not blocked(x_, y_, 0.5, "back") and x_ > 0.5 and x_ < W - 0.5 then
-        ink.push() ink.translate(x_, y_) ink.rotate(xr.sym(25)) M.bat(xr, xr.range(0.6, 1.05), xr.sym(1)) ink.pop()
+      for _ = 1, 40 do
+        local x_, y_ = cx + xr.sym(W * 0.5), cy + xr.sym(H * 0.32)
+        local ok = x_ > 0.6 and x_ < W - 0.6 and y_ < H - 0.6 and y_ > groundy + 3 and open_air(x_, y_, 0.55)
+        for _, q in ipairs(flock) do if (q[1] - x_) ^ 2 + (q[2] - y_) ^ 2 < 1.2 then ok = false end end
+        if ok then
+          flock[#flock + 1] = { x_, y_ }
+          ink.push() ink.translate(x_, y_) ink.rotate(xr.sym(22)) M.bat(xr, xr.range(0.75, 1.15), xr.sym(1)) ink.pop()
+          break
+        end
       end
     end
     ink.layer(old)
@@ -1820,7 +1916,11 @@ function M.tree(rng, o)
         local slope = abs(n.y - n.parent.y) / (abs(n.x - n.parent.x) + 1e-6)
         if slope < 0.5 then
           local yy = n.y - w * 0.47
-          if not blocked(n.x, yy - 0.3, 0.45, "back") then M.icicles(xr, n.x - 0.28, n.x + 0.28, yy, min(0.75, 0.3 + w * 0.5)) end
+          local air_below = not blocked(n.x, yy - 0.3, 0.45, "back")
+          for _, m in ipairs(nodes) do
+            if m ~= n and abs(m.x - n.x) < 0.5 + W_of(m) * 0.5 and m.y < yy + W_of(m) * 0.5 and m.y > yy - 1 then air_below = false break end
+          end
+          if air_below then M.icicles(xr, n.x - 0.25, n.x + 0.25, yy, min(0.42, 0.18 + w * 0.25)) end
         end
       end
     end
@@ -1832,7 +1932,7 @@ function M.tree(rng, o)
     local function air()
       for _ = 1, 12 do
         local x_, y_ = xr.range(1, W - 1), xr.range(groundy + 0.8, groundy + 7)
-        if abs(x_ - nodes[1].x) > trunkw * 0.8 + 0.5 and not blocked(x_, y_, 0.5, "back") then return x_, y_ end
+        if abs(x_ - nodes[1].x) > trunkw * 0.8 + 0.5 and open_air(x_, y_, 0.5) then return x_, y_ end
       end
     end
     for _ = 1, S.butterflies or 0 do
@@ -2017,7 +2117,7 @@ function M.tree(rng, o)
         local top = {}
         for k = 0, 10 do
           local t = k / 10
-          top[#top + 1] = { cx - r + 2 * r * t, groundy + 0.08 + h * sin(t * pi) ^ 1.3 * (1 + ground.sym(0.06)) }
+          top[#top + 1] = { cx - r + 2 * r * t, groundy + 0.08 + h * max(0, sin(t * pi)) ^ 1.3 * (1 + ground.sym(0.06)) }
         end
         local out = { { cx - r, groundy - 0.1 } }
         for _, q in ipairs(top) do out[#out + 1] = q end
