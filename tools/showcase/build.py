@@ -87,6 +87,9 @@ def oak_pdf():
     P.append(page(art('oak1'), caption('Seed 4'), cls='plain'))
     P.append(page(art('oak2'), caption('Seed 2'), cls='plain'))
     P.append(page(art('oak3'), caption('Seed 7'), cls='plain'))
+    P.append(page(art('oak4o'), caption('Seed 4 again, with the open crown: the same tree, limbs showing'), cls='plain'))
+    P.append(page(art('oak2o'), caption('Seed 2, open crown'), cls='plain'))
+    P.append(page(art('oak7o'), caption('Seed 7, open crown'), cls='plain'))
     P.append(page(art('oak4'), caption('Seed 3, in Delft blue'), cls='plain'))
     P.append(page(art('oak5'), caption('Seed 9, in Delft blue'), cls='plain'))
     full = 21.59 * 72 / 2.54

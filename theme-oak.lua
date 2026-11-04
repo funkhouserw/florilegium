@@ -147,7 +147,14 @@ local function paint_plate(rng, pts, t, big, maxdim, flat)
   if flat then                                         -- far away: still lit on one side, in fewer shapes
     ink.poly(pts, true) ink.fill(tone(min(0.95, t)))
     if t > 0.14 then
-      ink.moveto(x0 + (x1 - x0) * 0.2, y1 - (y1 - y0) * 0.15) ink.lineto(x0 + (x1 - x0) * 0.2, y0 + (y1 - y0) * 0.15)
+      -- along the plate's own length, on its lit side: on a slanted limb it slants too
+      local pa, pb, far = pts[1], pts[1], -1
+      for i = 1, #pts do for j = i + 1, #pts do
+        local d = (pts[i][1] - pts[j][1]) ^ 2 + (pts[i][2] - pts[j][2]) ^ 2
+        if d > far then far, pa, pb = d, pts[i], pts[j] end
+      end end
+      local ox, oy = -(y1 - y0) * 0.1 - (x1 - x0) * 0.1, (y1 - y0) * 0.08 + (x1 - x0) * 0.08
+      ink.moveto(lerp(cx, pa[1], 0.6) + ox, lerp(cy, pa[2], 0.6) + oy) ink.lineto(lerp(cx, pb[1], 0.6) + ox, lerp(cy, pb[2], 0.6) + oy)
       ink.stroke(white, max(0.25, min(x1 - x0, y1 - y0) * 0.15 * ink.unit() * ink.CM), 0.3)
     end
     return
@@ -388,7 +395,7 @@ end
 -- ---------------------------------------------------------------- leaves
 -- An oak leaf from the origin along +y, length L: rounded lobes along a stalked blade.
 local LOBE = { { 0.1, 0.07 }, { 0.26, 0.24 }, { 0.38, 0.13 }, { 0.54, 0.32 }, { 0.67, 0.17 }, { 0.82, 0.25 }, { 1, 0.03 } }
-local LOBE_SMALL = { { 0.2, 0.18 }, { 0.33, 0.24 }, { 0.44, 0.13 }, { 0.58, 0.26 }, { 0.72, 0.25 }, { 0.84, 0.12 }, { 0.97, 0.05 } }
+local LOBE_SMALL = { { 0.34, 0.23 }, { 0.55, 0.13 }, { 0.78, 0.2 }, { 1, 0.01 } }
 local function leaf_outline(rng, L, small)
   local left, right = {}, {}
   for _, q in ipairs(small and LOBE_SMALL or LOBE) do
@@ -405,9 +412,9 @@ function M.leaf(rng, L, o)
   o = o or {}
   local t0 = o.tone or rng.range(0.3, 0.45)
   local out = leaf_outline(rng, L, L * ink.unit() < 0.62)
-  if L * ink.unit() < 0.62 then ink.poly(out, true) else ink.smooth(out, true, 1) end
+  ink.smooth(out, true, 1)
   ink.fill(tone(t0), o.op)
-  if L * ink.unit() > 0.42 then
+  if L * ink.unit() > 0.6 then
     streak3(0, 0, 0, L * 0.3, rng.sym(L * 0.03), L * 0.6, rng.sym(L * 0.03), L * 0.93, L * 0.035, L * 0.008, o.rib or white, 0.55)
   end
 end
@@ -429,7 +436,7 @@ end
 -- shade inside the crown: only a few lit leaves) or "front" (bright, with a shadow under each
 -- billow). o.n scales the number of leaves, o.leaf their length.
 local DEPTH = {
-  back = { core = 0.8, lo = 0.68, hi = 0.86, op = 0.85, n = 0.55, shade = 0, small = true },
+  back = { core = 0.8, lo = 0.68, hi = 0.86, op = 0.85, n = 0.8, shade = 0, small = true },
   mid = { core = 0.09, lo = 0.08, hi = 0.28, op = 1, n = 1.05, shade = 0 },
   front = { core = 0.2, lo = 0.17, hi = 0.68, op = 1, n = 1.1, shade = 0.22 },
 }
@@ -447,14 +454,26 @@ function M.clump(rng, R, depth, o)
   table.sort(bs, function(p, q) return p[2] > q[2] end)
   for _, b in ipairs(bs) do
     local bx, by, r = b[1], b[2], b[3]
+    local solid = not o.clear or o.clear(bx, by) > r * 2 + 0.6   -- no shape cut off by a text box
     -- the shade inside it, well inside the leaves, soft-edged
-    if D.small then ink.smooth(ink.blob(rng, bx, by, r * 0.66, r * 0.58, 0.2, 9), true) ink.fill(tone(0.84), 0.8)
-    else ink.smooth(ink.blob(rng, bx, by - r * 0.04, r * 0.62, r * 0.56, 0.2, 9), true) ink.fill(tone(D.core), D.op) end
-    if D.shade > 0 then
+    if not solid then -- leaves only
+    elseif D.small then
+      for _ = 1, 3 do                                   -- pale shade, broken up: never one smooth shape
+        ink.smooth(ink.blob(rng, bx + rng.sym(r * 0.3), by + rng.sym(r * 0.26), r * 0.3, r * 0.26, 0.4, 8), true)
+        ink.fill(tone(0.84), 0.5)
+      end
+    else
+      -- a little shade at its heart, broken up so it never reads as a smooth shape
+      for _ = 1, 3 do
+        ink.smooth(ink.blob(rng, bx + rng.sym(r * 0.2), by + rng.sym(r * 0.18), r * 0.34, r * 0.3, 0.35, 8), true)
+        ink.fill(tone(D.core), D.op)
+      end
+    end
+    if D.shade > 0 and solid then
       ink.smooth(ink.blob(rng, bx, by - r * 0.5, r * 0.6, r * 0.22, 0.2, 8), true) ink.fill(tone(0.03), D.shade, true)
     end
     -- leaves from the dark low side up to the lit top, each pointing out and drooping a little
-    local count = floor((o.n or 1) * D.n * (8 + 4 * r * r / (L * L)))
+    local count = floor((o.n or 1) * D.n * (9 + 4.6 * r * r / (L * L)))
     local ls = {}
     for k = 1, count do
       local a = rng.range(0, 2 * pi)
@@ -463,6 +482,9 @@ function M.clump(rng, R, depth, o)
     end
     table.sort(ls, function(p, q) return p[2] < q[2] end)
     for _, q in ipairs(ls) do
+      -- near a text box the leaves thin out, so it has a fringe and not a cut edge
+      local gap = o.clear and o.clear(q[1], q[2]) or 9
+      if gap > 0.5 and (gap > 1.2 or rng.u() < (gap - 0.5) / 0.7) then
       local lit = (q[2] - by) / r                       -- -1 below .. +1 above
       local t = lerp(D.lo, D.hi, max(0, min(1, (lit + 0.75) / 1.6 + rng.sym(0.14))))
       local ang = q[3] / rad - 90 + rng.sym(32)
@@ -470,6 +492,7 @@ function M.clump(rng, R, depth, o)
       ink.push() ink.translate(q[1], q[2]) ink.rotate(ang)
       M.leaf(rng, L * rng.range(0.8, 1.2), { tone = t, op = D.op < 1 and D.op or nil })
       ink.pop()
+      end
     end
   end
 end
@@ -652,6 +675,7 @@ function M.skeleton(rng, o)
     reach({ prev })
   end
   local gx, gy = o.bias and o.bias[1] or 0, o.bias and o.bias[2] or -0.1
+  local inertia, outward = o.inertia or 0, o.outward or 0
   for _ = 1, o.iters or 70 do
     local pull = {}
     local any = false
@@ -671,14 +695,88 @@ function M.skeleton(rng, o)
     for _, a in ipairs(pull) do                        -- in insertion order, never pairs()
       local L = sqrt(a[1] * a[1] + a[2] * a[2] + a[3] * a[3]) + 1e-9
       local x, y, z = a[1] / L + gx + rng.sym(0.06), a[2] / L + gy + rng.sym(0.06), a[3] / L + rng.sym(0.06)
-      local L2 = sqrt(x * x + y * y + z * z) + 1e-9
       local n = a.n
+      -- a limb keeps going the way it was going, and outward from the trunk: no hoops, no S-bends
+      local up = n.parent
+      if up then
+        local px, py, pz = n.x - up.x, n.y - up.y, n.z - up.z
+        local pL = sqrt(px * px + py * py + pz * pz) + 1e-9
+        x, y, z = x + inertia * px / pL, y + inertia * py / pL, z + inertia * pz / pL
+      end
+      local ox = n.x - o.base[1]
+      x = x + outward * ox / (abs(ox) + 1)
+      local L2 = sqrt(x * x + y * y + z * z) + 1e-9
       -- a node with this direction already: stop a stuck tip growing on the spot
       local nx_, ny_ = n.x + D * x / L2, n.y + D * y / L2
       if #n.kids < 3 and allowed(nx_, ny_) then new[#new + 1] = add(nx_, ny_, n.z + D * z / L2, n) end
     end
     if #new == 0 then break end
     reach(new)
+  end
+  -- no hooks: a branch that has turned back on itself within a few steps stops where it turned
+  do
+    local function back(n, k) for _ = 1, k do n = n.parent or n end return n end
+    for _, n in ipairs(nodes) do
+      if n.parent and n.parent.cut then n.cut = true
+      else
+        local a, b = back(n, 2), back(n, 8)
+        local c = back(b, 2)
+        local dx, dy, ex, ey = n.x - a.x, n.y - a.y, b.x - c.x, b.y - c.y
+        if c ~= b and dx * ex + dy * ey < 0.1 * sqrt((dx * dx + dy * dy) * (ex * ex + ey * ey)) then n.cut = true end
+      end
+    end
+    local out = {}
+    for _, n in ipairs(nodes) do
+      if n.cut then
+        local kept = {}
+        for _, k in ipairs(n.parent.kids) do if k ~= n then kept[#kept + 1] = k end end
+        n.parent.kids = kept
+      else out[#out + 1] = n end
+    end
+    nodes = out
+  end
+  -- no stubs: a side branch of only a node or two is not a branch
+  do
+    local size = {}
+    for i = #nodes, 1, -1 do
+      local n = nodes[i]
+      local c = 1
+      for _, k in ipairs(n.kids) do c = c + (size[k] or 1) end
+      size[n] = c
+    end
+    for _, n in ipairs(nodes) do
+      if #n.kids > 1 then
+        local kept = {}
+        local biggest = 0
+        for _, k in ipairs(n.kids) do biggest = max(biggest, size[k]) end
+        for _, k in ipairs(n.kids) do
+          -- nor a weak shoot off a great limb: it would only loop around it
+          local weak = size[n] > 150 and size[k] < size[n] * 0.05
+          if (size[k] >= (o.minbranch or 4) and not weak) or size[k] == biggest then kept[#kept + 1] = k else k.pruned = true end
+        end
+        n.kids = kept
+      end
+    end
+    local out = {}
+    for _, n in ipairs(nodes) do
+      if not n.pruned and not (n.parent and n.parent.pruned) then out[#out + 1] = n else n.pruned = true end
+    end
+    nodes = out
+  end
+  -- relax the path: each node eases toward the line between its neighbors, so limbs sweep instead of wriggling
+  for _ = 1, o.relax or 4 do
+    local px, py = {}, {}
+    for _, n in ipairs(nodes) do
+      if n.parent and #n.kids == 1 then
+        local a, b = n.parent, n.kids[1]
+        px[n], py[n] = lerp(n.x, (a.x + b.x) / 2, 0.6), lerp(n.y, (a.y + b.y) / 2, 0.6)
+      elseif n.parent and #n.kids == 0 then
+        local a = n.parent
+        local g = a.parent or a
+        px[n], py[n] = lerp(n.x, a.x + (a.x - g.x), 0.5), lerp(n.y, a.y + (a.y - g.y), 0.5)
+      end
+    end
+    for _, n in ipairs(nodes) do if px[n] then n.x, n.y = px[n], py[n] end end
   end
   -- the pipe model, tips to base
   local en = o.pipe or 2.1
@@ -717,9 +815,10 @@ local function chains(nodes)
 end
 
 -- a root running out from the flare, sinking into the ground
-local function O_root(M_, rng, x, y, sd, L, w)
-  local spine = { { x, y + w * 0.5 }, { x + sd * L * 0.35, y + w * 0.1 }, { x + sd * L * 0.7, y - w * 0.15 }, { x + sd * L, y - w * 0.3 } }
-  M_.limb(rng, spine, function(v) return w * (1 - 0.82 * v) end, { rough = 0.08, plate = 0.11, stretch = 3, moss = 0.3 })
+local function O_root(M_, rng, x, y, sd, L, w, y0_)
+  local g_ = y0_ or y
+  local spine = { { x, y + w * 0.5 }, { x + sd * L * 0.35, lerp(y, g_, 0.5) + w * 0.12 }, { x + sd * L * 0.7, g_ + w * 0.02 }, { x + sd * L, g_ - 0.4 } }
+  M_.limb(rng, spine, function(v) return w * (1 - 0.7 * v) end, { rough = 0.08, plate = 0.11, stretch = 3, moss = 0.3 })
 end
 
 -- ---------------------------------------------------------------- one huge oak
@@ -754,8 +853,8 @@ function M.tree(rng, o)
   local nodes = M.skeleton(layout, {
     margin = trunkw_ * 0.12,
     envelope = { W * 0.5, H * 0.6, W * 0.6, H * 0.36, W * 0.3 },
-    base = { basex, groundy }, trunk = (o.keepouts and #o.keepouts > 0) and H * 0.14 or H * 0.2, N = o.N or 700, D = 0.6, di = 5, dk = 1.3,
-    keepouts = o.keepouts, iters = 80, pipe = 1.8,
+    base = { basex, groundy }, trunk = (o.keepouts and #o.keepouts > 0) and H * 0.14 or H * 0.2, N = o.N or 1100, D = 0.6, di = 5, dk = 1.0, minbranch = 7,
+    keepouts = o.keepouts, iters = 80, pipe = 1.55, inertia = o.inertia or 1.4, outward = o.outward or 0.25,
   })
   local trunkw = trunkw_
   local rmax = nodes[1].r
@@ -763,8 +862,8 @@ function M.tree(rng, o)
     local w = trunkw * (n.r / rmax)
     -- the last few nodes of a branch run out to a point
     local up = n
-    for k = 0, 2 do
-      if #up.kids == 0 then return w * (0.35 + 0.22 * k) end
+    for k = 0, 3 do
+      if #up.kids == 0 then return w * (0.3 + 0.175 * k) end
       up = up.kids[1]
     end
     return w
@@ -802,7 +901,10 @@ function M.tree(rng, o)
       while i < #sp - 1 and dist[i + 1] < d do i = i + 1 end
       local f = dist[i + 1] > dist[i] and (d - dist[i]) / (dist[i + 1] - dist[i]) or 0
       local w = lerp(ws[i], ws[i + 1], f)
-      if isroot then w = w * (1 + 0.6 * exp(-d / 1.1)) + 0.5 * exp(-d / 0.5) end   -- the root flare
+      if isroot then                                    -- the root flare, from the ground line up
+        local e = max(0, d - 1.5)
+        w = w * (1 + 0.6 * exp(-e / 1.1)) + 0.5 * exp(-e / 0.5)
+      end
       return w
     end
     local wm = width(0.5)
@@ -811,8 +913,8 @@ function M.tree(rng, o)
       if wm > 0.8 and layout.chance(0.7) then kn[1] = { layout.range(-0.5, 0.45), layout.range(0.2, 0.8), layout.range(0.55, 0.95) } end
       if isroot then bl[1] = { -0.42 + layout.sym(0.15), 0.42, 2.6 } kn = { { 0.42, 0.66, 1.05 } } end
       if wm > 1.3 and not isroot and layout.chance(0.5) then bl[1] = { layout.range(-0.5, 0.5), layout.range(0.3, 0.7), 1.7 } end
-      M.limb(rng.fork(), sp, width, { knots = kn, burls = bl, moss = wm > 1.25 and 0.5 or 0.08, rough = 0.05,
-        plate = max(0.14, min(0.21, wm * 0.15)), stretch = wm > 1 and 4.6 or 3, detail = wm > 1.8 and 0.16 or 9, flat = wm < 1.25, torn = not isroot })
+      M.limb(rng.fork(), sp, width, { knots = kn, burls = bl, moss = wm > 1.1 and 0.5 or 0.08, rough = 0.05,
+        plate = max(0.1, min(0.21, wm * 0.14)), stretch = wm > 1 and 4.6 or 4.2, detail = wm > 1.8 and 0.16 or 9, flat = wm < 0.7, torn = not isroot })
       -- level enough to lie on?
       if wm > 0.42 and wm < 1.7 then
         for i = 1, #sp - 1 do
@@ -823,8 +925,13 @@ function M.tree(rng, o)
         end
       end
     elseif wm >= 0.07 then
-      local _, outline = tube(rng.fork(), sp, width, 0.04)
-      ink.poly(outline, true) ink.fill(tone(0.14))
+      local P_, outline = tube(rng.fork(), sp, width, 0.03)
+      ink.smooth(outline, true, 0.8) ink.fill(tone(0.16))
+      local a_, b_ = P_(1, 0.5), select(1, P_(-1, 0.5))
+      local side = (a_ < b_) and 0.45 or -0.45          -- the side toward the light
+      local lit = {}
+      for j = 0, 8 do local x, y = P_(side, j / 8) lit[#lit + 1] = { x, y } end
+      ink.smooth(lit, false) ink.stroke(tone(0.42), max(0.25, wm * 0.3 * ink.unit() * ink.CM), 0.8)
     else
       ink.smooth(sp, false) ink.stroke(tone(0.12), max(0.3, wm * ink.CM * 0.8))
     end
@@ -840,6 +947,7 @@ function M.tree(rng, o)
       -- that the bark flows from one into the other
       sp[1] = { lerp(pp.x, back.x, 0.8), lerp(pp.y, back.y, 0.8) } ws[1] = min(wp * 0.8, W_of(list[1]) * 2.1)
       sp[2] = { pp.x, pp.y } ws[2] = min(wp * 0.82, W_of(list[1]) * 1.55)
+      if W_of(list[1]) < 0.3 then ws[1], ws[2] = W_of(list[1]) * 0.4, W_of(list[1]) * 1.2 end   -- a thin one grows out to a point inside it
       if W_of(list[1]) > 0.45 then forks[#forks + 1] = { x = pp.x, y = pp.y, w = W_of(list[1]), dx = list[1].x - pp.x, dy = list[1].y - pp.y } end
     end
     for i = 1, #list do
@@ -848,6 +956,17 @@ function M.tree(rng, o)
         sp[#sp + 1] = { n.x, n.y }
         ws[#ws + 1] = W_of(n)
       end
+    end
+    -- a limb narrows gradually past a fork, not all at once
+    for _ = 1, 3 do
+      local w2 = {}
+      for i = 2, #ws - 1 do w2[i] = (ws[i - 1] + 2 * ws[i] + ws[i + 1]) / 4 end
+      for i = 2, #ws - 1 do ws[i] = w2[i] end
+    end
+    -- the trunk starts below the ground, so its cut end never shows
+    if ci == 1 and #sp >= 2 then
+      table.insert(sp, 1, { sp[1][1] - (sp[2][1] - sp[1][1]) * 0.5, sp[1][2] - 1.5 })
+      table.insert(ws, 1, ws[1])
     end
     if #sp >= 3 then
       -- split where the width has fallen far; each stretch shares a point with the next
@@ -858,7 +977,8 @@ function M.tree(rng, o)
         b = min(b, #sp)
         if #sp - b < 2 then b = #sp end
         local ss, ww = {}, {}
-        for i = a, b do ss[#ss + 1] = sp[i] ww[#ww + 1] = ws[i] end
+        local b2 = min(#sp, b + 2)
+        for i = a, b2 do ss[#ss + 1] = sp[i] ww[#ww + 1] = ws[i] end
         if #ss >= 3 then stretch(ss, ww, ci == 1 and first, ch.parent_prev ~= nil, first)
         elseif #ss == 2 then ink.smooth(ss, false) ink.stroke(tone(0.12), max(0.3, ww[1] * ink.CM * 0.8)) end
         first = false
@@ -924,8 +1044,10 @@ function M.tree(rng, o)
   local tips = {}
   local cell = o.cell or 2
   local seen = {}
+  -- crown: "lush" (default) closes over the limbs; "open" thins the leaves so they read through
+  local open = o.crown == "open"
   for _, n in ipairs(nodes) do
-    if #n.kids == 0 or W_of(n) < trunkw * 0.05 then
+    if #n.kids == 0 or W_of(n) < trunkw * (open and 0.05 or 0.11) then
       local k = floor(n.x / cell) * 1000 + floor(n.y / cell)
       local b = seen[k]
       if not b then b = { x = 0, y = 0, z = 0, n = 0 } seen[k] = b tips[#tips + 1] = b end
@@ -953,23 +1075,50 @@ function M.tree(rng, o)
     if n then forky = n.y end
   end
   local tx0 = nodes[1].x
+  -- distance from a point of a clump to the nearest text box
+  local function clear_of(cx, cy)
+    if not o.keepouts or #o.keepouts == 0 then return nil end
+    return function(lx, ly)
+      local px, py, best = cx + lx, cy + ly, 99
+      for _, q in ipairs(o.keepouts) do
+        local dx, dy = max(q[1] - px, 0, px - q[3]), max(q[2] - py, 0, py - q[4])
+        best = min(best, sqrt(dx * dx + dy * dy))
+      end
+      return best
+    end
+  end
+  local bough = {}                                     -- open crown: the limbs the leaves stay off
+  if open then
+    for _, n in ipairs(nodes) do
+      if W_of(n) > trunkw * 0.15 then bough[#bough + 1] = { n.x, n.y, W_of(n) } end
+    end
+  end
+  local function on_bough(x, y, R)
+    for _, q in ipairs(bough) do
+      if (q[1] - x) ^ 2 + (q[2] - y) ^ 2 < (q[3] + R * 0.6) ^ 2 then return true end
+    end
+    return false
+  end
   local function clump_at(layer, depth, x, y, R, n)
+    if o.bare then return end
+    if open and depth ~= "back" and on_bough(x, y, R) then return end
     if depth ~= "back" and y - R * 0.7 < forky and abs(x - tx0) < trunkw * 0.7 + R then return end
     if blocked(x, y, R * 1.1, depth) then
       R = R * 0.62                                     -- a small mass still clothes a branch near a box
       if blocked(x, y, R * 1.1, depth) then return end
     end
     local old = ink.layer(layer)
-    ink.push() ink.translate(x, y) M.clump(rng.fork(), R, depth, { n = n, leaf = o.leaf or 0.36 }) ink.pop()
+    ink.push() ink.translate(x, y) M.clump(rng.fork(), R, depth, { n = n, leaf = o.leaf or 0.42, clear = clear_of(x, y) }) ink.pop()
     ink.layer(old)
     placed[depth] = placed[depth] + 1
+    return true
   end
   for _, b in ipairs(tips) do
     clump_at(1, "back", b.x + layout.sym(1.2), b.y + layout.range(0.3, 1.6), layout.range(1.5, 2.2), 0.3)
-    clump_at(3, "mid", b.x + layout.sym(0.7), b.y + layout.sym(0.5), layout.range(1.2, 1.75), 0.42)
+    b.shown = clump_at(3, "mid", b.x + layout.sym(0.7), b.y + layout.sym(0.5), layout.range(1.2, 1.75), 0.42)
     -- bright masses only part-way round, so limbs and what sits on them show between them
-    if layout.chance(0.78) then
-      clump_at(5, "front", b.x + layout.sym(0.6), b.y + layout.range(0, 0.7), layout.range(1, 1.5), 0.8)
+    if layout.chance(open and 0.55 or 0.78) then
+      b.shown = clump_at(5, "front", b.x + layout.sym(0.6), b.y + layout.range(0, 0.7), layout.range(1, 1.5), 0.8) or b.shown
     end
   end
   -- no bare ends: a branch tip with no mass near it gets a small one
@@ -978,14 +1127,14 @@ function M.tree(rng, o)
     for _, n in ipairs(nodes) do
       if #n.kids == 0 and n.y > forky then
         local near = false
-        for _, b in ipairs(tips) do if (b.x - n.x) ^ 2 + (b.y - n.y) ^ 2 < 0.6 and not b.blocked then near = true break end end
+        for _, b in ipairs(tips) do if (b.x - n.x) ^ 2 + (b.y - n.y) ^ 2 < 0.6 and (b.shown or not open) then near = true break end end
         for _, q in ipairs(done_) do if (q[1] - n.x) ^ 2 + (q[2] - n.y) ^ 2 < 0.8 then near = true break end end
-        local clear = not blocked(n.x, n.y, 0.45)
+        local clear = not blocked(n.x, n.y, open and 0.72 or 0.45)
         for _, q in ipairs(windows) do if (q[1] - n.x) ^ 2 + (q[2] - n.y) ^ 2 < (q[3] * 0.75) ^ 2 then clear = false end end
-        if clear and not near then
+        if clear and not near and not o.bare then
           done_[#done_ + 1] = { n.x, n.y }
           local old = ink.layer(5)
-          ink.push() ink.translate(n.x, n.y) M.clump(rng.fork(), 0.5, "front", { n = 0.8, leaf = o.leaf or 0.36 }) ink.pop()
+          ink.push() ink.translate(n.x, n.y) M.clump(rng.fork(), open and 0.8 or 0.5, "front", { n = 0.8, leaf = o.leaf or 0.42, clear = clear_of(n.x, n.y) }) ink.pop()
           ink.layer(old)
         end
       end
@@ -1021,7 +1170,7 @@ function M.tree(rng, o)
   for _, sd in ipairs({ -1, 1, -1, 1 }) do
     local L_, w_ = layout.range(2.4, 4.6), layout.range(0.5, 0.95)
     local off = layout.range(0.5, trunkw * 0.5)
-    O_root(M, rng.fork(), bx + sd * off, groundy + layout.range(0.05, 0.5), sd, L_, w_)
+    O_root(M, rng.fork(), bx + sd * off, groundy + layout.range(0.05, 0.5), sd, L_, w_, groundy)
   end
   for _, ly in ipairs({ 1, 2, 3, 4, 5 }) do ink.layer(ly) ink.unclip() end
   ink.layer(6)

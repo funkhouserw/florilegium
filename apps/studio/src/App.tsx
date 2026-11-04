@@ -41,6 +41,7 @@ export function App() {
   const [pieces, setPieces] = useState(1.4)
   const [grows, setGrows] = useState<'gym' | 'oak' | 'cats'>('gym')
   const [inkName, setInkName] = useState<'green' | 'blue'>('blue')
+  const [crown, setCrown] = useState<'lush' | 'open'>('lush')
   const S = SIZES[sizeKey]
   const W = S.w * CM, H = S.h * CM
   const [drawn, setDrawn] = useState<Box[][]>(() => [[startBox(W, H)]])
@@ -68,7 +69,7 @@ export function App() {
 
   // the gym's keep-outs: each box as far down as its text reaches, in cm, y up
   const requests = useMemo(() => pages.map((p, index) => ({
-    grows, ink: inkName, w: S.w, h: S.h, seed: seed + index * 101, cats, size: grows === 'gym' ? pieces : 1, density: 1, index,
+    grows, ink: inkName, crown, w: S.w, h: S.h, seed: seed + index * 101, cats, size: grows === 'gym' ? pieces : 1, density: 1, index,
     keepouts: p.boxes.map((b) => {
       const used = dragging ? b.h : p.lines.length ? (p.used.get(b.id) ?? 0) : b.h
       const h = used > 0 ? used : text.trim() === '' ? b.h : 0
@@ -76,7 +77,7 @@ export function App() {
       const pad = fontSize * 0.5                       // a little air around the text, and its descenders
       return [b.x - pad, H - (b.y + h + pad), b.x + b.w + pad, H - b.y + pad].map((v) => +(v / CM).toFixed(2))
     }).filter((q): q is number[] => q !== null),
-  })), [pages, S, seed, cats, pieces, H, text, dragging, fontSize, grows, inkName])
+  })), [pages, S, seed, cats, pieces, H, text, dragging, fontSize, grows, inkName, crown])
 
   const latest = useRef(requests)
   if (!dragging) latest.current = requests             // the gym regrows on release, not during a drag
@@ -141,6 +142,14 @@ export function App() {
             </select>
           </label>
         </div>
+        {grows === 'oak' && (
+          <label>Crown
+            <select value={crown} onChange={(e) => setCrown(e.target.value as 'lush' | 'open')}>
+              <option value="lush">Lush</option>
+              <option value="open">Open, limbs showing</option>
+            </select>
+          </label>
+        )}
         <label>Size
           <select value={sizeKey} onChange={(e) => changeSize(e.target.value as SizeKey)}>
             {Object.entries(SIZES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}

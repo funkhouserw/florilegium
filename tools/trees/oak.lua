@@ -12,7 +12,7 @@ ink.set_ink(INK[col][1] / 255, INK[col][2] / 255, INK[col][3] / 255)
 ink.set_transform(ink.page_transform())
 ink.record(true)
 local t0 = os.clock()
-local stats = O.tree(ink.rng(seed * 7919 + 13), { w = W, h = H })
+local stats = O.tree(ink.rng(seed * 7919 + 13), { w = W, h = H, crown = os.getenv("CROWN"), bare = os.getenv("BARE") ~= nil, cats = os.getenv("BARE") and 0 or nil, eyes = os.getenv("BARE") and 0 or nil, nests = os.getenv("BARE") and 0 or nil, sprigs = os.getenv("BARE") and 0 or nil })
 local rec = ink.take_recording()
 local sizes = {}
 for _, k in ipairs(rec.keys) do sizes[#sizes + 1] = k .. ":" .. (#table.concat(rec.layers[k], "\n") // 1024) .. "K" end
