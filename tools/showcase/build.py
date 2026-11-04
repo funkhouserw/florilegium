@@ -146,7 +146,72 @@ def seasons_pdf():
     P.append(crop('sn-summer', 5, 15, 9.6, 'Close up: the swing, and a heart in the bark'))
     P.append(crop('sn-dead', 3, 15, 9.6, 'Close up: bark falling away, shelf fungus'))
     return P
-for name, pages in (('cat-trees', gym_pdf()), ('oak-trees', oak_pdf()), ('oak-seasons', seasons_pdf())):
+SENTENCES = (
+    "A cut limb does not heal the way skin heals. The tree walls the wound off and rolls new wood in from the edges, a little more each year.",
+    "From below that roll, dormant buds wake up and send shoots straight toward the light; gardeners call them water sprouts.",
+    "An old oak can be wider than it is tall, because every limb has spent centuries reaching for whatever gap in the sky its neighbors left.",
+    "This one is grown the same way. It starts with a scatter of points in the empty parts of the page, and each point pulls on the nearest branch tip until a branch arrives.",
+    "Nothing here is drawn by hand, and nothing is copied. A drawing is only numbers and rules, so every seed grows a different tree.",
+    "When a box of text is in the way, the points inside it are simply never placed. The branches find the room that is left, and they slide along the edge of the box when they meet it.",
+    "The thickness of a limb is worked out from everything it has to carry, added up from the twigs back to the trunk.",
+    "Each plate of bark is lit on one side, according to which way that part of the limb faces, so a trunk reads as round without a single gradient.",
+    "If the text runs across the foot of the page, the ground simply moves up and stands on top of it.",
+    "A narrow margin gets a slimmer trunk. A wide one gets the whole old giant, with room for a swing.",
+    "Spanish moss is not a moss at all but a relative of the pineapple. It takes nothing from the tree, only somewhere to hang.",
+    "Many oaks keep some of their dead leaves through the winter and drop them only when the new buds push them off in spring.",
+    "A dead oak can stand for decades. Its bark falls away in sheets, shelf fungus climbs the trunk, and birds move in.",
+    "Somewhere on every trunk, at a different height each time, two initials have been cut into a heart. The bark has been growing around them for years.",
+    "Acorns take a long time to matter. An oak may be decades old before it bears a good crop, and in some years it bears almost none, then far too many for the squirrels to eat.",
+    "Up close, the leaves are only smooth wavy outlines, a few thousand of them, painted in layers: pale ones at the back, dark ones behind the limbs, bright ones in front.",
+    "Depth comes entirely from the order of painting. Whatever lives in the tree sits between the dark leaves and the bright ones, so it is partly hidden, the way it would be.",
+    "A limb always comes out from behind its parent here. That one rule did more for the forks than any amount of detail in the bark.",
+    "Bark is dead tissue, and it has to split to let the living wood beneath it grow. The plates and furrows of an old trunk are a record of it being outgrown, year after year.",
+    "Snow only lies where a limb is level enough to hold it, so it is thickest on the long low boughs and absent on anything steep.",
+    "A swing needs a limb that is low, level, and strong, with clear ground under it. If this page has no such limb, it has no swing.",
+    "The growing tips of a tree compete for light, and the branches that lose are shed. The shape you see is what is left of a long argument about the sky.",
+    "Most of the weight of an oak is not in the crown but in the trunk and the great lower limbs, which is why those limbs can reach out so far without falling.",
+    "On this page, as on every other, a seed is the only thing that was chosen. Change it and a different tree grows in the same space, around the same words.",
+    "Bats hunt in the open air along the edge of a tree, and they stay clear of the limbs here too, because nothing is allowed to fly into anything.",
+    "Robins do not really migrate away from every garden. Plenty stay all winter, and they are easy to see against bare branches once the leaves are down.",
+    "Holly keeps its leaves all year and its berries well into the cold, which is why it looks so well under a bare tree when everything else has gone gray.",
+    "An oak that is cut back hard will often answer with a crown of straight new shoots, and people have harvested wood that way for centuries without killing the tree.",
+    "There is no photograph behind any of this, and no reference drawing to trace. It comes out as paths and fills, and it stays sharp however far you zoom in.",
+    "Text sets the terms. Draw a box anywhere on the page, and the tree that grows afterward treats it as a wall it has always known about.",
+)
+def fill(width, height, start, size=10.5):
+    """whole sentences that fit a box of this size, in cm, from the pool, by estimate"""
+    chars_line = width / (size * 0.0178)
+    lines = int(height / (size * 1.42 * 0.0353)) - 1
+    room, out, i = chars_line * lines * 1.08, [], start
+    while room > 0:
+        t = SENTENCES[i % len(SENTENCES)]
+        if len(t) > room and out: break
+        out.append(t)
+        room -= len(t) + 1
+        i += 1
+    return ' '.join(out), i
+def text_pdf():
+    P = []
+    n_ = [0]
+    def tb(x, top, w, h, title=None, size=10.5):
+        head = f'<h2>{title}</h2>' if title else ''
+        room = h - (1.3 if title else 0)
+        body, n_[0] = fill(w, room, n_[0], size)
+        return textbox(x, top, w, h, f'{head}<p style="font-size:{size}pt;line-height:1.42">{body}</p>')
+    P.append(page(art('tx-left'), tb(8.2, 2.5, 11.4, 22.9, 'A wide left margin')))
+    P.append(page(art('tx-right'), tb(2, 2.5, 11.4, 22.9, 'A wide right margin, in autumn')))
+    P.append(page(art('tx-short'), tb(8.2, 2.5, 11.4, 9, 'Short text, in spring')))
+    P.append(page(art('tx-title'), textbox(3, 1.8, 15.6, 6, '<h1>Winter</h1><p class="sub">A title page, with the tree under it.</p>', 'center')))
+    P.append(page(art('tx-center'), tb(4.5, 8.5, 12.6, 9, 'A box in the middle, in Delft blue')))
+    P.append(page(art('tx-cols'), tb(1.8, 2.5, 8.4, 11, 'Two columns'), tb(11.4, 2.5, 8.4, 11)))
+    P.append(page(art('tx-foot'), tb(2.5, 18.5, 16.6, 7.4, 'Text along the foot')))
+    P.append(page(art('tx-scatter'), tb(1.5, 2, 7.5, 7, 'Scattered boxes', 10), tb(13, 11, 7, 6.5, None, 10), tb(1.5, 20, 6.5, 6, None, 10)))
+    P.append(page(art('tx-narrow'), tb(6, 2.5, 9.6, 22.9, 'A narrow column')))
+    P.append(page(art('tx-bands'), tb(1.8, 1.5, 18, 3), tb(1.8, 21.5, 18, 5)))
+    P.append(page(art('tx-moss'), tb(2, 2.5, 8.6, 13, 'Spanish moss')))
+    P.append(page(art('tx-mossdead'), tb(11, 15, 8.8, 10.4, 'Spanish moss, dead tree')))
+    return P
+for name, pages in (('cat-trees', gym_pdf()), ('oak-trees', oak_pdf()), ('oak-seasons', seasons_pdf()), ('oak-text', text_pdf())):
     html = f'<!doctype html><html><head><meta charset="utf-8"><title>{name}</title><style>{STYLE}</style></head><body>{"".join(pages)}</body></html>'
     (ROOT / f'build/showcase/{name}.html').write_text(html)
     print(name, len(pages), 'pages', len(html) // (1024 * 1024), 'MB html')

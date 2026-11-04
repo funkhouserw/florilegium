@@ -57,6 +57,24 @@ oak("sn-autumn-open", { seed = 7, season = "autumn", crown = "open" })
 oak("sn-autumn-blue", { seed = 4, season = "autumn", ink = "blue" })
 oak("sn-winter-blue", { seed = 3, season = "winter", ink = "blue" })
 oak("sn-dead-blue", { seed = 9, season = "dead", ink = "blue" })
+-- with text: the same numbers as text_pdf in build.py
+local TX = {
+  { "tx-left", 4, "summer", nil, { box(8.2, 2.5, 11.4, 22.9) } },
+  { "tx-right", 2, "autumn", nil, { box(2, 2.5, 11.4, 22.9) } },
+  { "tx-short", 7, "spring", nil, { box(8.2, 2.5, 11.4, 9) } },
+  { "tx-title", 2, "winter", nil, { box(3, 1.8, 15.6, 6) } },
+  { "tx-center", 5, "summer", "blue", { box(4.5, 8.5, 12.6, 9) } },
+  { "tx-cols", 7, "autumn", nil, { box(1.8, 2.5, 8.4, 11), box(11.4, 2.5, 8.4, 11) } },
+  { "tx-foot", 3, "summer", nil, { box(2.5, 18.5, 16.6, 7.4) } },
+  { "tx-scatter", 9, "dead", nil, { box(1.5, 2, 7.5, 7), box(13, 11, 7, 6.5), box(1.5, 20, 6.5, 6) } },
+  { "tx-narrow", 8, "winter", nil, { box(6, 2.5, 9.6, 22.9) } },
+  { "tx-bands", 6, "spring", nil, { box(1.8, 1.5, 18, 3), box(1.8, 21.5, 18, 5) } },
+  { "tx-moss", 2, "summer", nil, { box(2, 2.5, 8.6, 13) }, true },
+  { "tx-mossdead", 4, "dead", nil, { box(11, 15, 8.8, 10.4) }, true },
+}
+for _, t in ipairs(TX) do
+  oak(t[1], { seed = t[2], season = t[3], ink = t[4], keepouts = t[5], spanishmoss = t[6] })
+end
 oak("oak-cover", { seed = 1, keepouts = { box(3.6, 2.2, 14.4, 5.6) } })
 oak("oak-box", { seed = 5, keepouts = { box(3, 2.2, 15.6, 8.8) } })
 oak("oak-two", { seed = 6, keepouts = { box(1.6, 2, 8.4, 7), box(13.2, 15, 7, 8) } })

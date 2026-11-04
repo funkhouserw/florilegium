@@ -631,7 +631,40 @@ function M.skeleton(rng, o)
     return true
   end
   local e = o.envelope                                 -- { cx, cy, rx, ry, rz }
-  while #pts < (o.N or 900) do
+  if o.fill then
+    -- around text: the crown is whatever free space the tree can reach, not an ellipse. A flood over a
+    -- coarse grid from the top of the trunk finds it; attractors are scattered evenly through it.
+    local F = o.fill
+    local c = 0.7
+    local seen, queue = {}, {}
+    local function key(i, j) return i * 10000 + j end
+    local i0, j0 = floor(o.base[1] / c), floor((o.base[2] + (o.trunk or 6)) / c)
+    seen[key(i0, j0)] = 0 queue[1] = { i0, j0 }
+    local cells, head = 0, 1
+    local reach_ = F.reach / c                         -- no limb walks further than this around the text
+    while head <= #queue do
+      local q = queue[head] head = head + 1
+      if (q[2] + 0.5) * c >= F.ylo then cells = cells + 1 end
+      for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+        local i, j = q[1] + d[1], q[2] + d[2]
+        local x_, y_ = (i + 0.5) * c, (j + 0.5) * c
+        local steps_ = seen[key(q[1], q[2])] + 1
+        if not seen[key(i, j)] and steps_ <= reach_ and x_ > -1 and x_ < F.w + 1 and y_ > o.base[2] + 1 and y_ < F.h and allowed(x_, y_) then
+          seen[key(i, j)] = steps_ queue[#queue + 1] = { i, j }
+        end
+      end
+    end
+    local want = min(o.N or 1100, floor(cells * c * c * 3))
+    local tries = 0
+    while #pts < want and tries < want * 60 do
+      tries = tries + 1
+      local x_, y_ = rng.range(-0.8, F.w + 0.8), rng.range(F.ylo, F.h - 0.2)
+      if seen[key(floor(x_ / c), floor(y_ / c))] and allowed(x_, y_) then
+        pts[#pts + 1] = { x_, y_, rng.sym(1) * e[5], near = nil, dist = di }
+      end
+    end
+  end
+  while not o.fill and #pts < (o.N or 900) do
     local x, y, z = rng.sym(1), rng.sym(1), rng.sym(1)
     -- denser near the surface of the crown; the underside flattened
     if x * x + y * y + z * z <= 1 and x * x + y * y + z * z > 0.04 + rng.u() * 0.32 then
@@ -673,7 +706,8 @@ function M.skeleton(rng, o)
   for _ = 1, 200 do
     if reached() then break end
     if not allowed(prev.x, prev.y + D) then break end
-    prev = add(prev.x + D * (e[1] - prev.x) / e[3] * 0.25 + D * rng.sym(0.2), prev.y + D, rng.sym(0.05), prev)
+    local pull = o.fill and 0 or D * (e[1] - prev.x) / e[3] * 0.25
+    prev = add(prev.x + pull + D * rng.sym(o.fill and 0.08 or 0.2), prev.y + D, rng.sym(0.05), prev)
     reach({ prev })
   end
   local gx, gy = o.bias and o.bias[1] or 0, o.bias and o.bias[2] or -0.1
@@ -710,6 +744,14 @@ function M.skeleton(rng, o)
       local L2 = sqrt(x * x + y * y + z * z) + 1e-9
       -- a node with this direction already: stop a stuck tip growing on the spot
       local nx_, ny_ = n.x + D * x / L2, n.y + D * y / L2
+      -- a branch that meets a text box slides along it, it does not just stop
+      if o.fill and not allowed(nx_, ny_) then
+        local dx0, dy0 = x / L2, y / L2
+        for _, turn in ipairs({ 0.6, -0.6, 1.1, -1.1, 1.6, -1.6 }) do
+          local dx1, dy1 = dx0 * cos(turn) - dy0 * sin(turn), dx0 * sin(turn) + dy0 * cos(turn)
+          if allowed(n.x + D * dx1, n.y + D * dy1) then nx_, ny_ = n.x + D * dx1, n.y + D * dy1 break end
+        end
+      end
       if #n.kids < 3 and allowed(nx_, ny_) then new[#new + 1] = add(nx_, ny_, n.z + D * z / L2, n) end
     end
     if #new == 0 then break end
@@ -1182,36 +1224,78 @@ function M.tree(rng, o)
   if not blue or season == "autumn" then
     for i, c in ipairs(S.leaves or {}) do hues[i] = ramp_of(c) end
   end
-  -- the trunk stands where the text boxes leave it most room
+  -- the trunk stands where the text boxes leave it most room, and is as thick as that room allows;
+  -- if a box runs across the foot of the page, the ground is on top of that box
+  local keeps = o.keepouts or {}
   local trunkw_ = o.trunkw or W * 0.2
   local basex = W * (0.46 + layout.sym(0.05))
-  do
-    local function room(x)
-      local h = H
-      for _, q in ipairs(o.keepouts or {}) do
-        if x + trunkw_ * 0.75 > q[1] and x - trunkw_ * 0.75 < q[3] then h = min(h, q[2]) end
+  local filling = #keeps > 0
+  if filling then
+    local noise = {}
+    for k = 1, 25 do noise[k] = layout.range(0, 1.2) end
+    local function best_at(g)
+      local avail = H - g
+      local top_x, top_w, top_h, top_s
+      for k = 1, 25 do
+        local x = W * (0.08 + 0.84 * (k - 1) / 24)
+        for _, zone in ipairs({ 0.3, 0.5 }) do
+          local lo, hi = 0, W
+          for _, q in ipairs(keeps) do
+            if q[4] > g and q[2] < g + avail * zone then
+              if q[3] <= x then lo = max(lo, q[3])
+              elseif q[1] >= x then hi = min(hi, q[1]) end
+            end
+          end
+          local gap = hi - lo
+          local tw = o.trunkw or min(W * 0.2, gap * 0.42, avail * 0.25)
+          local h = avail
+          for _, q in ipairs(keeps) do
+            if q[4] > g and x + tw * 0.75 > q[1] and x - tw * 0.75 < q[3] then h = min(h, q[2] - g) end
+          end
+          if x - lo > tw * 0.6 and hi - x > tw * 0.6 then
+            local sc = h + tw * 3.5 - abs(x - W * 0.46) * 0.25 + noise[k] - (tw < W * 0.1 and 4 or 0)
+            if h > 2 and (not top_s or sc > top_s) then top_x, top_w, top_h, top_s = x, tw, h, sc end
+          end
+        end
       end
-      return h - abs(x - W * 0.46) * 0.25
+      return top_x, top_w, top_h
     end
-    local best = room(basex)
-    if best < H * 0.5 then
-      for k = 1, 12 do
-        local x = W * (0.12 + 0.76 * (k - 1) / 11)
-        local r_ = room(x)
-        if r_ > best then best, basex = r_, x end
+    local x0, w0, h0 = best_at(groundy)
+    local lowest
+    for _, q in ipairs(keeps) do
+      if q[3] - q[1] > W * 0.5 and q[2] < H * 0.45 and (not lowest or q[4] > lowest) then lowest = q[4] end
+    end
+    if lowest and (not x0 or w0 < W * 0.1 or h0 < (H - groundy) * 0.3) then
+      local g1 = lowest + 0.9
+      local x1, w1, h1 = best_at(g1)
+      if x1 and h1 > H * 0.3 and (not w0 or w1 > w0) then
+        groundy, x0, w0, h0 = g1, x1, w1, h1
       end
     end
+    if x0 then basex, trunkw_ = x0, w0 end
   end
   local nodes = M.skeleton(layout, {
-    margin = trunkw_ * 0.12,
+    margin = filling and 0.45 or trunkw_ * 0.12,
+    fill = filling and { w = W, h = H, ylo = groundy + max(3, (H - groundy) * 0.3), reach = o.reach or max(W, H) * 0.84 } or nil,
     envelope = { W * 0.5, H * 0.6, W * 0.6, H * 0.36, W * 0.3 },
-    base = { basex, groundy }, trunk = (o.keepouts and #o.keepouts > 0) and H * 0.14 or H * 0.2, N = o.N or 1100, D = 0.6, di = 5, dk = 1.0, minbranch = 7,
+    base = { basex, groundy }, trunk = filling and (H - groundy) * 0.16 or H * 0.2, N = o.N or 1100, D = 0.6, di = 5, dk = 1.0, minbranch = 7,
     keepouts = o.keepouts, iters = 80, pipe = 1.55, inertia = o.inertia or 1.4, outward = o.outward or 0.25,
   })
   local trunkw = trunkw_
   local rmax = nodes[1].r
   local function W_of(n)
     local w = trunkw * (n.r / rmax)
+    if filling then                                    -- a limb near a text box narrows, it is not cut off by it
+      if not n.room_ then
+        local best = 99
+        for _, q in ipairs(keeps) do
+          local dx, dy = max(q[1] - n.x, 0, n.x - q[3]), max(q[2] - n.y, 0, n.y - q[4])
+          best = min(best, sqrt(dx * dx + dy * dy))
+        end
+        n.room_ = best
+      end
+      w = min(w, max(0.1, n.room_ * 1.7))
+    end
     if n.stump then return w * 1.14 end                -- a little swollen where it was cut
     -- the last few nodes of a branch run out to a point
     local up = n
@@ -1293,12 +1377,18 @@ function M.tree(rng, o)
           local base_w = layout.range(0.1, 0.17)
           local bow_ = layout.sym(1)
           for k = 0, steps_ do
+            local nearbox = false
+            for _, q in ipairs(keeps) do
+              local px, py = x_ + k * lean, y_ + k * 0.55
+              if px > q[1] - 0.5 and px < q[3] + 0.5 and py > q[2] - 0.5 and py < q[4] + 0.5 then nearbox = true end
+            end
+            if nearbox then break end
             local nw = { x = x_ + k * lean + 0.03 * bow_ * sin(k * 0.6) * k, y = y_ + k * 0.55, z = 0, kids = {}, sprout = true, parent = prev_ or n, r = base_w * (1 - 0.55 * k / steps_) * rmax / trunkw }
             if prev_ then prev_.kids[1] = nw end
             sprout[#sprout + 1] = nw
             prev_ = nw
           end
-          n.shoots[i] = sprout
+          if #sprout >= 3 then n.shoots[#n.shoots + 1] = sprout end
         end
       end
     end
@@ -1314,8 +1404,10 @@ function M.tree(rng, o)
     for i = 0, nw do pts[#pts + 1] = { W * i / nw, groundy - 0.12 + gr.sym(0.05) } end
     pts[#pts + 1] = { W + 2, groundy - 0.12 } pts[#pts + 1] = { W + 2, H + 2 } pts[#pts + 1] = { -2, H + 2 }
     ink.poly(pts, true)
+    -- a hole winds the other way, so it must lie inside the region: a box under the ground is no hole
     for _, q in ipairs(o.keepouts or {}) do
-      ink.poly({ { q[1], q[2] }, { q[1], q[4] }, { q[3], q[4] }, { q[3], q[2] } }, true)
+      local y0 = max(q[2], groundy - 0.05)
+      if q[4] > y0 then ink.poly({ { q[1], y0 }, { q[1], q[4] }, { q[3], q[4] }, { q[3], y0 } }, true) end
     end
   end
   for _, ly in ipairs({ 1, 2, 3, 4, 5 }) do
