@@ -43,7 +43,7 @@ M.DIM = {
   hex_w = 60,                                    -- across the corners
   bubble_d = 44, bowl_d = 40,
   wave_w = 50, wave_h = 15,
-  ball_d = 5,
+  ball_d = 9,
 }
 local function real(cm) return cm * M.SCALE end
 M.real = real
@@ -1009,6 +1009,32 @@ end
 
 -- a ball hanging from the origin on a cord (or a spring). o: L, r, kind =
 -- pom | dark | sisal, spring
+-- a little mouse on a string, nose down: a body, an ear, a tail curling up
+local function mouse(rng, r)
+  plush(rng, ellipse(0, -r * 0.6, r * 0.7, r * 1.25, 14), 0.5, { size = r * 0.5 })
+  ink.circle(r * 0.5, -r * 0.05, r * 0.32) ink.fill(tone(0.62))
+  ink.circle(-r * 0.5, -r * 0.05, r * 0.32) ink.fill(tone(0.62))
+  ink.circle(0, -r * 1.85, r * 0.13) ink.fill(ink.accent(0.2))
+end
+-- a feather: a blade with a white rib, a copper quill
+local function feather(rng, r)
+  local L_ = r * 4.2
+  local pts = ink.blade(function(v) return r * 0.5 * sin(pi * v), -L_ * v end, 12,
+    function(v) return r * 0.75 * sin(pi * v ^ 0.7) end, function(v) return r * 0.75 * sin(pi * v ^ 0.7) end)
+  ink.smooth(pts, true) ink.fill(tone(0.55))
+  ink.smooth(pts, true) ink.clip()
+    mottle(rng, -r, -L_, r * 1.5, 0, 4, r * 0.6, 0.35, 0.72, 0)
+    for k = 1, 6 do
+      local v = k / 7
+      local x, y = r * 0.5 * sin(pi * v), -L_ * v
+      ink.moveto(x, y) ink.lineto(x + r * 0.9, y + r * 0.35)
+      ink.moveto(x, y) ink.lineto(x - r * 0.9, y + r * 0.35)
+    end
+    ink.stroke(white, 0.2, 0.6)
+  ink.unclip()
+  ink.moveto(0, 0) ink.curveto(r * 0.2, -L_ * 0.3, r * 0.7, -L_ * 0.6, r * 0.2, -L_ * 0.98) ink.stroke(ink.accent(-0.05), 0.35)
+end
+
 function M.ball(rng, o)
   o = o or {}
   local u = M.U
@@ -1023,7 +1049,23 @@ function M.ball(rng, o)
     cord[#cord + 1] = { x, -L * v }
   end
   ink.smooth(cord, false) ink.stroke(ink.accent(-0.1), o.spring and 0.35 or 0.4)
-  ink.push() ink.translate(sway, -L - r * 0.9) ball(rng, r, o.kind) ink.pop()
+  if o.kind == "knots" then                            -- a sisal rope with knots
+    for k = 1, 3 do
+      ink.push() ink.translate(sway * (k / 3) ^ 2, -L * (0.45 + 0.27 * k))
+      ink.smooth(soft(rng, 0, 0, r * 0.62, r * 0.5, 0.12, 10), true) ink.fill(ink.accent(0.2))
+      ink.smooth(soft(rng, 0, 0, r * 0.62, r * 0.5, 0.12, 10), true) ink.stroke(ink.accent(-0.3), 0.3, 0.7)
+      ink.pop()
+    end
+  elseif o.kind == "bell" then                         -- a little copper bell
+    ink.push() ink.translate(sway, -L)
+    ink.smooth({ { -r * 0.2, 0 }, { r * 0.2, 0 }, { r * 0.5, -r * 0.8 }, { r * 0.75, -r * 1.25 }, { -r * 0.75, -r * 1.25 }, { -r * 0.5, -r * 0.8 } }, true, 0.7)
+    ink.fill(ink.accent(0.05))
+    ink.moveto(-r * 0.45, -r * 0.5) ink.curveto(-r * 0.4, -r * 0.8, -r * 0.5, -r, -r * 0.55, -r * 1.1) ink.stroke(white, 0.3, 0.6)
+    ink.circle(0, -r * 1.38, r * 0.2) ink.fill(ink.accent(-0.35))
+    ink.pop()
+  elseif o.kind == "mouse" then ink.push() ink.translate(sway, -L) mouse(rng, r * 1.1) ink.pop()
+  elseif o.kind == "feather" then ink.push() ink.translate(sway, -L) feather(rng, r * 0.8) ink.pop()
+  else ink.push() ink.translate(sway, -L - r * 0.9) ball(rng, r, o.kind) ink.pop() end
   return { ports = { hang = { 0, 0, 0, 1 } }, spots = { { sway, -L - r, "bat" } } }
 end
 
@@ -1040,6 +1082,111 @@ function M.pompoms(rng, o)
     ink.push() ink.translate(ex, ey) M.ball(rng, { L = rng.range(0.6, 1.0) * u, r = 0.2 * u }) ink.pop()
   end
   return { ports = { mount = { 0, 0, 0, -1 } }, spots = {} }
+end
+
+-- A ball of yarn lying on a surface: the origin is under the ball; its strand runs along the
+-- surface for run (signed: toward the edge) and hangs over the edge for drop.
+function M.yarn(rng, r, run, drop, copperish)
+  local sd = run >= 0 and 1 or -1
+  local c = copperish and ink.accent(0.05) or tone(0.42)
+  local dark = copperish and ink.accent(-0.3) or tone(0.2)
+  local light = copperish and ink.accent(0.55) or tone(0.72)
+  ink.smooth({ { 0, 0.01 }, { run * 0.5, 0.012 }, { run, 0.005 }, { run + sd * real(1), -drop * 0.3 },
+    { run + sd * real(0.2), -drop * 0.7 }, { run + sd * real(1.8), -drop } }, false)
+  ink.stroke(c, 0.5)
+  ink.circle(0, r, r) ink.fill(c)
+  ink.circle(0, r, r) ink.clip()
+    for k = -3, 3 do
+      local y = r + k * r / 3.4
+      ink.moveto(-r, y - r * 0.35) ink.curveto(-r * 0.3, y + r * 0.3, r * 0.3, y + r * 0.1, r, y + r * 0.45)
+    end
+    ink.stroke(dark, 0.3, 0.7)
+    for k = -2, 2 do
+      local x = k * r / 2.6
+      ink.moveto(x - r * 0.4, 0) ink.curveto(x + r * 0.15, r * 0.5, x - r * 0.1, r * 1.5, x + r * 0.45, 2 * r)
+    end
+    ink.stroke(light, 0.3, 0.8)
+  ink.unclip()
+end
+
+-- A fishing-pole toy stuck in at an angle: a flexible wand from the origin to (dx, dy), a line
+-- hanging from its tip for drop, and feathers at the end of the line.
+function M.wand(rng, dx, dy, drop)
+  local sd = dx >= 0 and 1 or -1
+  local mx, my = dx * 0.55, dy * 0.72
+  ink.taper(0, 0, mx * 0.5, my * 0.55, mx, my, dx, dy, real(1.5), real(0.5))
+  ink.fill(ink.accent(-0.1))
+  ink.smooth(ellipse(0, 0, real(2), real(1.2), 10), true) ink.fill(ink.accent(-0.35))
+  ink.smooth({ { dx, dy }, { dx + sd * real(1.5), dy - drop * 0.35 }, { dx + sd * real(0.5), dy - drop * 0.7 }, { dx + sd * real(1.2), dy - drop } }, false)
+  ink.stroke(ink.accent(0.15), 0.3)
+  ink.push() ink.translate(dx + sd * real(1.2), dy - drop)
+  for _, a in ipairs({ -28, 4, 34 }) do
+    ink.push() ink.rotate(a + rng.sym(6)) feather(rng, real(2.1)) ink.pop()
+  end
+  ink.circle(0, 0, real(0.9)) ink.fill(ink.accent(-0.2))
+  ink.pop()
+end
+
+-- ---------------------------------------------------------------- in the air
+-- Hung from above: the origin is the piece, top = how far up the ropes run (the page's top
+-- edge). swing: a plank on two ropes (origin at its top surface). sling: a hammock on two
+-- ropes (origin at the middle of its top edge). basket: a bowl on three cords gathered
+-- into one rope (origin at its foot). hoop: a ring on one rope (origin at its foot).
+function M.hang(rng, kind, top, o)
+  o = o or {}
+  local u = M.U
+  if kind == "swing" then
+    local w = o.w or real(40)
+    local t = real(3.5)
+    for _, sd in ipairs({ -1, 1 }) do
+      local x = sd * (w / 2 - real(3))
+      rope({ { x, 0 }, { x + sd * real(0.5), top / 2 }, { x, top } }, 0.6)
+    end
+    plush(rng, rrect(rng, -w / 2, -t, w / 2, 0, 0.03, 0.003, 6), 0.3, { size = t })
+    plush(rng, soft(rng, 0, real(1), w * 0.42, real(1.6), 0.06, 12), 0.8, { size = real(1.5) })
+    for _, sd in ipairs({ -1, 1 }) do
+      ink.circle(sd * (w / 2 - real(3)), -t / 2, real(1)) ink.fill(ink.accent(-0.1))
+    end
+  elseif kind == "sling" then
+    local w = o.w or real(55)
+    for _, sd in ipairs({ -1, 1 }) do rope({ { sd * w / 2, 0 }, { sd * w / 2, top / 2 }, { sd * w / 2, top } }, 0.6) end
+    M.hammock(rng, -w / 2, 0, w / 2, 0, { sag = o.sag or real(13) })
+  elseif kind == "basket" then
+    local r = o.r or real(17)
+    local d = 0.78 * r
+    local kn = d + real(26)
+    for _, x in ipairs({ -r * 0.92, 0, r * 0.92 }) do ink.moveto(x, d) ink.lineto(0, kn) end
+    ink.stroke(ink.accent(-0.1), 0.45)
+    rope({ { 0, kn }, { 0, (kn + top) / 2 }, { 0, top } }, 0.6)
+    ink.circle(0, kn, real(1.2)) ink.fill(ink.accent(-0.2))
+    M.bowl(rng, { kind = "basket", r = r })
+  else
+    local d = o.d or real(38)
+    rope({ { 0, d }, { 0, (d + top) / 2 }, { 0, top } }, 0.6)
+    M.ring(rng, { d = d })
+  end
+end
+
+-- A ledge out of a page edge: a shelf with a copper knee brace into the edge. The origin is
+-- at the wall end of its top surface; it runs w along side (+1 right, -1 left).
+function M.ledge(rng, w, side)
+  local t = real(3.5)
+  ink.push() ink.scale(side, 1)
+  -- the brace: a slim copper strut from under the shelf back to the edge, and a small wall plate
+  local reach = min(w * 0.42, real(26))
+  ink.taper(reach, -t, reach * 0.66, -t - reach * 0.34, reach * 0.33, -t - reach * 0.66, 0, -t - reach, real(1.6), real(2))
+  ink.fill(ink.accent(-0.05))
+  ink.poly({ { -0.1, -t }, { real(1.8), -t }, { real(1.8), -t - reach - real(1.5) }, { -0.1, -t - reach - real(1.5) } }, true)
+  ink.fill(ink.accent(-0.1))
+  plush(rng, rrect(rng, -0.1, -t, w, 0, 0.02, 0.003, 6), 0.78, { smooth = false, size = t, top = true })
+  ink.pop()
+end
+
+-- A sisal mat on the wall, to scratch: origin at its foot.
+function M.mat(rng, w, h)
+  sisal(rng, -w / 2, 0, w / 2, h, { step = 0.03, tone = 0.8 })
+  local bar = real(2)
+  copper(rng, rrect(rng, -w / 2 - real(1), h - bar / 2, w / 2 + real(1), h + bar / 2, 0.01, 0, 2), 0.5, { smooth = false, size = 0.1 })
 end
 
 -- ---------------------------------------------------------------- the composition
@@ -1114,7 +1261,7 @@ function M.compose(C, ink, seed, col, o)
     if a < bound[1] - 0.05 or c > bound[3] + 0.05 or b < bound[2] - 0.05 or d > bound[4] + 0.05 then return false end
     if o.spill and c > x1 + 0.05 and d > o.spill[4] then return false end
     for _, q in ipairs(boxes) do
-      if q[5] ~= ignore and a < q[3] - m and c > q[1] + m and b < q[4] - m and d > q[2] + m then return false end
+      if q[5] ~= ignore and a < q[3] - m and c > q[1] + m and b < q[4] - m and d > q[2] + m then LASTHIT = string.format("%s[%.2f,%.2f,%.2f,%.2f]vs[%.2f,%.2f,%.2f,%.2f]", q[5], q[1], q[2], q[3], q[4], a, b, c, d) return false end
     end
     return true
   end
@@ -1203,7 +1350,8 @@ function M.compose(C, ink, seed, col, o)
   local top = fy + real(C.DIM.base_t)
   local cw = x1 - x0
   local DD = o.D or 1                                  -- density: less of everything; at 0.1 and below, the tower alone
-  local n = max(3, min(5, floor(cw / 1.8) + (rng.chance(0.5) and 1 or 0)))
+  local wide = cw > 9                                  -- a whole page or a panorama, not a margin column
+  local n = wide and floor(cw / rng.range(1.5, 1.9)) or max(3, min(5, floor(cw / 1.8) + (rng.chance(0.5) and 1 or 0)))
   if DD < 0.5 then n = max(2, n - 1) end
   local xs = {}
   local a, b = x0 + 0.5 + rng.range(0, 0.2), x1 - 0.55 - rng.range(0, 0.25)
@@ -1227,6 +1375,8 @@ function M.compose(C, ink, seed, col, o)
     n = #xs
     bound = { x0, -1e9, SP[3], 1e9 }
   end
+  -- a little more than the box: outlines, sway and strokes reach past what they reserve
+  for _, ko in ipairs(o.keepout or {}) do reg(ko[1] - real(5), ko[2] - real(5), ko[3] + real(5), ko[4] + real(5), "head") end
   if o.pnum then reg(o.pnum[1] - 0.6, o.pnum[2] - 0.25, o.pnum[1] + 0.6, o.pnum[2] + 0.45, "head") end
   local lv = {}
   -- the tower takes about half to two thirds of the column
@@ -1235,10 +1385,36 @@ function M.compose(C, ink, seed, col, o)
   for i = 1, n do
     if i <= ncol then lv[i] = i == spine and maxlv or rng.int(1, maxlv - 1)
     else lv[i] = rng.int(1, max(1, maxL - 1)) end
+    if wide and i % 4 == 1 then lv[i] = maxlv end       -- a tall post every so often
+    for _, ko in ipairs(o.keepout or {}) do             -- no post through what must stay clear
+      if xs[i] > ko[1] - 0.4 and xs[i] < ko[3] + 0.4 then
+        lv[i] = min(lv[i], floor((ko[2] - top - 0.5) / step))
+      end
+    end
+  end
+  -- a post with no room under a keep-out is not built
+  if o.keepout and #o.keepout > 0 then
+    local xs_, lv_, ncol_ = {}, {}, 0
+    for i = 1, n do
+      if lv[i] >= 1 then
+        xs_[#xs_ + 1], lv_[#lv_ + 1] = xs[i], lv[i]
+        if i <= ncol then ncol_ = ncol_ + 1 end
+      end
+    end
+    xs, lv, n, ncol = xs_, lv_, #xs_, ncol_
+    spine = 1
+    for i = 1, ncol do if lv[i] > lv[spine] then spine = i end end
+  end
+  -- does a level surface from xa to xb at y cross a keep-out?
+  local function crosses_keepout(xa, xb, y)
+    for _, ko in ipairs(o.keepout or {}) do
+      if xa < ko[3] + 0.15 and xb > ko[1] - 0.15 and y + real(C.DIM.shelf_t) + real(6) > ko[2] - 0.15 and y - real(4) < ko[4] + 0.15 then return true end
+    end
+    return false
   end
   -- the U: tall at both ends, walked across at the top
   local U = Lmode and n > ncol + 1 and maxL >= 2 and rng.chance(0.8)
-  if U then
+  if U and n > 0 then
     lv[n] = min(maxL, lv[spine] - 1)
     if lv[n] < 2 then U = false end
   end
@@ -1259,13 +1435,40 @@ function M.compose(C, ink, seed, col, o)
     p.y = top + p.L * step
     p.xa = max(x0 + 0.02, xs[p.i] - rng.range(0.3, 0.5))
     p.xb = min(bound[3] - 0.02, xs[p.j] + rng.range(0.3, 0.5))
+  end
+  -- platforms keep out of the keep-outs: trim the overhang, or leave the platform out
+  if o.keepout and #o.keepout > 0 then
+    local kept = {}
+    for _, p in ipairs(plats) do
+      if crosses_keepout(p.xa, p.xb, p.y) then p.xa, p.xb = max(x0 + 0.02, xs[p.i] - pr), min(bound[3] - 0.02, xs[p.j] + pr) end
+      if not crosses_keepout(p.xa, p.xb, p.y) then kept[#kept + 1] = p end
+    end
+    plats = kept
+  end
+  for _, p in ipairs(plats) do
     for k = p.i, p.j do if lv[k] == p.L then ptop[k] = true end end
   end
   -- base and posts
-  local bxa, bxb = max(x0, xs[1] - 0.5), min(bound[3], xs[n] + 0.5)
-  draw(2, at((bxa + bxb) / 2, fy, function(r) C.base(r, { w = bxb - bxa }) end))
-  reg(bxa, fy, bxb, top, "base")
-  spot(xs[1] + (xs[2] - xs[1]) / 2, top, { "sit", "loaf" })
+  local bxa, bxb = n > 0 and max(x0, xs[1] - 0.5) or x0, n > 0 and min(bound[3], xs[n] + 0.5) or bound[3]
+  -- the base, in pieces if a keep-out comes down to the floor
+  local segs = { { bxa, bxb } }
+  for _, ko in ipairs(o.keepout or {}) do
+    if ko[2] < top + real(8) then
+      local out = {}
+      for _, g in ipairs(segs) do
+        if ko[1] - 0.15 > g[1] then out[#out + 1] = { g[1], min(g[2], ko[1] - 0.15) } end
+        if ko[3] + 0.15 < g[2] then out[#out + 1] = { max(g[1], ko[3] + 0.15), g[2] } end
+      end
+      segs = out
+    end
+  end
+  for _, g in ipairs(segs) do
+    if g[2] - g[1] > 0.6 then
+      draw(2, at((g[1] + g[2]) / 2, fy, function(r) C.base(r, { w = g[2] - g[1] }) end))
+      reg(g[1], fy, g[2], top, "base")
+    end
+  end
+  if n >= 2 then spot(xs[1] + (xs[2] - xs[1]) / 2, top, { "sit", "loaf" }) end
   local kinds = { "banded", "sisal", "banded", "plush" }
   for i = 1, n do
     local h = lv[i] * step
@@ -1282,7 +1485,7 @@ function M.compose(C, ink, seed, col, o)
       if rng.chance(0.5 * min(1, DD * 1.4)) then
         local y = top + L * step + (rng.chance(0.5) and -0.5 or 0) * step
         local xa, xb = xs[i] - rng.range(0.2, 0.4), xs[i + 1] + rng.range(0.2, 0.4)
-        local ok = y > top + 1.2
+        local ok = y > top + 1.2 and not crosses_keepout(xa, xb, y)
         for _, q in ipairs(plats) do if xa < q.xb and xb > q.xa and abs(q.y - y) < 1.0 then ok = false end end
         for _, q in ipairs(more) do if xa < q.xb and xb > q.xa and abs(q.y - y) < 1.0 then ok = false end end
         if ok then more[#more + 1] = { L = L, i = i, j = i + 1, y = y, xa = max(x0 + 0.02, xa), xb = min(bound[3] - 0.02, xb), mid = true } end
@@ -1310,10 +1513,13 @@ function M.compose(C, ink, seed, col, o)
     if p.L >= 2 and rng.chance(0.7) then
       local a, b = xs[p.i] + pr, xs[p.i + 1] - pr
       local y = p.y - rng.range(0.9, 1.3)
-      if b - a > 1.4 and free(a, y - 1.0, b, y) then
-        draw(1, function(r) C.hammock(r, a, y, b, y) end)
-        reg(a, y - 1.0, b, y, "hammock")
-        spot((a + b) / 2, y - 0.85, { "curl" }, true)
+      -- a real hammock's size: a cat's length or two across, a cat's depth down
+      local sag_ = min(real(17), 0.28 * (b - a))
+      local deep = sag_ + 0.8 * C.U + real(1)
+      if b - a > 1.4 and b - a < real(115) and free(a, y - deep, b, y) then
+        draw(1, function(r) C.hammock(r, a, y, b, y, { sag = sag_ }) end)
+        reg(a, y - deep, b, y, "hammock")
+        spot((a + b) / 2, y - sag_ - real(2), { "curl" }, true)
         nham = (nham or 0) + 1
         if nham >= 2 then break end
       end
@@ -1356,10 +1562,10 @@ function M.compose(C, ink, seed, col, o)
     local dx_ = rng.chance(0.5) and p.xb or p.xa
     spot(dx_, p.y + st, { "drape" }, false, dx_ == p.xb and 1 or -1)
     -- a toy under one end
-    if rng.chance(0.5) then
+    if rng.chance(0.7) then
       local tx = rng.chance(0.5) and p.xa + 0.25 or p.xb - 0.25
       if free(tx - 0.15, p.y - 1.5, tx + 0.15, p.y - 0.05) then
-        draw(5, at(tx, p.y, function(r) C.ball(r, { kind = rng.pick({ "pom", "sisal", "dark" }), L = real(rng.range(20, 28)) }) end))
+        draw(5, at(tx, p.y, function(r) C.ball(r, { kind = rng.pick({ "pom", "sisal", "dark", "mouse", "feather", "knots", "bell" }), spring = rng.chance(0.2), L = real(rng.range(20, 28)) }) end))
         reg(tx - 0.15, p.y - 1.5, tx + 0.15, p.y, "toy")
       end
     end
@@ -1368,6 +1574,7 @@ function M.compose(C, ink, seed, col, o)
   -- post's top (leaning toward the tower), a shelf on the side of the rightmost
   -- column post tall enough, and a level rope bridge between them
   local Udone
+  local tower_bridges = {}
   if U then
     local yb = top + lv[n] * step
     local w = real(42)
@@ -1386,6 +1593,7 @@ function M.compose(C, ink, seed, col, o)
         reg(sx0, yb - 0.3, bx0, yb + 0.45, "shelf")
         local sag = min(0.5, (bx1 - bx0) * 0.06)
         draw(5, function(r) C.bridge(r, bx0, yb + st, bx1, yb + st, { sag = sag }) end)
+        tower_bridges[#tower_bridges + 1] = { bx0, yb + st, bx1, yb + st, sag }
         reg(bx0 + 0.3, yb - sag - 0.2, bx1 - 0.3, yb + real(30), "bridge")
         spot((bx0 + bx1) / 2, yb + st - sag, { "walk" }, true, 0)
         Udone = true
@@ -1435,10 +1643,16 @@ function M.compose(C, ink, seed, col, o)
     local before = #tops
     if not ptop[i] and not (Udone and i == n) then
       local y = top + lv[i] * step
-      local choices = { "ring", "tube", "pad", "cushion", "hex", "hex" }
-      for _ = 1, 6 do
+      local choices = { "ring", "tube", "pad", "cushion", "hex", "hex", "pompoms" }
+      for _ = 1, 7 do
         local c = table.remove(choices, rng.int(1, #choices))
-        if c == "hex" then
+        if c == "pompoms" then
+          if free(xs[i] - 0.8, y, xs[i] + 0.8, y + 1.3) then
+            draw(4, at(xs[i], y, function(r) C.pompoms(r, {}) end))
+            reg(xs[i] - 0.8, y, xs[i] + 0.8, y + 1.3, "toy")
+            tops[#tops + 1] = { xs[i], y + 0.05, noroute = true } break
+          end
+        elseif c == "hex" then
           -- a hexagon resting on the post's top, on a short bracket shelf
           local R = real(C.DIM.hex_w) / 2
           if free(xs[i] - R, y, xs[i] + R, y + st + 1.732 * R) then
@@ -1510,184 +1724,747 @@ function M.compose(C, ink, seed, col, o)
     end
   end
 
-  local placed_hex = {}
-  if DD > 0.1 then                                    -- the wall and the top; at the lowest density, none
-  -- ---------------------------------------------------------------- 2. the wall
-  -- the route goes up on the side away from the tallest post
-  local right = xs[spine] < mid
-  local sgn = right and -1 or 1                       -- the runs point inward
-  local xr = right and (x1 - 0.42) or (x0 + 0.42)     -- the riser
-  local rh = rng.range(1.8, 2.5)
-  local l1, l2 = rng.range(1.5, 2.3), rng.range(1.3, 2.0)
-  local yR1 = top + (lv[spine] - 1) * step + rng.range(0.6, 1.0)
-  local wall_top = T
-  local function route_free(y)
-    return free(min(xr, xr + sgn * l1) - 0.45, y - 0.25, max(xr, xr + sgn * l1) + 0.45, y + 0.1)
-      and free(xr - 0.45, y, xr + 0.45, y + rh)
-      and free(min(xr, xr + sgn * l2) - 0.45, y + rh - 0.25, max(xr, xr + sgn * l2) + 0.45, y + rh + 0.1)
-  end
-  for _ = 1, 20 do if route_free(yR1) then break end yR1 = yR1 + 0.3 end
-  local yR2 = yR1 + rh
-  local pts = { { xr + sgn * l1, yR1 }, { xr, yR1 }, { xr, yR2 }, { xr + sgn * l2, yR2 } }
-  draw(3, function(r) C.route(r, pts) end)
-  reg(min(xr, xr + sgn * l1) - 0.42, yR1 - 0.25, max(xr, xr + sgn * l1) + 0.42, yR1 + 0.08, "route")
-  reg(xr - 0.42, yR1, xr + 0.42, yR2, "route")
-  reg(min(xr, xr + sgn * l2) - 0.42, yR2 - 0.25, max(xr, xr + sgn * l2) + 0.42, yR2 + 0.08, "route")
-  spot(xr + sgn * l1 * 0.55, yR1, { "sit", "loaf" })
-  -- join the route's lower run to the tower: a chain of steps (or dots) from the
-  -- nearest place a cat stands below it to the run's open end, if one crosses nothing
-  do
-    local ex_ = xr + sgn * (l1 + real(16) / 2)          -- the open end of the lower run
-    local best, bd
-    for _, sp in ipairs(spots) do
-      if not sp[4] and sp[2] < yR1 - 0.3 then
-        local d = sqrt((sp[1] - ex_) ^ 2 + (sp[2] - yR1) ^ 2)
-        if d > 0.8 and (not bd or d < bd) then best, bd = sp, d end
+  -- ---------------------------------------------------------------- 2. the wall: routes
+  -- CATTREE-RULES.md. Traversal first: routes up from the tower, each a chain of modules
+  -- (a ladder, a D-pole, a zigzag run of identical shelves, a diagonal of steps, dots or
+  -- pegs, a gangway, a level rope bridge), every module creating the landing it arrives
+  -- at; the first route ends at the lookout, nothing above it; a second route and short
+  -- bridges between the routes make it a network; boxes, hexes and a bubble hang off the
+  -- landings as dead ends. Planned as data first, checked, then drawn in the order built.
+  local function plan_wall()
+    local R = real
+    local mid_ = (x0 + x1) / 2
+    local clears = {}                                 -- { a, b, c, d, owner landing id }
+    local ups = {}                                    -- the extents of the upward modules
+    local plan = {}                                   -- accepted modules, in order
+    local lands = {}
+    local nid = 0
+    local function hits_clear(q, exempt)
+      for _, c in ipairs(clears) do
+        if not exempt[c[5]] and q[1] < c[3] and q[3] > c[1] and q[2] < c[4] and q[4] > c[2] then return true end
       end
+      return false
     end
-    if best and bd < 5 then
-      local ax, ay, bx, by = best[1], best[2] + 0.25, ex_ - sgn * 0.1, yR1 + 0.05
-      local pc = plan_chain(ax, ay, bx, by)
-      if chain_free(pc.boxes) then draw_chain(pc) end
+    local function landing(kind, cx, ytop, w)
+      nid = nid + 1
+      local L = { id = nid, kind = kind, cx = cx, w = w, x0 = cx - w / 2, x1 = cx + w / 2, y = ytop }
+      if kind == "moon" then L.solid = { cx - w / 2, ytop - R(13), cx + w / 2, ytop }
+      else L.solid = { cx - w / 2, ytop - st - R(3), cx + w / 2, ytop } end
+      local cw = max(w, R(45))
+      L.clear = { cx - cw / 2, ytop + 0.01, cx + cw / 2, ytop + R(30) }
+      return L
     end
-  end
-  -- across to a half-moon on the far side: a shallow bridge, or floating steps if short
-  local xe = xr + sgn * (l2 + real(16) / 2)            -- the far end of the upper run
-  local mw = real(rng.range(34, 42))
-  local mx = right and (x0 + mw / 2 + 0.05) or (x1 - mw / 2 - 0.05)
-  local mtop = real(3) + real(4.5)
-  local mxe = mx - sgn * mw / 2                        -- its edge toward the route
-  local span = abs(xe - mxe)
-  local my = yR2 + rng.sym(0.25) - mtop
-  local crossed = false
-  if span >= 1.3 then
-    for _ = 1, 16 do
-      local bx0, bx1 = min(xe, mxe), max(xe, mxe)
-      if free(bx0 + 0.5, min(yR2, my + mtop) - 0.5, bx1 - 0.5, max(yR2, my + mtop) + real(28)) and free(mx - mw / 2, my - 0.3, mx + mw / 2, my + mtop) then
-        crossed = true break
+    -- does a module fit: its solids and its landings, against everything placed and every
+    -- clearance (but the one it starts from), its landings' clearances against everything
+    local DBG = os.getenv("CATDEBUG") and {} or nil
+    local function why(r) if DBG then DBG[r] = (DBG[r] or 0) + 1 if os.getenv("CATDEBUG") == "2" then io.stderr:write(r .. "\n") end end return false end
+    local function fits(m, cur)
+      local ex = { [cur.id or -1] = true }
+      local function ok(q, isclear)
+        if q[1] < x0 + 0.02 or q[3] > x1 - 0.02 or q[4] > y1 + 0.05 then return why(m.kind .. ":bounds") end
+        if not free(q[1], q[2], q[3], q[4], 0.02) then return why(m.kind .. (isclear and ":clear-vs-" or ":hits-") .. tostring(LASTHIT)) end
+        if not isclear and hits_clear(q, ex) then return why(m.kind .. ":in-clear") end
+        return true
       end
-      my = my + 0.25
-    end
-  end
-  if crossed then
-    local dy = (my + mtop) - yR2
-    if abs(dy) > span * 0.27 then my = yR2 + (dy > 0 and 1 or -1) * span * 0.27 - mtop end
-    draw(3, at(mx, my, function(r) C.moon(r, { w = mw }) end))
-    reg(mx - mw / 2, my - 0.3, mx + mw / 2, my + mtop, "moon")
-    spot(mx, my + mtop, { "loaf", "sit" })
-    local sag = rng.range(0.15, 0.3)
-    draw(5, function(r) C.bridge(r, mxe, my + mtop, xe, yR2, { sag = sag }) end)
-    reg(min(xe, mxe) + 0.3, min(yR2, my + mtop) - sag - 0.2, max(xe, mxe) - 0.3, max(yR2, my + mtop) + real(28), "bridge")
-    -- the walking cat, on the deck at the middle
-    local t = 0.5
-    local bx = mxe + (xe - mxe) * t
-    local byy = (my + mtop) + (yR2 - my - mtop) * t - sag
-    local ang = math.deg(math.atan(yR2 - my - mtop, xe - mxe))
-    if ang > 90 or ang < -90 then ang = ang - 180 end
-    spot(bx, byy, { "walk" }, true, ang)
-    wall_top = max(wall_top, yR2 + real(28), my + mtop)
-  end
-  -- hexes: on a short post on the upper run, or on the wall above it
-  local R = real(C.DIM.hex_w) / 2
-  local hx = xr + sgn * min(l2 * 0.55, 1.2)
-  local hp = rng.chance(0.5) and rng.range(0.8, 1.5) or 0
-  local hy = yR2 + hp + 0.866 * R + (hp == 0 and 0.15 or 0)
-  placed_hex = {}
-  local hy0 = hy
-  for k = 1, 30 do
-    if free(hx - R, hy - 0.866 * R, hx + R, hy + 0.866 * R, -GAP) then break end
-    hy = hy + 0.3
-    if k % 10 == 0 then hx, hy = hx + sgn * 0.6, hy0 hp = 0 end
-  end
-  if free(hx - R, hy - 0.866 * R, hx + R, hy + 0.866 * R, -GAP) then
-    -- held up: on a post from the upper run when it is above the run, else a chain of dots to it
-    local gapy = hy - 0.866 * R - yR2
-    local onrun = (hx - xr) * sgn >= 0 and (hx - xr) * sgn <= l2
-    if gapy > 0.2 and onrun then
-      draw(2, at(hx, yR2, function(r) C.post(r, { kind = "sisal", h = gapy }) end))
-      reg(hx - pr, yR2, hx + pr, yR2 + gapy, "post")
-    elseif gapy > 0.2 then
-      local ax, ay = xr + sgn * l2, yR2 + 0.3
-      local bx, by = hx - sgn * R * 0.5, hy - 0.866 * R - 0.15
-      local pc = plan_chain(ax, ay, bx, by)
-      if chain_free(pc.boxes) then draw_chain(pc) end
-    end
-    draw(3, at(hx, hy, function(r) C.hex(r, {}) end))
-    reg(hx - R, hy - 0.866 * R, hx + R, hy + 0.866 * R, "hex")
-    placed_hex[#placed_hex + 1] = { hx, hy }
-    spot(hx, hy - 0.866 * R + real(3.5), { "sit" }, true)
-    -- a second one, up and inward, sharing an edge
-    local h2x, h2y = hx + sgn * 1.5 * R, hy + 0.866 * R
-    if rng.chance(0.7) and free(h2x - R, h2y - 0.866 * R, h2x + R, h2y + 0.866 * R) then
-      draw(3, at(h2x, h2y, function(r) C.hex(r, {}) end))
-      reg(h2x - R, h2y - 0.866 * R, h2x + R, h2y + 0.866 * R, "hex")
-      placed_hex[#placed_hex + 1] = { h2x, h2y }
-      spot(h2x, h2y - 0.866 * R + real(3.5), { "sit" }, true)
-    end
-  end
-  for _, h in ipairs(placed_hex) do wall_top = max(wall_top, h[2] + 0.866 * R) end
-  -- a space bubble: on the far side, above the half-moon
-  if crossed then
-    local br = real(rng.range(17, 21))
-    local bw = br + real(12)
-    local bx = mx
-    local by = my + mtop + rng.range(2.4, 2.9)
-    if free(bx - bw, by - real(4) - br - 0.1, bx + bw, by + 0.15) then
-      draw(4, at(bx, by, function(r) C.bubble(r, { r = br }) end))
-      reg(bx - bw, by - real(4) - br, bx + bw, by + 0.15, "bubble")
-      spot(bx, by - real(4) - br * 0.85, { "curl" }, true)
-      wall_top = max(wall_top, by + 0.2)
-    end
-  end
-
-  -- ---------------------------------------------------------------- 3. the top, sparse
-  local y = wall_top + rng.range(0.4, 0.8)
-  local onright = rng.chance(0.5)
-  local px, py = (placed_hex[#placed_hex] or { mid, wall_top })[1], wall_top
-  local nm, pw = 0, nil
-  local maxm = DD < 0.5 and 1 or rng.int(1, 2)
-  while y < y1 - 3.5 and nm < maxm do
-    local w = real(rng.range(28, 36))
-    local x = onright and (x1 - w / 2 - rng.range(0.1, 0.6)) or (x0 + w / 2 + rng.range(0.1, 0.6))
-    local yy = y + rng.range(2.2, 3.0)
-    if free(x - w / 2, yy - 0.3, x + w / 2, yy + 0.4, -GAP) then
-      local ax, ay = px + (onright and 1 or -1) * ((pw or 0) / 2 + 0.2), py + 0.25
-      local bx, by = x - (onright and w / 2 + 0.3 or -(w / 2 + 0.3)), yy + 0.1
-      local pc = plan_chain(ax, ay, bx, by)
-      if not chain_free(pc.boxes) then y = y + 0.5 else
-      draw_chain(pc)
-      draw(3, at(x, yy, function(r) C.moon(r, { w = w, carpet = rng.chance(0.5) }) end))
-      reg(x - w / 2, yy - 0.3, x + w / 2, yy + 0.4, "moon")
-      spot(x, yy + real(7.5), { "sit", "loaf" })
-      if rng.chance(0.4) then
-        local tx = x + (onright and -1 or 1) * (w / 2 - 0.2)
-        if free(tx - 0.15, yy - 1.3, tx + 0.15, yy - 0.35, -GAP) then
-          draw(5, at(tx, yy, function(r) C.ball(r, { kind = "sisal", L = real(20) }) end))
-          reg(tx - 0.15, yy - 1.3, tx + 0.15, yy, "toy")
+      for _, q in ipairs(m.solids) do if not ok(q) then return false end end
+      for _, L in ipairs(m.land) do
+        if not ok(L.solid) or not ok(L.clear, true) then return false end
+        for _, q in ipairs(m.solids) do                 -- its own pieces stay out of its landings' room
+          if q[1] < L.clear[3] and q[3] > L.clear[1] and q[2] < L.clear[4] - 0.05 and q[4] > L.clear[2] + 0.05 then return false end
         end
       end
-      px, py, y, pw = x, yy + 0.4, yy + 0.4, w
-      nm = nm + 1
+      -- one way up per stretch: no two upward modules of the same kind side by side
+      if m.up then
+        for _, u in ipairs(ups) do
+          local oy = min(m.up[4], u[4]) - max(m.up[2], u[2])
+          local gx = max(u[1] - m.up[3], m.up[1] - u[3])
+          if oy > R(30) and gx < R(40) and (u.kind == m.kind or gx < R(10)) then return false end
+        end
       end
-    else
-      y = y + 0.5
+      return true
     end
-    onright = not onright
-  end
-  -- a tapering line of dots to finish
-  local side_ = (px < mid) and 1 or -1
-  local ey = min(y1, py + rng.range(1.4, 2.2))
-  local ex = px + side_ * (ey - py) * rng.range(1.0, 1.4)
-  if ey - py > 1.0 then
-    local sx = px + ((ex > px) and 1 or -1) * ((pw or 0) / 2 + 0.3)
-    local bs = chain_boxes(sx, py + 0.3, ex, ey, real(6), real(6))
-    if chain_free(bs) then
-      draw(5, function(r) C.dots(r, sx, py + 0.3, ex, ey, { taper = true, d = real(10) }) end)
-      chain_reg(bs)
+    local function accept(m)
+      for _, q in ipairs(m.solids) do reg(q[1], q[2], q[3], q[4], "pl") end
+      for _, L in ipairs(m.land) do
+        reg(L.solid[1], L.solid[2], L.solid[3], L.solid[4], "pl")
+        clears[#clears + 1] = { L.clear[1], L.clear[2], L.clear[3], L.clear[4], L.id }
+        lands[#lands + 1] = L
+      end
+      if m.up then m.up.kind = m.kind ups[#ups + 1] = m.up end
+      plan[#plan + 1] = m
     end
-  end
+    local function edge_x(cur, s) return s > 0 and cur.x1 or cur.x0 end
+    local function inside_col(cx, w) return cx - w / 2 >= x0 + 0.03 and cx + w / 2 <= x1 - 0.03 end
 
+    -- the modules: each builds from landing cur toward side s (+1 right, -1 left)
+    local M_ = {}
+    local route_target = y1
+    -- One long ladder, vertical and flat on the wall, up to the next landing's underside;
+    -- never two in a row. Where it is long, shelves step off it to the side at even spacing.
+    function M_.ladder(cur, s, ex)
+      local lx = ex - s * R(16)
+      local w = R(rng.pick({ 36, 40, 44 }))
+      local cx = lx - s * R(12) + s * w / 2
+      if not inside_col(cx, w) then return nil end
+      local rise = R(rng.range(70, 200))
+      local rem = route_target - cur.y
+      if rem < rise + R(60) then rise = rem end        -- a ladder that would stop just short goes all the way
+      if rise < R(50) then return nil end
+      local A = landing(rng.chance(0.5) and "moon" or "shelf", cx, cur.y + rise, w)
+      local y1_ = A.solid[2]
+      local land, half = {}, R(14)
+      -- the step-offs: identical shelves, one rhythm, on one side or alternating
+      local no = floor(rise / R(55)) - 1
+      if no > 0 then
+        local wo = R(rng.pick({ 30, 34, 38 }))
+        local alt = rng.chance(0.5)
+        local side = rng.chance(0.5) and 1 or -1
+        for k = 1, no do
+          local sd = (alt and k % 2 == 0) and -side or side
+          local ox = lx + sd * (half + wo / 2 - R(1))
+          if not inside_col(ox, wo) then sd = -sd ox = lx + sd * (half + wo / 2 - R(1)) end
+          if inside_col(ox, wo) then
+            local O = landing("shelf", ox, cur.y + rise * k / (no + 1), wo)
+            O.stepoff = true
+            -- its room is beside the ladder, not over it
+            local c0 = sd > 0 and (lx + half + R(1)) or (lx - half - R(1) - R(45))
+            O.clear = { c0, O.y + 0.01, c0 + R(45), O.y + R(30) }
+            land[#land + 1] = O
+          end
+        end
+      end
+      land[#land + 1] = A
+      return { kind = "ladder", land = land, solids = { { lx - half, cur.y, lx + half, y1_ } },
+        up = { lx - half, cur.y, lx + half, A.y },
+        draw = function() draw(1, function(r) C.ladder(r, lx, cur.y, lx, y1_) end) end }
+    end
+    function M_.climb(cur, s, ex)                        -- a sisal pole with half-steps, standing on the tower
+      if not cur.ground then return nil end
+      local px = ex - s * R(10)
+      local w = R(rng.pick({ 36, 40 }))
+      local cx = px - s * R(8) + s * w / 2
+      if not inside_col(cx, w) then return nil end
+      local A = landing("shelf", cx, cur.y + R(rng.range(65, 100)), w)
+      local y1_ = A.solid[2]
+      local a_, b_ = min(px - s * R(5), px - s * R(30)), max(px - s * R(5), px - s * R(30))
+      return { kind = "climb", land = { A }, solids = { { min(a_, px - R(5)), cur.y, max(b_, px + R(5)), y1_ } },
+        up = { min(a_, px - R(5)), cur.y, max(b_, px + R(5)), A.y },
+        draw = function() draw(2, function(r) C.climb(r, px, cur.y, y1_, { side = -s }) end) end }
+    end
+    function M_.run(cur, s, ex)                          -- zigzag: identical shelves, one rise, two columns
+      local n = rng.int(3, 4)
+      local w = R(rng.pick({ 35, 40 }))
+      local rise = R(rng.pick({ 25, 30 }))
+      local ca = ex + s * (w / 2 + R(4))
+      local cb = ca - s * (w + R(10))
+      local land, ys = {}, {}
+      for k = 1, n do
+        local cx = (k % 2 == 1) and ca or cb
+        if not inside_col(cx, w) then return nil end
+        land[k] = landing("shelf", cx, cur.y + k * rise, w)
+        land[k].series = true
+      end
+      local lo, hi = min(ca, cb) - w / 2, max(ca, cb) + w / 2
+      return { kind = "run", land = land, solids = {}, up = { lo, cur.y, hi, cur.y + n * rise }, draw = function() end }
+    end
+    local DIAG = { steps = { { 18, 20, 22 }, 30, 48, 11, 1.2 }, dots = { { 22 }, 30, 48, 6, 6 }, pegs = { { 30 }, 22, 40, 5, 5 } }
+    local function diag(kind)
+      return function(cur, s, ex)
+        local P = DIAG[kind]
+        local stride = R(rng.pick(P[1]))
+        local a = math.rad(rng.range(P[2], P[3]))
+        local dx, dy = s * stride * cos(a), stride * sin(a)
+        local w = R(rng.pick({ 35, 40, 45 }))
+        local n
+        for nn = rng.int(4, 6), 3, -1 do
+          local cx = ex + (nn + 1) * dx + s * w / 2
+          if inside_col(cx, w) then n = nn break end
+        end
+        if not n then return nil end
+        local A = landing("moon", ex + (n + 1) * dx + s * w / 2, cur.y + (n + 1) * dy, w)
+        local solids, pts = {}, {}
+        for k = 1, n do
+          local x, y = ex + k * dx, cur.y + k * dy
+          pts[k] = { x, y }
+          solids[#solids + 1] = { x - R(P[4]), y - R(P[5] + 2), x + R(P[4]), y + R(1.5) }
+        end
+        local lo, hi = min(ex, A.x0, A.x1), max(ex, A.x0, A.x1)
+        return { kind = kind, land = { A }, solids = solids, up = { lo, cur.y, hi, A.y },
+          draw = function()
+            local f, l = pts[1], pts[n]
+            if kind == "steps" then draw(5, function(r) C.steps(r, f[1], f[2], l[1], l[2], { stride = stride }) end)
+            elseif kind == "dots" then draw(5, function(r) C.dots(r, f[1], f[2] - R(6), l[1], l[2] - R(6), { stride = stride, d = R(12) }) end)
+            else draw(5, function(r) C.pegs(r, f[1], f[2] - R(5), l[1], l[2] - R(5), { stride = stride }) end) end
+          end }
+      end
+    end
+    M_.steps, M_.dots, M_.pegs = diag("steps"), diag("dots"), diag("pegs")
+    function M_.gangway(cur, s, ex)                      -- a slanted board with step blocks
+      local a = math.rad(rng.range(25, 40))
+      local L = R(rng.range(70, 120))
+      local dx, dy = s * L * cos(a), L * sin(a)
+      local w = R(rng.pick({ 36, 40 }))
+      local cx = ex + dx + s * w / 2
+      if not inside_col(cx, w) then return nil end
+      local A = landing("shelf", cx, cur.y + dy, w)
+      local solids = {}
+      for k = 1, 5 do
+        local u = (k - 0.5) / 5
+        local x, y = ex + dx * u, cur.y + dy * u
+        solids[#solids + 1] = { x - abs(dx) / 10 - R(2), y - R(7), x + abs(dx) / 10 + R(2), y + R(5) }
+      end
+      return { kind = "gangway", land = { A }, solids = solids, up = { min(ex, ex + dx), cur.y, max(ex, ex + dx), A.y },
+        draw = function() draw(5, function(r) C.stairs(r, ex, cur.y, ex + dx, cur.y + dy) end) end }
+    end
+    function M_.bridge(cur, s, ex, gap)                  -- level rope bridge to a shelf; never low
+      if cur.y - fy < R(100) then return nil end
+      if abs(ex - edge_x(cur, s)) > 0.01 then return nil end   -- a bridge leaves from the end it faces
+      local w = R(rng.pick({ 30, 36, 40 }))
+      gap = gap or R(rng.range(40, 120))
+      local cx = ex + s * (gap + w / 2)
+      if not inside_col(cx, w) then return nil end
+      local A = landing("shelf", cx, cur.y + R(rng.range(-6, 6)), w)
+      local sag = min(R(14), gap * 0.12)
+      local bx1 = ex + s * gap
+      return { kind = "bridge", land = { A }, bridge = true, br = { ex, cur.y, bx1, A.y, sag },
+        solids = { { min(ex, bx1) + R(4), min(cur.y, A.y) - sag - R(6), max(ex, bx1) - R(4), max(cur.y, A.y) + R(27) } },
+        draw = function()
+          local sg = sag
+          draw(5, function(r) C.bridge(r, ex, cur.y, bx1, A.y, { sag = sg }) end)
+          spot((ex + bx1) / 2, (cur.y + A.y) / 2 - sag, { "walk" }, true, 0)
+        end }
+    end
+
+    -- the series used on this page: two of the three slanted kinds at most
+    local series = ({ { "steps", "pegs" }, { "steps", "dots" }, { "pegs", "steps" } })[rng.int(1, 3)]
+    local function kinds_for(cur)
+      local k = { { "run", 3 }, { "ladder", 3 }, { series[1], 3 }, { series[2], 2 }, { "gangway", 2 } }
+      if cur.ground then k[#k + 1] = { "climb", 2 } end
+      if cur.y - fy > R(100) then k[#k + 1] = { "bridge", 1 } end
+      -- weighted order, without replacement
+      local out = {}
+      while #k > 0 do
+        local tot = 0
+        for _, e in ipairs(k) do tot = tot + e[2] end
+        local u, i = rng.u() * tot, 1
+        while u > k[i][2] do u = u - k[i][2] i = i + 1 end
+        out[#out + 1] = table.remove(k, i)[1]
+      end
+      return out
+    end
+
+    -- grow a route from a landing up to about y_target; returns its landings
+    local function route(start, y_target, maxmods)
+      local cur, out = start, {}
+      route_target = y_target
+      local s = (start.cx < mid_) and 1 or -1
+      local nm, lastkind, jumps_ = 0, nil, 0
+      while cur.y < y_target - R(40) and nm < maxmods do
+        local done = false
+        for _, kind in ipairs(kinds_for(cur)) do
+          if kind ~= lastkind then
+            local tries_ = {}
+            for _, sd in ipairs(rng.chance(0.7) and { s, -s } or { -s, s }) do
+              for v = 1, 3 do                                -- three sizes of each
+                tries_[#tries_ + 1] = { sd, edge_x(cur, sd) }          -- out from the near end
+                tries_[#tries_ + 1] = { sd, edge_x(cur, -sd) + sd * R(6) }   -- or back across from the far end
+                if cur.x1 - cur.x0 > R(60) then tries_[#tries_ + 1] = { sd, (cur.x0 + cur.x1) / 2 } end
+              end
+            end
+            for _, tr in ipairs(tries_) do
+              local sd = tr[1]
+              local m = M_[kind](cur, sd, tr[2])
+              if m then
+                local top_ = m.land[#m.land].y
+                if top_ <= y_target + R(25) and fits(m, cur) then
+                  accept(m)
+                  m.from = cur
+                  for _, L in ipairs(m.land) do out[#out + 1] = L end
+                  cur = m.land[#m.land]
+                  s = -sd
+                  lastkind = kind
+                  done = true
+                  break
+                end
+              end
+            end
+          end
+          if done then break end
+        end
+        -- stuck: a jump (at most two per route), to a staggered shelf past whatever is in the way
+        if not done and jumps_ < 2 then
+          for _, dy in ipairs({ 45, 35, 25 }) do
+            for _, gp in ipairs({ 25, 40, 55 }) do
+              for _, sd in ipairs({ s, -s }) do
+                local w = R(rng.pick({ 36, 40 }))
+                local cx = edge_x(cur, sd) + sd * (R(gp) + w / 2)
+                if inside_col(cx, w) then
+                  local A = landing("moon", cx, cur.y + R(dy), w)
+                  local m = { kind = "jump", land = { A }, solids = {}, draw = function() end }
+                  if fits(m, cur) then
+                    accept(m)
+                    out[#out + 1] = A
+                    cur, s, lastkind, done = A, -sd, "jump", true
+                    jumps_ = jumps_ + 1
+                    break
+                  end
+                end
+              end
+              if done then break end
+            end
+            if done then break end
+          end
+        end
+        if not done then break end
+        nm = nm + 1
+      end
+      return out, cur
+    end
+
+    -- the starts: the tower's landings in the column, highest first
+    local starts = {}
+    for _, p in ipairs(plats) do
+      local a_, b_ = max(p.xa, x0), min(p.xb, x1)
+      if b_ - a_ > 0.6 then starts[#starts + 1] = { id = -1, cx = (a_ + b_) / 2, x0 = a_, x1 = b_, y = p.y + st, ground = true } end
+    end
+    for _, t in ipairs(tops) do
+      if t[1] > x0 and t[1] < x1 and not t.noroute then starts[#starts + 1] = { id = -1, cx = t[1], x0 = t[1] - 0.45, x1 = t[1] + 0.45, y = t[2], ground = true } end
+    end
+    if #starts == 0 then                              -- no tower: the routes leave from the floor
+      for _, g in ipairs(segs) do
+        if g[2] - g[1] > 0.6 then starts[#starts + 1] = { id = -1, cx = (g[1] + g[2]) / 2, x0 = g[1], x1 = g[2], y = top } end
+      end
+    end
+    if #starts == 0 then return end
+    table.sort(starts, function(a, b) return a.y > b.y end)
+    local nroutes = wide and max(2, floor((x1 - x0) / 3.5)) or (DD >= 0.6 and 2 or 1)
+    local D_ = max(0.3, DD)
+    local y_look = y1 - R(rng.range(30, 60))
+    if DBG then io.stderr:write(string.format("start y=%.2f x=%.2f..%.2f  y_look=%.2f y1=%.2f col=%.2f..%.2f\n", starts[1].y, starts[1].x0, starts[1].x1, y_look, y1, x0, x1)) end
+    -- the main route: from the highest start it can leave
+    local r1, top1 = {}, nil
+    for si = 1, #starts do
+      r1, top1 = route(starts[si], y_look, floor(8 * D_ + 0.5))
+      if #r1 > 0 then
+        if si > 1 then starts[1], starts[si] = starts[si], starts[1] end
+        break
+      end
+    end
+    if top1 and top1 ~= starts[1] then top1.lookout = true top1.kind = "moon" end
+    local routes = { r1 }
+    if nroutes > 1 then
+      -- the second start: the highest tower landing well away from the first
+      -- the second start: the tower landing farthest across from the first, at any height
+      -- the highest landing on the other side of the column with open sky above it
+      local best
+      for i = 2, #starts do
+        local st_ = starts[i]
+        if abs(st_.cx - starts[1].cx) > R(30) and (st_.cx - mid_) * (starts[1].cx - mid_) <= 0.05
+          and free(st_.x0, st_.y + 0.05, st_.x1, st_.y + R(70), 0.02) then best = st_ break end
+      end
+      if best and not wide then
+        local r2 = route(best, (top1 and top1.y or y_look) - R(rng.range(40, 90)), floor(6 * D_ + 0.5))
+        routes[#routes + 1] = r2
+      end
+      if wide then                                    -- spaced across the frame, each to its own perch
+        local used = { starts[1] }
+        for i = 2, #starts do
+          local st_ = starts[i]
+          local far = true
+          for _, u in ipairs(used) do if abs(u.cx - st_.cx) < R(70) then far = false end end
+          if far and #routes < nroutes and free(st_.x0, st_.y + 0.05, st_.x1, st_.y + R(50), 0.02) then
+            used[#used + 1] = st_
+            local rn, tn = route(st_, y_look - R(rng.range(0, 120)), floor(7 * D_ + 0.5))
+            if tn and tn ~= st_ then tn.lookout = true tn.kind = "moon" end
+            routes[#routes + 1] = rn
+          end
+        end
+      end
+    end
+
+    -- ledges out of the page's edges, reached by a jump or a short bridge; on a wide frame
+    -- a route goes on up from them
+    local edges = o.edges or {}
+    local nledge = wide and floor((y1 - fy) / 7) or 1
+    for side, ex_ in pairs({ edges[1] or false, edges[2] or false }) do
+      if ex_ then
+        local sd = side == 1 and 1 or -1
+        local made = 0
+        for _ = 1, 10 do
+          if made >= nledge then break end
+          local w = R(rng.range(45, 75))
+          local yy = rng.range(top + R(110), y1 - R(70))
+          local inner = ex_ + sd * w
+          local a_, b_ = min(ex_, inner), max(ex_, inner)
+          a_, b_ = max(a_, x0 + 0.03), min(b_, x1 - 0.03)
+          local q = { a_, yy - R(4) - w * 0.4, b_, yy }
+          local cq = { a_, yy + 0.01, b_, yy + R(30) }
+          if b_ - a_ > R(30) and free(q[1], q[2], q[3], q[4], 0.02) and free(cq[1], cq[2], cq[3], cq[4], 0.02) and not hits_clear(q, {}) then
+            -- how a cat gets there: a jump from a landing, or a short level bridge
+            local tip = sd > 0 and b_ or a_
+            local via, viagap
+            for _, L in ipairs(lands) do
+              if not L.series then
+                local near = sd > 0 and L.x0 or L.x1
+                local gap = (near - tip) * sd
+                local dy = abs(L.y - yy)
+                if gap > 0 and gap <= R(60) and dy <= R(50) then via, viagap = L, nil break end
+                if gap > R(35) and gap < R(wide and 240 or 120) and dy <= R(14) and yy - fy > R(100) then via, viagap = L, gap end
+              end
+            end
+            if via then
+              local brq
+              local okb = true
+              if viagap then
+                local nearx = sd > 0 and via.x0 or via.x1
+                brq = { min(tip, nearx) + R(4), min(yy, via.y) - R(16), max(tip, nearx) - R(4), max(yy, via.y) + R(27) }
+                okb = free(brq[1], brq[2], brq[3], brq[4], 0.02) and not hits_clear(brq, { [via.id] = true })
+              end
+              if okb then
+                local LL = landing("shelf", (a_ + b_) / 2, yy, b_ - a_)
+                LL.solid = q LL.clear = cq
+                reg(q[1], q[2], q[3], q[4], "pl")
+                clears[#clears + 1] = { cq[1], cq[2], cq[3], cq[4], LL.id }
+                lands[#lands + 1] = LL
+                local lw, le = abs(inner - ex_), ex_
+                local function drawledge()
+                  draw(3, at(le, yy, function(r) C.ledge(r, lw, sd) end))
+                  spot(LL.cx, yy, { "loaf", "sit" })
+                end
+                local m = { kind = "ledge", land = {}, solids = {}, draw = drawledge }
+                plan[#plan + 1] = m
+                if viagap then
+                  reg(brq[1], brq[2], brq[3], brq[4], "pl")
+                  local nearx, vy = sd > 0 and via.x0 or via.x1, via.y
+                  local sag = min(R(12), viagap * 0.12)
+                  plan[#plan + 1] = { br = { tip, yy, nearx, vy, sag }, draw = function()
+                    draw(5, function(r) C.bridge(r, tip, yy, nearx, vy, { sag = sag }) end)
+                    spot((tip + nearx) / 2, (yy + vy) / 2 - sag, { "walk" }, true, 0)
+                  end }
+                end
+                if wide and y_look - yy > R(90) then
+                  local rl, tl = route(LL, y_look - R(rng.range(20, 100)), 2)
+                  if tl and tl ~= LL then tl.lookout = true tl.kind = "moon" end
+                  routes[#routes + 1] = rl
+                end
+                made = made + 1
+              end
+            end
+          end
+        end
+      end
+    end
+
+    if DBG then io.stderr:write(string.format("routes: %d; landings r1=%d r2=%s; top1 y=%s\n", #routes, #routes[1], routes[2] and #routes[2] or "-", top1 and string.format("%.2f", top1.y) or "-")) end
+    -- cross-links between the routes: short level bridges where two landings face each other
+    local links = 0
+    local maxlinks = wide and 2 * #routes or 2
+    for ri = 1, #routes - 1 do for rj = ri + 1, #routes do
+      for _, a in ipairs(routes[ri]) do
+        for _, b in ipairs(routes[rj]) do
+          if links < maxlinks and not a.lookout and abs(a.y - b.y) < R(wide and 30 or 20) then
+            local s = b.cx > a.cx and 1 or -1
+            local gap = s > 0 and (b.x0 - a.x1) or (a.x0 - b.x1)
+            if gap > R(35) and gap < R(wide and 320 or 160) and a.y - fy > R(100) then
+              local ex, bx1 = edge_x(a, s), edge_x(b, -s)
+              local sag = min(R(12), gap * 0.12)
+              local m = { kind = "link", land = {}, bridge = true, br = { ex, a.y, bx1, b.y, sag },
+                solids = { { min(ex, bx1) + R(4), min(a.y, b.y) - sag - R(6), max(ex, bx1) - R(4), max(a.y, b.y) + R(27) } },
+                draw = function()
+                  draw(5, function(r) C.bridge(r, ex, a.y, bx1, b.y, { sag = sag }) end)
+                  spot((ex + bx1) / 2, (a.y + b.y) / 2 - sag, { "walk" }, true, 0)
+                end }
+              local ex_ = { [a.id] = true, [b.id] = true }
+              local okk = true
+              for _, q in ipairs(m.solids) do
+                if not free(q[1], q[2], q[3], q[4], 0.02) or hits_clear(q, ex_) then okk = false end
+              end
+              if okk then accept(m) links = links + 1 end
+            end
+          end
+        end
+      end
+    end end
+
+    -- dead ends off the landings: a condo on a bracket (a second box beside it, now and then,
+    -- or a short bridge to it), a hex with a cushion, a clear bubble a jump above a shelf
+    local hosts = {}
+    for _, L in ipairs(lands) do if not L.lookout and not L.series then hosts[#hosts + 1] = L end end
+    for i = #hosts, 2, -1 do local j = rng.int(1, i) hosts[i], hosts[j] = hosts[j], hosts[i] end
+    local jobs = DD >= 0.5 and { "hide", "bed", "bubble" } or { "bed" }
+    if wide then
+      local base = jobs
+      jobs = {}
+      for _ = 1, floor((x1 - x0) / 3.5) do for _, jb in ipairs(base) do jobs[#jobs + 1] = jb end end
+    end
+    local function try_leaf(job, L, s)
+      local ex = edge_x(L, s)
+      if job == "hide" or job == "bed" then
+        local box = job == "hide" and "condo" or "hex"
+        local w = box == "condo" and real(C.DIM.condo_w) or real(C.DIM.hex_w)
+        local h = box == "condo" and real(C.DIM.condo_h) + R(4) or 0.866 * real(C.DIM.hex_w)
+        local cx = ex + s * (w / 2 + R(2))
+        local by = L.y - st
+        local q = { cx - w / 2, by, cx + w / 2, by + h }
+        if not inside_col(cx, w) or not free(q[1], q[2], q[3], q[4], 0.02) or hits_clear(q, { [L.id] = true }) then return false end
+        local top_ = landing("shelf", cx, by + h, w * 0.8)
+        if not free(top_.clear[1], top_.clear[2], top_.clear[3], top_.clear[4], 0.02) then return false end
+        reg(q[1], q[2], q[3], q[4], "pl")
+        if box == "condo" then
+          plan[#plan + 1] = { draw = function()
+            draw(3, at(cx, by, function(r) C.condo(r, { holes = { rng.pick({ "round", "arch", "oval" }) } }) end))
+          end }
+          spot(cx, by + h - R(4), { "loaf", "sit" })
+          spot(cx, by + real(C.DIM.condo_h) * 0.5, { "peek" }, true)
+        else
+          plan[#plan + 1] = { draw = function()
+            draw(3, at(cx, by + 0.866 * w / 2, function(r) C.hex(r, {}) end))
+          end }
+          spot(cx, by + real(3.5) + R(3), { "sit" }, true)
+        end
+        clears[#clears + 1] = { top_.clear[1], top_.clear[2], top_.clear[3], top_.clear[4], top_.id }
+        return true
+      else                                            -- the bubble: hung a jump above and beside the shelf
+        local br = R(rng.range(17, 20))
+        local bw = br + R(12)
+        local cx = ex + s * (bw + R(6))
+        local ty = L.y + R(rng.range(30, 45))
+        local q = { cx - bw, ty - R(4) - br - 0.05, cx + bw, ty + 0.15 }
+        if not inside_col(cx, 2 * bw) or ty > (top1 and top1.y or y1) - R(20) or not free(q[1], q[2], q[3], q[4], 0.02) or hits_clear(q, { [L.id] = true }) then return false end
+        reg(q[1], q[2], q[3], q[4], "pl")
+        plan[#plan + 1] = { draw = function() draw(4, at(cx, ty, function(r) C.bubble(r, { r = br }) end)) end }
+        spot(cx, ty - R(4) - br * 0.85, { "curl" }, true)
+        return true
+      end
+    end
+    for _, job in ipairs(jobs) do
+      local placed = false
+      for _, L in ipairs(hosts) do
+        for _, s in ipairs({ 1, -1 }) do
+          if try_leaf(job, L, s) then placed = true break end
+        end
+        if placed then break end
+      end
+    end
+
+    -- from above: perches and beds on ropes to the page's top edge, within a jump of a landing
+    local ceil_ = o.ceil
+    if ceil_ then
+      local nhang = wide and floor((x1 - x0) / 3) or 2
+      local shuffled = {}
+      for _, L in ipairs(lands) do if not L.series then shuffled[#shuffled + 1] = L end end
+      for _, st_ in ipairs(starts) do shuffled[#shuffled + 1] = st_ end
+      for i = #shuffled, 2, -1 do local j = rng.int(1, i) shuffled[i], shuffled[j] = shuffled[j], shuffled[i] end
+      local KIND = { "swing", "sling", "basket", "hoop", "swing", "basket" }
+      local made = 0
+      for _, L in ipairs(shuffled) do
+        if made >= nhang then break end
+        local kd = KIND[made % #KIND + 1]
+        local w = kd == "swing" and R(rng.range(34, 44)) or kd == "sling" and R(rng.range(50, 60)) or kd == "basket" and R(34) or R(38)
+        for _, sd in ipairs(rng.chance(0.5) and { 1, -1 } or { -1, 1 }) do
+          local ex = sd > 0 and L.x1 or L.x0
+          local cx = ex + sd * (w / 2 + R(rng.range(14, 50)))
+          local yy = L.y + R(rng.range(5, 42))
+          local q = kd == "swing" and { cx - w / 2, yy - R(5), cx + w / 2, yy + R(28) }
+            or kd == "sling" and { cx - w / 2, yy - R(24), cx + w / 2, yy + R(4) }
+            or { cx - w / 2, yy, cx + w / 2, yy + R(36) }
+          local ropes = kd == "swing" and { cx - w / 2 + R(3), cx + w / 2 - R(3) }
+            or kd == "sling" and { cx - w / 2, cx + w / 2 } or { cx }
+          local ok = inside_col(cx, w) and yy < y1 - R(50) and free(q[1], q[2], q[3], q[4], 0.02) and not hits_clear(q, {})
+          for _, rx in ipairs(ropes) do
+            ok = ok and free(rx - R(1), q[4], rx + R(1), ceil_, 0.02) and not hits_clear({ rx - R(1), q[4], rx + R(1), ceil_ }, {})
+          end
+          if ok then
+            reg(q[1], q[2], q[3], q[4], "pl")
+            for _, rx in ipairs(ropes) do reg(rx - R(1), q[4], rx + R(1), ceil_, "rope") end
+            clears[#clears + 1] = { q[1], q[2], q[3], q[4], -2 }
+            local top_ = ceil_ - yy
+            plan[#plan + 1] = { draw = function()
+              draw(4, at(cx, yy, function(r) C.hang(r, kd, top_, { w = w, r = w / 2, d = w }) end))
+              if kd == "swing" then spot(cx, yy + R(2), { "loaf", "sit" }, true)
+              elseif kd == "sling" then spot(cx, yy - R(17), { "curl" }, true)
+              elseif kd == "basket" then spot(cx, yy + R(8), { "curl" }, true) end
+            end }
+            made = made + 1
+            break
+          end
+        end
+      end
+      -- long toys from the top edge, anywhere there is air
+      local ntoys = wide and floor((x1 - x0) / 2.2) or 3
+      local LONG = { "pom", "feather", "knots", "bell", "mouse", "sisal", "dark" }
+      local placed = 0
+      for _ = 1, ntoys * 6 do
+        if placed >= ntoys then break end
+        local tx = rng.range(x0 + 0.2, x1 - 0.2)
+        local L_ = R(rng.range(35, 170))
+        local q = { tx - R(7), ceil_ - L_ - R(16), tx + R(7), ceil_ }
+        if q[2] > fy + 1 and free(q[1], q[2], q[3], q[4], 0.05) and not hits_clear(q, {}) then
+          reg(q[1], q[2], q[3], q[4], "toy")
+          local kd = LONG[rng.int(1, #LONG)]
+          plan[#plan + 1] = { draw = function()
+            draw(5, at(tx, ceil_, function(r) C.ball(r, { kind = kd, L = L_ }) end))
+          end }
+          placed = placed + 1
+        end
+      end
+    end
+
+    -- sisal mats on the wall beside a landing: somewhere to scratch
+    do
+      local nm_, tried = 0, 0
+      for _, L in ipairs(lands) do
+        if nm_ >= (wide and 3 or 1) or tried > 12 then break end
+        if not L.series and not L.lookout then
+          tried = tried + 1
+          local sd = rng.chance(0.5) and 1 or -1
+          local w_, h_ = R(20), R(42)
+          local cx = (sd > 0 and L.x1 or L.x0) + sd * (w_ / 2 + R(5))
+          local by = L.y - R(6)
+          local q = { cx - w_ / 2 - R(1), by, cx + w_ / 2 + R(1), by + h_ + R(2) }
+          if inside_col(cx, w_) and free(q[1], q[2], q[3], q[4], 0.02) and not hits_clear(q, { [L.id] = true }) then
+            reg(q[1], q[2], q[3], q[4], "pl")
+            plan[#plan + 1] = { draw = function() draw(2, at(cx, by, function(r) C.mat(r, w_, h_) end)) end }
+            nm_ = nm_ + 1
+          end
+        end
+      end
+    end
+
+    -- toys off the bridges: hung from the deck, a few along each
+    do
+      local KINDS = { "pom", "mouse", "feather", "knots", "bell", "sisal", "dark" }
+      local brs = {}
+      for _, m in ipairs(plan) do if m.br then brs[#brs + 1] = m.br end end
+      for _, b in ipairs(tower_bridges) do brs[#brs + 1] = b end
+      for _, b in ipairs(brs) do
+        local ax, ay, bx, by, sag = b[1], b[2], b[3], b[4], b[5]
+        local span = abs(bx - ax)
+        local want_ = max(1, min(4, floor(span / R(45))))
+        local lane = min(ay, by) - sag - R(8)
+        for k = 1, want_ do
+          local t = (k - 0.5) / want_ + rng.sym(0.3 / want_)
+          local tx, dy_ = ax + (bx - ax) * t, ay + (by - ay) * t - 4 * sag * t * (1 - t)
+          local cord = R(rng.range(14, 34))
+          local q = { tx - R(7), dy_ - cord - R(16), tx + R(7), lane }
+          if q[4] > q[2] and free(q[1], q[2], q[3], q[4], 0.02) and not hits_clear(q, {}) then
+            reg(q[1], q[2], q[3], q[4], "toy")
+            local kd = KINDS[rng.int(1, #KINDS)]
+            plan[#plan + 1] = { draw = function()
+              draw(5, at(tx, dy_ - R(1), function(r) C.ball(r, { kind = kd, L = cord }) end))
+            end }
+          end
+        end
+      end
+    end
+
+    -- the flat places a cat lies on, for yarn and wands: wall landings and tower platforms
+    local flats = {}
+    for _, L in ipairs(lands) do
+      if not L.series and not L.lookout and L.kind == "shelf" then flats[#flats + 1] = { x0 = L.x0, x1 = L.x1, y = L.y, id = L.id } end
+    end
+    for _, p_ in ipairs(plats) do flats[#flats + 1] = { x0 = max(p_.xa, x0), x1 = min(p_.xb, x1), y = p_.y + st, id = -1 } end
+    for i = #flats, 2, -1 do local j = rng.int(1, i) flats[i], flats[j] = flats[j], flats[i] end
+
+    -- yarn on the perches, its strand over the edge
+    do
+      local nyarn, maxyarn = 0, wide and floor((x1 - x0) / 3.5) or 2
+      for _, F in ipairs(flats) do
+        if nyarn >= maxyarn then break end
+        local sd = rng.chance(0.5) and 1 or -1
+        local edge = sd > 0 and F.x1 or F.x0
+        local r_ = R(rng.range(4, 5.5))
+        local run = R(rng.range(10, 20))
+        local bx = edge - sd * run
+        local drop = R(rng.range(15, 40))
+        local qb = { bx - r_, F.y + 0.01, bx + r_, F.y + 2 * r_ }
+        local qs = { edge - R(1), F.y - st - drop, edge + sd * R(4), F.y }
+        qs[1], qs[3] = min(qs[1], qs[3]), max(qs[1], qs[3])
+        if F.x1 - F.x0 > R(30) and free(qb[1], qb[2], qb[3], qb[4], 0.02) and free(qs[1], qs[2], qs[3], qs[4], 0.02) and not hits_clear(qs, {}) then
+          reg(qb[1], qb[2], qb[3], qb[4], "toy")
+          reg(qs[1], qs[2], qs[3], qs[4], "toy")
+          local cp = rng.chance(0.5)
+          plan[#plan + 1] = { draw = function()
+            draw(5, at(bx, F.y, function(r) C.yarn(r, r_, sd * run, drop, cp) end))
+          end }
+          nyarn = nyarn + 1
+        end
+      end
+    end
+
+    -- fishing-pole wands, stuck in at an angle at a perch's end, the line hanging clear
+    do
+      local nw, maxw = 0, wide and floor((x1 - x0) / 4) or 2
+      for _, F in ipairs(flats) do
+        if nw >= maxw then break end
+        local sd = rng.chance(0.5) and 1 or -1
+        local L_ = R(rng.range(42, 62))
+        local a_ = math.rad(rng.range(42, 66))
+        local dx, dy = sd * L_ * cos(a_), L_ * sin(a_)
+        local ox = (sd > 0 and F.x1 or F.x0) - sd * R(3)
+        local drop = R(rng.range(14, 26))
+        local ok = true
+        for u = 0.25, 1.001, 0.25 do
+          local x, y = ox + dx * u, F.y + dy * u
+          local q = { x - R(3), y - R(3), x + R(3), y + R(3) }
+          if not free(q[1], q[2], q[3], q[4], 0.02) or hits_clear(q, { [F.id] = true }) then ok = false end
+        end
+        local tx, ty = ox + dx, F.y + dy
+        local qs = { tx + sd * R(1) - R(9), ty - drop - R(13), tx + sd * R(1) + R(9), ty - R(3) }
+        if ok and inside_col(tx, R(18)) and ty < y1 and free(qs[1], qs[2], qs[3], qs[4], 0.02) and not hits_clear(qs, { [F.id] = true }) then
+          reg(min(ox, tx), F.y + R(2), max(ox, tx), ty, "toy")
+          reg(qs[1], qs[2], qs[3], qs[4], "toy")
+          plan[#plan + 1] = { draw = function()
+            draw(5, at(ox, F.y, function(r) C.wand(r, dx, dy, drop) end))
+          end }
+          nw = nw + 1
+        end
+      end
+    end
+
+    -- toys: hung under a landing's end, never into a path
+    local TOYS = { "pom", "pom", "sisal", "dark", "spring", "mouse", "feather", "knots", "bell" }
+    for _, L in ipairs(lands) do
+      if not L.series and rng.chance(0.6) then
+        local tx = rng.chance(0.5) and L.x0 or L.x1
+        tx = tx + (tx == L.x0 and R(5) or -R(5))
+        local cord = R(rng.range(18, 34))
+        local yb = L.solid[2]
+        local q = { tx - R(6), yb - cord - R(10), tx + R(6), yb - R(1) }
+        if free(q[1], q[2], q[3], q[4], 0.02) and not hits_clear(q, {}) then
+          reg(q[1], q[2], q[3], q[4], "toy")
+          local kd = TOYS[rng.int(1, #TOYS)]
+          plan[#plan + 1] = { draw = function()
+            draw(5, at(tx, yb, function(r)
+              C.ball(r, { kind = kd == "spring" and "pom" or kd, spring = kd == "spring", L = cord })
+            end))
+          end }
+        end
+      end
+    end
+
+    if DBG then
+      local ks = {} for k, v in pairs(DBG) do ks[#ks + 1] = k .. "=" .. v end table.sort(ks)
+      io.stderr:write("plan: " .. #plan .. " items; starts " .. #starts .. "; " .. table.concat(ks, " ") .. "\n")
+    end
+    -- draw, in the order planned: each module, then the landings it made
+    for _, m in ipairs(plan) do
+      m.draw()
+      for _, L in ipairs(m.land or {}) do
+        local L_ = L
+        if L_.kind == "moon" then
+          draw(3, at(L_.cx, L_.y - R(7.5), function(r) C.moon(r, { w = L_.w, carpet = L_.lookout or rng.chance(0.3) }) end))
+        else
+          draw(3, at(L_.cx, L_.y - st - R(1.5), function(r) C.shelf(r, { kind = "bracket", w = L_.w }) end))
+        end
+        if L_.lookout then spot(L_.cx, L_.y, { "sit", "loaf" })
+        elseif not L_.series then spot(L_.cx, L_.y, { "loaf", "sit" }) end
+      end
+    end
   end
+  local placed_hex = {}
+  if DD > 0.1 then plan_wall() end
+
 
   -- ---------------------------------------------------------------- 3b. under the text (the last page)
   -- rows of raised wall pieces reaching sideways out of the column: a shelf at the
@@ -1765,105 +2542,9 @@ function M.compose(C, ink, seed, col, o)
     bound = { x0, -1e9, o.spill[3], 1e9 }
   end
 
-  -- ---------------------------------------------------------------- 4. the fill, largest hole first
-  -- (grow.lua's loop): a hex, a half-moon, a pad or a wall step, joined by a chain of
-  -- steps, pegs or dots to the nearest place a cat can already reach
-  if fld then
-    if o.head then fld.disc(o.head[1], o.head[2], 0.8, 1) end
-    local anchors = {}
-    for _, s in ipairs(spots) do if not s[4] then anchors[#anchors + 1] = { s[1], s[2] } end end
-    local D = o.D or 1
-    local nfill, hexes = DD > 0.1 and floor(13 * D + 0.5) or 0, #placed_hex
-    local function clear(ax, ay, bx, by, r)
-      for u = 0.2, 0.81, 0.15 do
-        if fld.free_at(ax + (bx - ax) * u, ay + (by - ay) * u) < r then return false end
-      end
-      return true
-    end
-    for _ = 1, nfill * 3 do
-      if nfill <= 0 then break end
-      local best, bi = -1, nil
-      for i = 1, #fld.x do
-        local x, y = fld.x[i], fld.y[i]
-        local inspill = o.spill and not Lmode and x > o.spill[1] + 0.3 and x < o.spill[3] and y > o.spill[2] + 1.0 and y < o.spill[4]
-        if (x >= x0 and x <= x1 and y >= min(T - 0.5, top + 3.5) and y <= y1 - 0.4) or inspill then
-          local v = fld.free[i] * rng.range(0.9, 1.1)
-          if v > best then best, bi = v, i end
-        end
-      end
-      if not bi then break end
-      local f, x, y = fld.free[bi], fld.x[bi], fld.y[bi]
-      if f < 0.75 then break end
-      -- the nearest anchor a chain can reach without crossing anything
-      local cand = {}
-      for _, a in ipairs(anchors) do
-        local d = sqrt((a[1] - x) ^ 2 + (a[2] - y) ^ 2)
-        if d < 4.0 then cand[#cand + 1] = { d, a } end
-      end
-      table.sort(cand, function(p, q) return p[1] < q[1] end)
-      local kind, w, top
-      if f < 0.9 then break end
-      if f >= 1.55 and hexes < 3 and rng.chance(0.5) then kind = "hex" else kind = "moon" end
-      local R = real(C.DIM.hex_w) / 2
-      local box
-      if kind == "hex" then box = { x - R, y - 0.866 * R, x + R, y + 0.866 * R }
-      elseif kind == "puck" then w = real(18) box = { x - w / 2, y - w / 2, x + w / 2, y + w / 2 }
-      else w = min(2 * f - 0.3, real(rng.range(30, 42))) box = { x - w / 2, y - 0.3, x + w / 2, y + 0.45 } end
-      -- the piece, and a chain from the nearest anchor that crosses nothing
-      local link, ck, cbs, ax, ay, bx, by
-      if free(box[1], box[2], box[3], box[4], -GAP) then
-        for _, c in ipairs(cand) do
-          local a = c[2]
-          local dx, dy = x - a[1], y - a[2]
-          local d = sqrt(dx * dx + dy * dy)
-          -- from the anchor's edge to the piece's edge
-          local ex, ey = (box[3] - box[1]) / 2, (box[4] - box[2]) / 2
-          local t = min(ex / max(abs(dx), 1e-6), ey / max(abs(dy), 1e-6))
-          bx, by = x - dx * t - dx / d * 0.35, y - dy * t - dy / d * 0.35
-          ax, ay = a[1] + dx / d * 0.6, a[2] + 0.2 + dy / d * 0.6
-          local L = sqrt((bx - ax) ^ 2 + (by - ay) ^ 2)
-          if (bx - ax) * dx + (by - ay) * dy <= 0 or L < 0.35 then goto nextcand end
-          ck = plan_chain(ax, ay, bx, by)
-          cbs = ck.boxes
-          if chain_free(cbs) then link = a break end
-          ::nextcand::
-        end
-      end
-      if not link then
-        fld.disc(x, y, f * 0.6, 1)                      -- leave this hole alone
-      else
-        if kind == "hex" then
-          draw(3, at(x, y, function(r) C.hex(r, {}) end))
-          spot(x, y - 0.866 * R + real(3.5), { "sit" }, true)
-          top = { x, y + 0.866 * R }
-          hexes = hexes + 1
-        elseif kind == "moon" or kind == "pad" then
-          if kind == "moon" then draw(3, at(x, y, function(r) C.moon(r, { w = w, carpet = rng.chance(0.6) }) end))
-          else draw(3, at(x, y, function(r) C.pad(r, { w = w }) end)) end
-          spot(x, y + real(7.5), { "loaf", "sit", "curl" })
-          top = { x, y + 0.45 }
-        else
-          draw(5, at(x, y, function(r) C.puck(r, { d = w }) end))
-          top = { x, y + w / 2 }
-        end
-        reg(box[1], box[2], box[3], box[4], kind)
-        if (kind == "moon" or kind == "pad") and rng.chance(0.3) then
-          local tx = x + (rng.chance(0.5) and 1 or -1) * (w / 2 - 0.2)
-          if free(tx - 0.15, y - 1.4, tx + 0.15, y - 0.35, -GAP) then
-            draw(5, at(tx, y, function(r) C.ball(r, { kind = rng.pick({ "pom", "sisal" }), L = real(20) }) end))
-            reg(tx - 0.15, y - 1.4, tx + 0.15, y, "toy")
-          end
-        end
-        if ck then draw_chain(ck) end
-        for _, q in ipairs(cbs) do fld.disc((q[1] + q[3]) / 2, (q[2] + q[4]) / 2, 0.3, 1) end
-        anchors[#anchors + 1] = top
-        nfill = nfill - 1
-      end
-    end
-  end
-
   -- ---------------------------------------------------------------- the footer
   if Lmode then o.foot = nil end
+  if not o.nofoot then
   local fx0 = o.foot and (o.foot[1] + 0.5) or (x1 + 0.9)
   local fx1 = o.foot and (o.foot[3] - 0.2) or (fx0 + 5.4)
   local fh = o.foot and (o.foot[4] - top + 0.5) or 1.4       -- the height the band allows above the base
@@ -1911,6 +2592,7 @@ function M.compose(C, ink, seed, col, o)
     if w and w > 0 then fx, last = fx + w + rng.range(0.15, 0.5), kind else fx = fx + 0.3 end
   end
 
+  end
   -- draw, back to front
   for _, L in ipairs(layers) do for _, fn in ipairs(L) do fn() end end
 
@@ -1919,7 +2601,7 @@ function M.compose(C, ink, seed, col, o)
   for i = 1, #spots do order[i] = i end
   for i = #order, 2, -1 do local j = rng.int(1, i) order[i], order[j] = order[j], order[i] end
   -- one or two cats a page; a heading's cat counts among them
-  local want = rng.int(1, 2)
+  local want = o.cats or rng.int(1, 2)
   for _, mc in ipairs(marked) do if #cats < 2 then cat(mc[1], mc[2], mc[3], 1, nil, true) want = max(want, #cats) end end
   if #claws > 0 and #cats < want and rng.chance(0.35) then
     local px = claws[rng.int(1, #claws)]
@@ -1934,7 +2616,12 @@ function M.compose(C, ink, seed, col, o)
     if #cats >= want then break end
     local s = spots[i]
     local pose = s[3][rng.int(1, #s[3])]
-    if pose == "peek" then
+    -- a cat is drawn larger than its box in some poses: well clear of the keep-outs, or not at all
+    for _, ko in ipairs(o.keepout or {}) do
+      if s[1] + real(38) > ko[1] and s[1] - real(38) < ko[3] and s[2] + real(52) > ko[2] and s[2] - real(30) < ko[4] then pose = nil break end
+    end
+    if pose == nil then
+    elseif pose == "peek" then
       if rng.chance(0.6) then cats[#cats + 1] = { s[1], s[2] - real(10) + real(1), "peek" } end
     elseif pose == "drape" then
       -- the cat lies on the end with its paw and tail over the edge: the body back from the edge
@@ -2267,7 +2954,7 @@ function M.page(g, grow)
   local events = {}
   local cats = M.compose(M, ink, g.seed, { col[1], col[2] + 0.15, col[3], g.headrule - 0.9 },
     { foot = foot, spill = spill, field = fld, D = g.density or 1, head = { g.colright - 0.5, g.headrule + 0.1 },
-      pnum = { (g.textleft + g.textright) / 2, g.footy }, anim = anim, events = events, marks = g.marks })
+      pnum = { (g.textleft + g.textright) / 2, g.footy }, anim = anim, events = events, marks = g.marks, ceil = g.ph + 0.2, edges = { 0, nil } })
   local crng = ink.rng(g.seed * 7919 + 103)
   -- the cats come last, one after another, each growing in from its feet
   local tcat = 0.3

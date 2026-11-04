@@ -304,7 +304,109 @@ Heavy at the bottom, lighter as it rises, like the flowers thinning toward the t
 Cats go where they fit: lying on platforms and moons, sitting on tubes and in hexes, curled in
 hammocks, bowls, rings and bubbles, walking across bridges.
 
-## Where it stopped (2026-11-03, evening)
+## Design brief: intent (2026-11-04)
+
+The first generator placed pieces wherever they fit and joined them afterwards; pages had
+no intent (a climbing pole beside shelves doing the same job, shelf runs of mixed sizes,
+things going up into nothing). The rewrite plans **traversal first**: a few landings, each
+with a job, joined the way a cat would get between them, then the pieces dressed on.
+
+### What each piece is for
+
+- **Getting around.** Shelf run: a staircase of identical shelves (a cat's jump is regular:
+  about 25–30 cm up, 30–40 cm across). Ladder, D-pole: straight up where there is no room to
+  go sideways (ladder easy, pole agile). Ramp, gangway: the gentle slanted climb. Bridge:
+  crossing a gap at height between zones, a landing at each end. Pegs, dots: stepping stones
+  along the wall, sideways only. Hex with side holes: a pass-through, so it can sit on a route.
+  Tube: a tunnel to walk through or hide in.
+- **Resting.** Hammock, basket, bowl, bed: sleep spots, cradled, a little high (dead ends are
+  fine). Platform, perch: sitting and watching. The top lookout: one per gym, the highest,
+  with a cushion. Bubble: lounging, seen from below; a destination off the route.
+- **Hiding.** Condos, cubes: low to middle, ideally two openings.
+- **Scratching.** Sisal posts and the base posts, at stretching height near the floor and
+  near sleep spots.
+- **Playing.** Toys dangling under platforms near rest spots, never into a path. The ring:
+  a toy and a climb-through.
+
+### Rules
+
+1. Every piece has a job (getting around, resting, hiding, scratching, playing, watching);
+   a piece without one is not drawn.
+2. Getting-around pieces join two landings; nothing goes up into nothing. One way per
+   segment: no pole beside shelves doing the same job.
+3. A series keeps its rhythm: the same size and the same step. Another series elsewhere on
+   the page may have its own size and rhythm.
+4. Jumps have limits: about 50 cm up, 60 cm across between standing surfaces; more than
+   that needs a ladder, a pole or a bridge.
+5. Busy levels have two ways in or out; only rest spots are dead ends.
+6. Height follows function: scratching, play, loungers at the floor; hiding low; sleeping in
+   the middle; the lookout at the top.
+7. Every walkway and standing surface keeps cat-sized room above it (about 45 × 30 cm);
+   nothing else may enter it.
+8. Support by attachment: a piece needs its own post or bracket only if nothing it is
+   attached to carries it. Boxes may join side to side (two condos, a condo and a hex, two
+   hexes) on one post or none of their own; a box fixed to the side of another needs no pole.
+   Stacks stay small: two side by side, or rarely three as an L or a ^ pyramid (two below, one
+   on top). Never more. Boxes near each other at about the same height but not touching
+   may be joined by a short rope bridge, door to door (a small one, scaled to the gap).
+9. Never two ladders in a row: one long ladder with shelves stepping off to the sides at even
+   spacing, then another kind of module if the route goes on. A ladder may run from one surface up to the *underside* of another (through a hole, or to
+   its edge): it need not end on top of something.
+10. Cats show the function: asleep in beds, sitting at the lookout, walking on a route.
+11. Steps always go somewhere: every shelf run, peg or dot chain ends at a landing, a box or
+   at least a perch. No series stops in mid-air.
+12. Jumps are allowed, sparingly: an occasional gap within the limits of rule 4 instead of
+   a connector, not as the usual way between landings.
+
+### The same thinking, carried on (from "etc etc etc")
+
+Small touches that follow from the rules, used now and then, never all at once:
+- A hammock slung between two posts that already exist, or under a platform that already
+  spans two posts, never on posts of its own.
+- A toy hung from the underside of a landing next to a bed (a cat batting it from the bed),
+  or from the end of a bridge, never in a route's clearance.
+- A scratching post at the foot of the climb that starts a route, where a cat would stretch
+  before going up; sisal bands on the posts at the heights cats stand on.
+- A pass-through hex placed so a route goes in one hole and out the other.
+- A bed or bowl at the end of a short branch off the route, so resting spots are dead ends
+  and the route itself never is.
+- The lookout at the very top, reached by the last module of the main route.
+- A tube on a post top where a route crosses over the post, so the cat goes through it.
+- A rope bridge's two ends on landings of the same kind (two shelves, two boxes, a shelf and
+  a box), never from a peg or a step.
+- Cushions in sleep spots and on the lookout; bare boards on walkways and steps.
+- On a page with little room, fewer landings and the same rules, never a squeezed module.
+
+### The planner (to build)
+
+The full spec is `CATTREE-RULES.md` (data model, rules R1–R12 with numbers, the generation
+procedure, twelve motifs, a validation checklist). Summary:
+
+Landings at heights by function → modules between them under rules 2–4, 7, 9 → boxes and
+destinations attached under rule 8 → toys, scratching, cats. Kept from the first generator:
+the floor tower (L and U shapes), the cats, the ink, the animation contract and the checks.
+Replaced: the wall zone, the sparse top and the largest-hole fill.
+
+## The browser app (decided 2026-11-04, after more directions and toys)
+
+A browser tool in its own folder in this repo (monorepo style, not a separate project): paste a
+post, pick a size (4:5 for Instagram, a PDF page), **draw arbitrary bounding boxes for the text on
+a page; Pretext lays the text out inside them, and what does not fit goes to the next page**. Each
+text box becomes a keep-out for the gym (`o.keepout`). Export PNGs for a carousel, or a PDF.
+React is fine; the Lua stays, in wasmoon in a worker. Also possible: text flowing around the gym.
+Test PDF export early (blend modes).
+
+## Where it stopped (2026-11-04)
+
+The route planner (`plan_wall` in `M.compose`, spec in `CATTREE-RULES.md`) replaced the wall, top
+and fill; uncommitted on top of commit e0de2ea. Works: routes end at a lookout, vertical ladders
+with step-offs and never two in a row, D-poles, zigzag runs, slanted steps, bridges. Next: pages
+are too sparse and the second route and cross-links rarely fit, so let routes climb beside and
+through the tower (maybe a shorter tower), shorter modules, boxes that read as attached (redraw the
+peek cat's paws too). The user also wants more toys and accoutrements on the pieces: dangling
+balls, pom-poms and the like, in the dressing step. `CATDEBUG=1|2` prints rejection reasons. Then re-run animcheck and playcheck.
+
+## Where it stopped earlier (2026-11-03, evening)
 
 Stopped mid-session to free the laptop's CPU. Nothing is committed: everything is on branch
 `cattree` in the working tree (`theme-cattree.lua`, `tools/cattree/`, `cattree.tex`,
@@ -335,8 +437,11 @@ PNGs via `tools/cattree/render.sh` / `montage.sh` (headless Chrome). Lua 5.4 is
 
 ## Later (not started)
 
-- **Trees with cats in them** (noted 2026-11-03): after the cat gym is done, a new project of the
-  same kind as florilegium, but real trees: bark, branches, foliage, cats in the branches.
+- **Trees with cats in them** (next, ideas discussed 2026-11-04): big barky oaks, very verdant, lots
+  of layered foliage with things peeking out from behind it. Not started.
+- **Vector PDF from the studio:** ink.lua already writes PDF operators, so the gym's streams could
+  go straight into a page with pdf-lib (ExtGState for opacity and multiply) instead of images.
+  Not tried.
 
 ## Open questions
 
