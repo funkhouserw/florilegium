@@ -23,6 +23,12 @@ type Drag =
 type Caret = { x: number; y0: number; y1: number; base: number; size: number }
 type TextDrag = { story: number; anchor: number; unit: 'char' | 'word' | 'block'; lo: number; hi: number }
 
+// The pages' zoom is the canvas's own, kept apart from the panel and from the browser's zoom
+const ZOOMS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4]
+const ZOOM_KEY = 'felilegium-zoom'
+const clampZoom = (z: number) => Math.max(ZOOMS[0], Math.min(ZOOMS[ZOOMS.length - 1], +z.toFixed(3)))
+const PAGE_PX = 420             // a page's width on screen at 100%
+
 export function App() {
   const [stories, setStories] = useState<Story[]>(() => storiesOf(initial))
   const [sizeKey, setSizeKey] = useState<SizeKey>(initial.sizeKey)
@@ -53,6 +59,56 @@ export function App() {
   const svgs = useRef<(SVGSVGElement | null)[]>([])
   const caretEl = useRef<SVGLineElement | null>(null)
   const followed = useRef('')
+  const [zoom, setZoom] = useState(() => { const z = Number(localStorage.getItem(ZOOM_KEY)); return z > 0 ? clampZoom(z) : 1 })
+  const pagesEl = useRef<HTMLElement | null>(null)
+  const anchor = useRef<{ page: number; fx: number; fy: number; cx: number; cy: number } | null>(null)
+  // zoom about a point on screen, so what is under it stays under it
+  function zoomTo(next: number | ((z: number) => number), cx?: number, cy?: number) {
+    const el = pagesEl.current
+    if (el) {
+      const r = el.getBoundingClientRect()
+      const x = cx ?? r.left + r.width / 2, y = cy ?? r.top + r.height / 2
+      const stage = (document.elementFromPoint(x, y) as Element | null)?.closest<HTMLElement>('.stage')
+      if (stage) {
+        const s = stage.getBoundingClientRect()
+        anchor.current = { page: Number(stage.dataset.page), fx: (x - s.left) / s.width, fy: (y - s.top) / s.height, cx: x, cy: y }
+      }
+    }
+    setZoom((z) => clampZoom(typeof next === 'function' ? next(z) : next))
+  }
+  useLayoutEffect(() => {
+    try { localStorage.setItem(ZOOM_KEY, String(zoom)) } catch { /* not kept */ }
+    const a = anchor.current, el = pagesEl.current
+    anchor.current = null
+    const stage = a && el?.querySelector<HTMLElement>(`.stage[data-page="${a.page}"]`)
+    if (!a || !el || !stage) return
+    const s = stage.getBoundingClientRect()
+    el.scrollBy(s.left + a.fx * s.width - a.cx, s.top + a.fy * s.height - a.cy)
+  }, [zoom])
+  const zoomStep = (dir: 1 | -1) => zoomTo((z) => (dir > 0 ? ZOOMS.find((v) => v > z + 1e-3) : [...ZOOMS].reverse().find((v) => v < z - 1e-3)) ?? z)
+  const stepRef = useRef(zoomStep)
+  stepRef.current = zoomStep
+  useEffect(() => {
+    const el = pagesEl.current
+    if (!el) return
+    // a pinch on a trackpad arrives as a wheel with ctrl held
+    const wheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      zoomTo((z) => z * Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY)
+    }
+    const keys = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return
+      if (e.key === '=' || e.key === '+') stepRef.current(1)
+      else if (e.key === '-') stepRef.current(-1)
+      else if (e.key === '0') zoomTo(1)
+      else return
+      e.preventDefault()
+    }
+    el.addEventListener('wheel', wheel, { passive: false })
+    window.addEventListener('keydown', keys)
+    return () => { el.removeEventListener('wheel', wheel); window.removeEventListener('keydown', keys) }
+  }, [])   // eslint-disable-line react-hooks/exhaustive-deps
   const goalX = useRef<number | null>(null)                  // where up and down are aiming
   const [activeId, setActiveId] = useState<number | null>(null)
   const [focused, setFocused] = useState(false)
@@ -578,10 +634,13 @@ export function App() {
   )
 
   return (
+    <div className="shell">
+    <header className="top">
+      <h1>Felilegium</h1>
+      <span>Grown from Kevin Raymond's <a href="https://github.com/kevinraymond/florilegium" target="_blank" rel="noreferrer">florilegium</a></span>
+    </header>
     <div className="app">
       <aside className="panel">
-        <h1>Felilegium</h1>
-        <p className="hint">Grown from Kevin Raymond's <a href="https://github.com/kevinraymond/florilegium" target="_blank" rel="noreferrer">florilegium</a>.</p>
         <div className="toolbar" role="toolbar" aria-label="Text formatting">
           {tool('H1', 'Large heading', kind === 1, () => edit((s) => setBlock(s, 1)))}
           {tool('H2', 'Heading', kind === 2, () => edit((s) => setBlock(s, 2)))}
@@ -704,7 +763,20 @@ export function App() {
         <p className="hint">{unsaved ? 'This browser is out of room, so your latest changes are not kept here: save a file.' : 'Kept in this browser as you work. Save a file to keep it anywhere else.'}</p>
         {error && <p className="error" role="alert">{error}</p>}
       </aside>
-      <main className="pages">
+      <section className="canvas">
+      <div className="zoombar" role="toolbar" aria-label="Zoom the pages">
+        <button onClick={() => zoomStep(-1)} aria-label="Zoom out" disabled={zoom <= ZOOMS[0]}>−</button>
+        <select aria-label="Zoom" value={String(zoom)} onChange={(e) => zoomTo(+e.target.value)}>
+          {(ZOOMS.includes(zoom) ? ZOOMS : [...ZOOMS, zoom].sort((a, b) => a - b)).map((z) => <option key={z} value={String(z)}>{Math.round(z * 100)}%</option>)}
+        </select>
+        <button onClick={() => zoomStep(1)} aria-label="Zoom in" disabled={zoom >= ZOOMS[ZOOMS.length - 1]}>+</button>
+        <button onClick={() => {
+          const el = pagesEl.current
+          if (el) zoomTo(Math.min((el.clientHeight - 80) / (PAGE_PX * H / W), (el.clientWidth - 64) / PAGE_PX))
+        }}>Fit a page</button>
+        <span className="hint">⌘ and + or −, ⌘ and scroll, or pinch</span>
+      </div>
+      <main className="pages" ref={pagesEl}>
         {linking !== null && (
           <div className="banner" role="status">
             <span>Click the box to link, or draw a new one. Text flows through linked boxes in page order.</span>
@@ -714,7 +786,7 @@ export function App() {
         {pages.map((p, i) => {
           const m = marks.get(i)
           return (
-            <PageView key={i} index={i} page={p} W={W} H={H} margins={margins} style={style} gym={gyms[i]} growing={growing}
+            <PageView key={i} index={i} page={p} W={W} H={H} zoom={zoom} margins={margins} style={style} gym={gyms[i]} growing={growing}
               svgRef={(el) => { svgs.current[i] = el }} caretRef={caretEl} caret={focused ? m?.caret : undefined} composition={composition} rects={m?.rects ?? []}
               linking={linking !== null} activeStory={activeId} selectedId={selected?.page === i ? selected.id : null}
               chainLabel={(b) => { const ch = chainOf(b.story); return ch.length > 1 ? `${ch.findIndex((c) => c.page === i && c.id === b.id) + 1}/${ch.length}` : '' }}
@@ -724,12 +796,18 @@ export function App() {
           )
         })}
       </main>
+      </section>
       <textarea ref={typing} className="typing" aria-label="Text of the box you are editing" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
         onKeyDown={onKey} onInput={() => { if (composition === null) syncTyping() }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         onCompositionStart={() => setComposition('')}
         onCompositionUpdate={(e) => setComposition(e.data)}
         onCompositionEnd={() => { setComposition(null); syncTyping() }}
         onCopy={(e) => onCopy(e, false)} onCut={(e) => onCopy(e, true)} onPaste={onPaste} />
+    </div>
+    <footer className="bottom">
+      <span>© 2026 Ilse Funkhouser. All rights reserved.</span>
+      <span>Built on <a href="https://github.com/kevinraymond/florilegium" target="_blank" rel="noreferrer">florilegium</a> by Kevin Raymond (<a href="https://github.com/kevinraymond/florilegium/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT License</a>). Fonts: IM Fell (SIL Open Font License), Latin Modern (GUST Font License).</span>
+    </footer>
     </div>
   )
 }
@@ -782,8 +860,8 @@ function LinesOf({ lines, style }: { lines: Line[]; style: TextStyle }) {
   )
 }
 
-function PageView({ index, page, W, H, margins, style, gym, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink, unlink }: {
-  index: number; page: FlowPage; W: number; H: number; margins: Margins; style: TextStyle; gym?: string; growing: boolean
+function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink, unlink }: {
+  index: number; page: FlowPage; W: number; H: number; zoom: number; margins: Margins; style: TextStyle; gym?: string; growing: boolean
   svgRef: (el: SVGSVGElement | null) => void; caretRef: React.RefObject<SVGLineElement | null>
   caret?: Caret; composition: string | null; rects: { x: number; y: number; w: number; h: number }[]
   linking: boolean; activeStory: number | null; selectedId: number | null; chainLabel: (b: Box) => string
@@ -794,7 +872,7 @@ function PageView({ index, page, W, H, margins, style, gym, growing, svgRef, car
 }) {
   const ref = useRef<SVGSVGElement | null>(null)
   const drag = useRef<Drag | null>(null)
-  const scale = 420 / W
+  const scale = PAGE_PX * zoom / W
   const left = margins.left * CM, right = W - margins.right * CM, top = margins.top * CM, bottom = H - margins.bottom * CM
   const pull = 6 / scale      // how near a margin a dragged edge snaps to it
   const snap = (v: number, ...lines: number[]) => lines.find((l) => Math.abs(v - l) < pull) ?? v
@@ -854,7 +932,7 @@ function PageView({ index, page, W, H, margins, style, gym, growing, svgRef, car
       <div className="pagelabel"><span>Page {index + 1}{page.auto ? ' (text ran on)' : ''}</span>
         {removePage && <button className="link" onClick={removePage}>Delete page</button>}
       </div>
-      <div className={'stage' + (growing ? ' growing' : '')} style={{ width: W * scale, height: H * scale }}>
+      <div className={'stage' + (growing ? ' growing' : '')} data-page={index} style={{ width: W * scale, height: H * scale }}>
         <svg className="under" viewBox={`0 0 ${W} ${H}`} aria-hidden="true"><LinesOf lines={page.lines.filter((l) => l.layer === 'behind')} style={style} /></svg>
         {url && <img src={url} alt="" />}
         <svg ref={(el) => { ref.current = el; svgRef(el) }} className={'ink' + (linking ? ' linking' : '')} viewBox={`0 0 ${W} ${H}`} role="application" aria-label={`Page ${index + 1}`}
