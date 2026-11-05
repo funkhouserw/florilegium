@@ -33,6 +33,7 @@ local CASES = {
   { name = "cattree", theme = "cattree" },
   { name = "cattree, mirrored, density 0.4", theme = "cattree", mirror = true, density = 0.4 },
   { name = "oak", theme = "oak" },
+  { name = "oakblue", theme = "oakblue" },
   { name = "oak, autumn, mirrored, density 0.4", theme = "oak", age = 1, mirror = true, density = 0.4 },
 }
 local function geometry(seed, spill, case)

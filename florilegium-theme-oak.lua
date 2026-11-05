@@ -1341,10 +1341,13 @@ function M.initial_for(season, o)
           local k_ = depth == "back" and 5 or (depth == "mid" and 5 or 4)
           for i = 1, k_ do
             local x_ = lerp(max(f + U(0.06), xs0 - U(0.06)), min(TS - f - U(0.06), xs1 + U(0.06)), (i - 0.5) / k_) + rng.sym(U(0.03))
-            local y_ = yt + U(depth == "back" and 0.12 or (depth == "mid" and 0.08 or 0.09)) + rng.sym(U(0.03))
+            local y_ = yt + U(depth == "back" and 0.16 or (depth == "mid" and 0.135 or 0.145)) + rng.sym(U(0.025))
             leaf_ramp()
             ink.push() ink.translate(x_, y_)
-            M.clump(rng.fork(), U(0.075) * (S.size or 1), depth, { n = (depth == "back" and 0.5 or 0.72) * (S.fill or 1), leaf = U(0.042) * (S.leaf or 1) })
+            M.clump(rng.fork(), U(0.075) * (S.size or 1), depth, { clear = function(x, y)     -- the leaves stop at the letter's top edge, so that it can be read
+                local top_ = cols[floor((x_ + x) / cell)] or foot
+                return 0.5 + 0.7 * (y_ + y - top_ - U(0.012)) / U(0.03)
+              end, n = (depth == "back" and 0.5 or 0.72) * (S.fill or 1), leaf = U(0.042) * (S.leaf or 1) })
             ink.pop()
             ink.use_ramp(bark_ramp)
           end
@@ -1732,9 +1735,9 @@ function M.tree(rng, o)
       return w
     end
     local wm = width(0.5)
-    if wm >= 0.3 then
+    if wm >= 0.16 then                                  -- thin limbs too, or the bark stops short along a limb
       local kn, bl = {}, {}
-      if wm > 0.8 and layout.chance(0.7) then kn[1] = { layout.range(-0.5, 0.45), layout.range(0.2, 0.8), layout.range(0.55, 0.95) } end
+      if wm > 0.8 and layout.chance(0.7) and not (cur_chain and cur_chain.list[1].sweep) then kn[1] = { layout.range(-0.5, 0.45), layout.range(0.2, 0.8), layout.range(0.55, 0.95) } end
       if isroot then bl[1] = { -0.42 + layout.sym(0.15), 0.42, 2.6 } kn = { { 0.42, 0.66, 1.05 } } end
       if wm > 1.3 and not isroot and layout.chance(0.5) then bl[1] = { layout.range(-0.5, 0.5), layout.range(0.3, 0.7), 1.7 } end
       -- a branch does not grow out of a knot, and bark near a cut runs straight
@@ -1758,7 +1761,7 @@ function M.tree(rng, o)
         end
       end
       M.limb(rng.fork(), sp, width, { knots = kn, burls = bl, moss = wm > 1.1 and 0.5 or 0.08, rough = 0.05,
-        plate = max(0.1, min(0.21, wm * 0.14)), stretch = wm > 1 and 4.6 or 4.2, detail = wm > 1.8 and 0.16 or 9, flat = wm < 0.7, torn = not isroot, peel = S.peel })
+        plate = wm < 0.3 and 0.07 or max(0.1, min(0.21, wm * 0.14)), stretch = wm > 1 and 4.6 or 4.2, detail = wm > 1.8 and 0.16 or 9, flat = wm < 0.7, torn = not isroot, peel = S.peel })
       -- level enough to lie on?
       if wm > 0.42 and wm < 1.7 then
         for i = 1, #sp - 1 do
@@ -2587,9 +2590,9 @@ end
 -- A composition of its own (florilegium-grow.lua hands it the page). In layout coordinates, so
 -- a mirrored page is only the last transform. Keep-outs: the text, from the head rule down to
 -- the last line, and the page number.
-function M.page(g)
+function M.page(g, _, force_ink)
   local season = season_of(g.age)
-  local ramp, blue = ink.get_ramp(), own_ink()
+  local ramp, blue = ink.get_ramp(), force_ink or own_ink()
   if not blue then M.season_ink(season) end
   ink.set_transform(ink.page_transform(g.mirror and g.pw))
   local bottom = g.ybot
@@ -2618,9 +2621,9 @@ end
 -- The initial: the letter is the tree, in the season of the page. florilegium.lua calls
 -- before_initial first, because the letter itself is painted before M.initial decorates it.
 local initial_opts
-function M.before_initial(age)
+function M.before_initial(age, force_ink)
   local season = season_of(age)
-  local ramp, blue = ink.get_ramp(), own_ink()
+  local ramp, blue = ink.get_ramp(), force_ink or own_ink()
   if not blue then M.season_ink(season) end
   initial_opts = { season, { blue = blue } }
   return function() ink.use_ramp(ramp) end
