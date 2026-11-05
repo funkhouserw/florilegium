@@ -7,7 +7,7 @@ import { blockAt, deleteBack, deleteForward, enter, marksHere, newState, redo, r
 import { flow, fontOf, lineOfPos, posOfX, remeasure, xOfPos, type Box, type FlowPage, type Layer, type Line, type TextStyle } from './flow'
 import { growGym } from './gym'
 import { download, pagePng, pagesToHtml, pagesToPdf } from './exporter'
-import { CM, docFile, loadDoc, newBoxId, newDoc, newStoryDoc, newStoryId, readDocFile, saveDoc, SEASONS, SIZES, type Doc, type Grows, type Season, type SizeKey } from './doc'
+import { CM, docFile, fitMargins, followMargins, loadDoc, marginLimit, newBoxId, newDoc, newStoryDoc, newStoryId, readDocFile, resizeBoxes, saveDoc, SEASONS, SIZES, type Doc, type Grows, type Margins, type Season, type SizeKey } from './doc'
 import { familyOf, FAMILIES } from './fonts'
 import { fromMarkdown, sliceFromHtml, sliceFromMarkdown, sliceToHtml, sliceToText, toMarkdown, type Align } from './schema'
 
@@ -37,6 +37,7 @@ export function App() {
   const [season, setSeason] = useState<Season>(initial.season)
   const [spanishmoss, setSpanishmoss] = useState(initial.spanishmoss)
   const [textColor, setTextColor] = useState(initial.textColor)
+  const [margins, setMargins] = useState<Margins>(initial.margins)
   const [drawn, setDrawn] = useState<Box[][]>(initial.drawn)
   const S = SIZES[sizeKey]
   const W = S.w * CM, H = S.h * CM
@@ -83,8 +84,8 @@ export function App() {
   const boxCount = (story: number) => drawn.reduce((n, p) => n + p.filter((b) => b.story === story).length, 0)
 
   // kept in this browser as you work; a full disk must not stop the work
-  const doc: Doc = useMemo(() => ({ stories: texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, textColor, drawn }),
-    [texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, textColor, drawn])
+  const doc: Doc = useMemo(() => ({ stories: texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, textColor, margins, drawn }),
+    [texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, textColor, margins, drawn])
   docNow.current = doc
   const note = noted && noted.doc === doc ? noted.text : ''      // a note lasts until the work changes
   useEffect(() => {
@@ -96,7 +97,7 @@ export function App() {
   }, [doc, dragging])
   function applyDoc(d: Doc) {
     setStories(storiesOf(d)); setSizeKey(d.sizeKey); setFamily(d.family); setFontSize(d.fontSize); setSeed(d.seed); setCats(d.cats); setPieces(d.pieces)
-    setGrows(d.grows); setInkName(d.inkName); setCrown(d.crown); setSeason(d.season); setSpanishmoss(d.spanishmoss); setTextColor(d.textColor); setDrawn(d.drawn)
+    setGrows(d.grows); setInkName(d.inkName); setCrown(d.crown); setSeason(d.season); setSpanishmoss(d.spanishmoss); setTextColor(d.textColor); setMargins(d.margins); setDrawn(d.drawn)
     setError(''); setNote(''); setActiveId(null); setSelected(null); setLinking(null); setPlain(null)
     setGrowTick((t) => t + 1)
     growOnFonts.current = d.family !== family
@@ -360,10 +361,19 @@ export function App() {
     return () => window.removeEventListener('keydown', esc)
   }, [linking])
   function changeSize(k: SizeKey) {
-    const old = SIZES[sizeKey], next = SIZES[k]
-    const sx = next.w / old.w, sy = next.h / old.h
+    const fitted = fitMargins(margins, k)
     setSizeKey(k)
-    setDrawn((d) => d.map((p) => p.map((b) => ({ ...b, x: b.x * sx, y: b.y * sy, w: b.w * sx, h: b.h * sy }))))
+    setMargins(fitted)
+    setDrawn((d) => resizeBoxes(d, sizeKey, margins, k, fitted))
+    setGrowTick((t) => t + 1)      // a drawing grown for the old paper can't stand in for the new one
+  }
+  // Each keystroke starts again from where the field was entered, so a slip like 12 for 1.2 can be taken back.
+  const marginStart = useRef<{ margins: Margins; drawn: Box[][] } | null>(null)
+  function changeMargin(side: keyof Margins, v: number) {
+    const start = marginStart.current ?? { margins, drawn }
+    const next = { ...margins, [side]: v }
+    setMargins(next)
+    setDrawn(followMargins(start.drawn, sizeKey, start.margins, next))
   }
   // a change to a page that only follows the last one makes it a page of its own
   function editPage(page: number, fn: (boxes: Box[]) => Box[]) {
@@ -630,6 +640,17 @@ export function App() {
             {Object.entries(SIZES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </label>
+        <p className="hint">{S.px} × {Math.round(S.px * S.h / S.w)} px as a PNG. Changing it grows a new drawing.</p>
+        <div className="margins" onFocus={() => { marginStart.current ??= { margins, drawn } }} onBlur={() => { marginStart.current = null }}>
+          <span>Margins, in cm</span>
+          <div className="row">
+            {(['top', 'bottom', 'left', 'right'] as const).map((side) => (
+              <NumberField key={side} label={side[0].toUpperCase() + side.slice(1)} min={0} max={marginLimit(margins, sizeKey, side)} step={0.1}
+                value={margins[side]} onChange={(v) => changeMargin(side, v)} />
+            ))}
+          </div>
+          <p className="hint">The dotted line on each page. A box touching it moves with it, and boxes snap to it as you drag. You can still drag a box past it.</p>
+        </div>
         <label>Typeface
           <select value={family} onChange={(e) => setFamily(e.target.value)}>
             {FAMILIES.map((f) => <option key={f.css} value={f.css}>{f.label}</option>)}
@@ -672,7 +693,7 @@ export function App() {
         {pages.map((p, i) => {
           const m = marks.get(i)
           return (
-            <PageView key={i} index={i} page={p} W={W} H={H} style={style} gym={gyms[i]} growing={growing}
+            <PageView key={i} index={i} page={p} W={W} H={H} margins={margins} style={style} gym={gyms[i]} growing={growing}
               svgRef={(el) => { svgs.current[i] = el }} caretRef={caretEl} caret={focused ? m?.caret : undefined} composition={composition} rects={m?.rects ?? []}
               linking={linking !== null} activeStory={activeId} selectedId={selected?.page === i ? selected.id : null}
               chainLabel={(b) => { const ch = chainOf(b.story); return ch.length > 1 ? `${ch.findIndex((c) => c.page === i && c.id === b.id) + 1}/${ch.length}` : '' }}
@@ -731,7 +752,7 @@ function NumberField({ label, value, min, max, step, onChange }: {
 
 function LinesOf({ lines, style }: { lines: Line[]; style: TextStyle }) {
   return (
-    <g fontFamily={style.family} fill={style.color} style={{ pointerEvents: 'none', whiteSpace: 'pre' }}>
+    <g fontFamily={style.family} fill={style.color} style={{ pointerEvents: 'none' }}>
       {lines.flatMap((l, i) => l.runs.map((r, j) => (
         <text key={`${i}.${j}`} x={r.x} y={l.y} fontSize={l.size} fontWeight={r.bold ? 700 : 400} fontStyle={r.italic ? 'italic' : 'normal'}>{r.text}</text>
       )))}
@@ -739,8 +760,8 @@ function LinesOf({ lines, style }: { lines: Line[]; style: TextStyle }) {
   )
 }
 
-function PageView({ index, page, W, H, style, gym, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink }: {
-  index: number; page: FlowPage; W: number; H: number; style: TextStyle; gym?: string; growing: boolean
+function PageView({ index, page, W, H, margins, style, gym, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink }: {
+  index: number; page: FlowPage; W: number; H: number; margins: Margins; style: TextStyle; gym?: string; growing: boolean
   svgRef: (el: SVGSVGElement | null) => void; caretRef: React.RefObject<SVGLineElement | null>
   caret?: Caret; composition: string | null; rects: { x: number; y: number; w: number; h: number }[]
   linking: boolean; activeStory: number | null; selectedId: number | null; chainLabel: (b: Box) => string
@@ -751,6 +772,10 @@ function PageView({ index, page, W, H, style, gym, growing, svgRef, caretRef, ca
 }) {
   const ref = useRef<SVGSVGElement | null>(null)
   const drag = useRef<Drag | null>(null)
+  const scale = 420 / W
+  const left = margins.left * CM, right = W - margins.right * CM, top = margins.top * CM, bottom = H - margins.bottom * CM
+  const pull = 6 / scale      // how near a margin a dragged edge snaps to it
+  const snap = (v: number, ...lines: number[]) => lines.find((l) => Math.abs(v - l) < pull) ?? v
   const url = useMemo(() => (gym ? URL.createObjectURL(new Blob([gym], { type: 'image/svg+xml' })) : ''), [gym])
   useEffect(() => () => { if (url) URL.revokeObjectURL(url) }, [url])
   const at = (e: React.PointerEvent) => {
@@ -766,8 +791,9 @@ function PageView({ index, page, W, H, style, gym, growing, svgRef, caretRef, ca
   }
   const onDown = (e: React.PointerEvent) => {
     const p = at(e)
-    const id = drawBox(index, p.x, p.y)
-    begin(e, { kind: 'draw', page: index, x0: p.x, y0: p.y, id })
+    const x0 = snap(p.x, left, right), y0 = snap(p.y, top, bottom)
+    const id = drawBox(index, x0, y0)
+    begin(e, { kind: 'draw', page: index, x0, y0, id })
   }
   const onMove = (e: React.PointerEvent) => {
     const d = drag.current
@@ -777,11 +803,18 @@ function PageView({ index, page, W, H, style, gym, growing, svgRef, caretRef, ca
     editPage(d.page, (bs) => bs.map((b) => {
       if (b.id !== d.id) return b
       if (d.kind === 'draw') {
-        const x = clampX(p.x), y = clampY(p.y)
+        const x = snap(clampX(p.x), left, right), y = snap(clampY(p.y), top, bottom)
         return { ...b, x: Math.min(d.x0, x), y: Math.min(d.y0, y), w: Math.abs(x - d.x0), h: Math.abs(y - d.y0) }
       }
-      if (d.kind === 'move') return { ...b, x: clampX(p.x - d.dx), y: clampY(p.y - d.dy) }
-      return { ...b, w: Math.max(30, clampX(p.x) - b.x), h: Math.max(20, clampY(p.y) - b.y) }
+      if (d.kind === 'move') {
+        const x = clampX(p.x - d.dx), y = clampY(p.y - d.dy)
+        return {
+          ...b,
+          x: Math.abs(x + b.w - right) < pull ? right - b.w : snap(x, left),
+          y: Math.abs(y + b.h - bottom) < pull ? bottom - b.h : snap(y, top),
+        }
+      }
+      return { ...b, w: Math.max(30, snap(clampX(p.x), right) - b.x), h: Math.max(20, snap(clampY(p.y), bottom) - b.y) }
     }))
   }
   const onUp = () => {
@@ -794,7 +827,6 @@ function PageView({ index, page, W, H, style, gym, growing, svgRef, caretRef, ca
     }
     setDragging(false)
   }
-  const scale = 420 / W
   return (
     <div className="pagewrap">
       <div className="pagelabel"><span>Page {index + 1}{page.auto ? ' (text ran on)' : ''}</span>
@@ -805,6 +837,7 @@ function PageView({ index, page, W, H, style, gym, growing, svgRef, caretRef, ca
         {url && <img src={url} alt="" />}
         <svg ref={(el) => { ref.current = el; svgRef(el) }} className={'ink' + (linking ? ' linking' : '')} viewBox={`0 0 ${W} ${H}`} role="application" aria-label={`Page ${index + 1}`}
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+          <rect className="guide" x={left} y={top} width={right - left} height={bottom - top} />
           {rects.map((r, i) => <rect key={i} className="selection" x={r.x} y={r.y} width={r.w} height={r.h} />)}
           <LinesOf lines={page.lines.filter((l) => l.layer !== 'behind')} style={style} />
           {page.boxes.map((b) => {

@@ -15,6 +15,7 @@ export const SIZES = {
   letter: { label: 'US Letter', w: 21.59, h: 27.94, px: 1700 },
 } as const
 export type SizeKey = keyof typeof SIZES
+export type Margins = { top: number; right: number; bottom: number; left: number }   // in cm
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter', 'dead'] as const
 export type Season = typeof SEASONS[number]
 export type Grows = 'gym' | 'oak' | 'cats'
@@ -22,7 +23,7 @@ export const TEXT_COLOR = '#1b2a6b'
 export type SavedStory = { id: number; doc: Node; auto: boolean }
 export type Doc = {
   stories: SavedStory[]; sizeKey: SizeKey; family: string; fontSize: number; seed: number; cats: number; pieces: number
-  grows: Grows; inkName: 'green' | 'blue'; crown: 'lush' | 'open'; season: Season; spanishmoss: boolean; textColor: string; drawn: Box[][]
+  grows: Grows; inkName: 'green' | 'blue'; crown: 'lush' | 'open'; season: Season; spanishmoss: boolean; textColor: string; margins: Margins; drawn: Box[][]
 }
 
 const SAMPLE = `# Why my cat needs a gym
@@ -42,15 +43,67 @@ let nextStory = 1
 export const newBoxId = () => nextBox++
 export const newStoryId = () => nextStory++
 export const newStoryDoc = () => schema.node('doc', null, [schema.nodes.paragraph.create()])
+const MARGINS: Margins = { top: 2.5, right: 3, bottom: 2.5, left: 3 }
+const MIN_TEXT = 2       // cm the margins always leave between them
 const startBox = (k: SizeKey, story: number): Box => {
   const W = SIZES[k].w * CM, H = SIZES[k].h * CM
-  return { id: newBoxId(), x: W * 0.14, y: H * 0.1, w: W * 0.72, h: H * 0.36, story, layer: 'clear' }
+  const x = MARGINS.left * CM, y = MARGINS.top * CM
+  return { id: newBoxId(), x, y, w: W - x - MARGINS.right * CM, h: H * 0.36, story, layer: 'clear' }
+}
+// margins that leave room on a page of this size
+export function fitMargins(m: Margins, k: SizeKey): Margins {
+  const across = Math.min(1, (SIZES[k].w - MIN_TEXT) / Math.max(m.left + m.right, 1e-6))
+  const down = Math.min(1, (SIZES[k].h - MIN_TEXT) / Math.max(m.top + m.bottom, 1e-6))
+  return { top: m.top * down, right: m.right * across, bottom: m.bottom * down, left: m.left * across }
+}
+export const marginLimit = (m: Margins, k: SizeKey, side: keyof Margins) => {
+  const across = side === 'left' || side === 'right'
+  const other = m[side === 'left' ? 'right' : side === 'right' ? 'left' : side === 'top' ? 'bottom' : 'top']
+  return Math.max(0, +((across ? SIZES[k].w : SIZES[k].h) - MIN_TEXT - other).toFixed(2))
+}
+const EDGE = 0.5        // pt: a box this close to a margin is touching it
+const MIN_W = 30, MIN_H = 20
+// One axis of a margin change. An edge touching a margin follows it, an edge the new margin crosses is
+// pushed in, and an edge you placed out in the margin stays where you put it.
+function follow(lo: number, hi: number, size: number, from: [number, number], to: [number, number], least: number): [number, number] {
+  const a = lo < from[0] - EDGE ? lo : Math.abs(lo - from[0]) <= EDGE ? to[0] : Math.max(lo, to[0])
+  const b = hi > from[1] + EDGE ? hi : Math.abs(hi - from[1]) <= EDGE ? to[1] : Math.min(hi, to[1])
+  const w = Math.max(least, b - a)
+  return [Math.max(0, Math.min(a, size - w)), w]
+}
+export function followMargins(pages: Box[][], k: SizeKey, from: Margins, to: Margins): Box[][] {
+  const W = SIZES[k].w * CM, H = SIZES[k].h * CM
+  return pages.map((p) => p.map((b) => {
+    const [x, w] = follow(b.x, b.x + b.w, W, [from.left * CM, W - from.right * CM], [to.left * CM, W - to.right * CM], MIN_W)
+    const [y, h] = follow(b.y, b.y + b.h, H, [from.top * CM, H - from.bottom * CM], [to.top * CM, H - to.bottom * CM], MIN_H)
+    return { ...b, x, y, w, h }
+  }))
+}
+// a new paper size: what sat between the margins sits between them on the new page
+export function resizeBoxes(pages: Box[][], a: SizeKey, m: Margins, b: SizeKey, n: Margins): Box[][] {
+  const across = (SIZES[b].w - n.left - n.right) / (SIZES[a].w - m.left - m.right)
+  const down = (SIZES[b].h - n.top - n.bottom) / (SIZES[a].h - m.top - m.bottom)
+  const W = SIZES[b].w * CM, H = SIZES[b].h * CM
+  return pages.map((p) => p.map((q) => {
+    const w = Math.min(W, q.w * across), h = Math.min(H, q.h * down)
+    const x = n.left * CM + (q.x - m.left * CM) * across, y = n.top * CM + (q.y - m.top * CM) * down
+    return { ...q, x: Math.max(0, Math.min(W - w, x)), y: Math.max(0, Math.min(H - h, y)), w, h }
+  }))
+}
+// a work saved before margins existed: read them off its boxes, so the boxes touch them
+function marginsOf(pages: Box[][], W: number, H: number): Margins {
+  const gap = (v: number) => +(Math.min(3, Math.max(0, v) / CM)).toFixed(2)
+  const all = pages.flat()
+  return {
+    top: gap(Math.min(...all.map((b) => b.y))), right: gap(W - Math.max(...all.map((b) => b.x + b.w))),
+    bottom: gap(H - Math.max(...all.map((b) => b.y + b.h))), left: gap(Math.min(...all.map((b) => b.x))),
+  }
 }
 export const newDoc = (): Doc => {
   const id = newStoryId()
   return {
     stories: [{ id, doc: fromMarkdown(SAMPLE), auto: true }], sizeKey: 'insta', family: FAMILIES[0].css, fontSize: 26, seed: 3, cats: 2, pieces: 1.4,
-    grows: 'gym', inkName: 'blue', crown: 'lush', season: 'summer', spanishmoss: false, textColor: TEXT_COLOR, drawn: [[startBox('insta', id)]],
+    grows: 'gym', inkName: 'blue', crown: 'lush', season: 'summer', spanishmoss: false, textColor: TEXT_COLOR, margins: { ...MARGINS }, drawn: [[startBox('insta', id)]],
   }
 }
 
@@ -94,6 +147,10 @@ export function checkDoc(raw: unknown): Doc {
     return [{ ...box, id: newBoxId(), story, layer: oneOf(q.layer, LAYERS, 'clear') }]
   })) : []
   const anyBox = drawn.some((p) => p.length)
+  const m = (o.margins && typeof o.margins === 'object' ? o.margins : null) as Record<string, unknown> | null
+  const margins = !anyBox ? d.margins : m
+    ? fitMargins({ top: num(m.top, 0, 50, 0), right: num(m.right, 0, 50, 0), bottom: num(m.bottom, 0, 50, 0), left: num(m.left, 0, 50, 0) }, sizeKey)
+    : marginsOf(drawn, W, H)
   return {
     stories: anyBox ? stories : d.stories,
     sizeKey,
@@ -108,6 +165,7 @@ export function checkDoc(raw: unknown): Doc {
     season: oneOf(o.season, SEASONS, d.season),
     spanishmoss: o.spanishmoss === true,
     textColor: typeof o.textColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.textColor) ? o.textColor : d.textColor,
+    margins,
     drawn: anyBox ? drawn : d.drawn,
   }
 }
