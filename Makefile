@@ -22,6 +22,8 @@ florilegium-grow.pdf: florilegium-grow.tex florilegium.sty florilegium-grow.lua 
 # the option aging reads the page count of the first one
 cattree.pdf: cattree.tex florilegium.sty florilegium-grow.lua $(LUA)
 	$(LUALATEX) cattree.tex
+oak.pdf: oak.tex florilegium.sty florilegium-grow.lua florilegium-theme-oak.lua $(LUA)
+	$(LUALATEX) oak.tex
 showcase.pdf: showcase.tex florilegium.sty florilegium-grow.lua $(LUA)
 	$(LUALATEX) showcase.tex
 	$(LUALATEX) showcase.tex

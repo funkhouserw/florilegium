@@ -185,6 +185,8 @@ tower alone. `\florilegiuminitial` puts a cat on (or in) the letter.
 
 <img src="gallery/cattree-grow.gif" alt="a cat gym building itself in the margin" width="420">
 
+**`theme=oak`** is one huge oak on every page (`florilegium-theme-oak.lua`), grown around the text block, with cats on its perches. `\florilegiumage` sets the season (past autumn, 1.5 is winter and 2 a dead tree), and `\florilegiuminitial` makes the letter a tree. `oak.tex` describes it.
+
 ## More in the margin
 
 | | |

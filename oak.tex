@@ -1,0 +1,51 @@
+%% oak.tex -- "One huge oak": the theme=oak margin describes itself. LuaLaTeX:
+%%   lualatex oak.tex
+\documentclass[11pt,a4paper]{article}
+\renewcommand\rmdefault{cmr}\renewcommand\sfdefault{cmss}\renewcommand\ttdefault{cmtt}
+\usepackage[T1]{fontenc}
+\usepackage[a4paper,left=68mm,right=22mm,top=32mm,bottom=30mm,headsep=8mm]{geometry}
+\usepackage{fancyhdr}
+\usepackage[grown,theme=oak]{florilegium}
+
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[R]{\small\textsc{One huge oak}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand\headrulewidth{0pt}
+\newcommand\code[1]{\texttt{\small #1}}
+
+\begin{document}
+\section{A tree for every page}
+
+\florilegiuminitial[4]{T}{his} page has an oak on it, and the letter that opens this paragraph
+is an oak too, its shape filled with bark and a crown growing out of its top. The package draws
+them with \code{theme=oak}. Nothing is stored: every plate of bark, every leaf and every cat is
+computed while the page is written, and each page grows a different tree.
+
+The tree does not go in the margin so much as around the text. The program is told where the
+text block is and treats it as something the tree cannot grow through, as a real tree treats a
+wall. The trunk stands where there is the most room, and it is only as thick as that room
+allows. The limbs grow toward points scattered over the free parts of the page, each point
+pulling on the nearest branch tip, so the crown fills what the words leave and stops where
+they start.
+
+\section{What lives in it}
+
+Cats take the perches a cat would choose, birds the limbs that are nearly level, and nests the
+forks. Butterflies and bees keep to the open air, clear of the tree. There may be a swing, a
+heart cut into the trunk long ago, a few mushrooms in the grass.
+
+\section{The seasons}
+
+The command \code{\string\florilegiumage} chooses the season: 0 is spring, 0.5 summer and 1
+autumn, and past the package's usual range 1.5 is winter and 2 a dead tree. The option
+\code{aging} takes a document from spring to autumn, one page at a time.
+
+\newpage
+\section{Where the text stops}
+
+On the last page the tree notices where the words end, and takes the room below them too.
+
+\florilegiumage{1}
+Set \code{\string\florilegiumtextend} after the last line, as here.
+\florilegiumtextend
+\end{document}

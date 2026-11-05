@@ -256,9 +256,11 @@ function M.initial(letter, side, hang, cap)
   -- a theme may decorate the tile its own way (florilegium-theme-cattree: a cat on the letter)
   local th = M.theme and M.theme ~= "" and M.theme ~= "flora" and require("florilegium-grow").load_theme(M.theme)
   local deco = type(th) == "table" and th.initial or nil
+  local restore = deco and th.before_initial and th.before_initial(M.age)   -- the letter's own ink (florilegium-theme-oak)
   local initial = require("florilegium-initial")
   M.check_versions()                          -- loaded with the first initial, so checked here
   local ok, err = initial.draw(page_rng.fork(), side * SP_CM, letter, { font = M.initial_font, decorate = deco })
+  if restore then restore() end
   if not ok then tex.error("florilegium: " .. tostring(err)) end
   ink.flush()
 end

@@ -218,6 +218,8 @@
   \endgroup
   \hangindent=\dimexpr\dimen1+0.6em\relax \hangafter=-#1\relax
   \noindent\florilegium@colors
+  \ifflorilegium@aging\ifdefined\flo@lastpage   % the season of the page it stands on (theme=oak's letter)
+    \directlua{florilegium.auto_age(\number\value{page}, \flo@lastpage)}\fi\fi
   \directlua{florilegium.initial("\luaescapestring{#2}", \number\dimen1, \number\hangindent, \number\dimen3)}%
   \llap{\directlua{florilegium.hidden(true)}#2\directlua{florilegium.hidden(false)}}%
   \ignorespaces}

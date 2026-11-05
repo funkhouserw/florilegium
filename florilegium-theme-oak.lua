@@ -2481,4 +2481,74 @@ function M.tree(rng, o)
   return stats, forks, nodes, W_of
 end
 
+-- ---------------------------------------------------------------- the theme
+-- \usepackage[grown,theme=oak]{florilegium}: every page a whole oak, grown around the text
+-- block the way a tree grows around a wall. The oak has its own greens and browns unless the
+-- document sets an ink of its own (\definecolor{ink}...), which then paints the bark and the
+-- summer leaves. \florilegiumage picks the season: 0 spring, 0.5 summer, 1 autumn, and past
+-- the package's usual range 1.5 winter, 2 a dead tree. The option aging runs spring to autumn.
+local DELFT = { 0x24 / 255, 0x56 / 255, 0xC4 / 255 }
+local function same_ramp(a, b)                 -- xcolor's rounding moves a color a little on its way here
+  for i = 0, 100 do
+    for k = 1, 3 do if math.abs(a[i][k] - b[i][k]) > 0.01 then return false end end
+  end
+  return true
+end
+local function own_ink()                       -- has the document chosen an ink?
+  local now = ink.get_ramp()
+  ink.set_ink(DELFT[1], DELFT[2], DELFT[3])
+  local delft = ink.get_ramp()
+  ink.use_ramp(now)
+  return not same_ramp(now, delft)
+end
+local function season_of(age)
+  if not age then return "summer" end
+  if age < 0.25 then return "spring" elseif age < 0.75 then return "summer"
+  elseif age < 1.25 then return "autumn" elseif age < 1.75 then return "winter" end
+  return "dead"
+end
+
+-- A composition of its own (florilegium-grow.lua hands it the page). In layout coordinates, so
+-- a mirrored page is only the last transform. Keep-outs: the text, from the head rule down to
+-- the last line, and the page number.
+function M.page(g)
+  local season = season_of(g.age)
+  local ramp, blue = ink.get_ramp(), own_ink()
+  if not blue then M.season_ink(season) end
+  ink.set_transform(ink.page_transform(g.mirror and g.pw))
+  local bottom = g.ybot
+  if g.spill == 1 and g.spilly > g.ybot then bottom = g.spilly - 0.5 end
+  local mid = (g.textleft + g.textright) / 2
+  local keepouts = { { g.textleft - 0.25, bottom, g.textright + 0.25, g.headrule + 0.7 } }
+  keepouts[#keepouts + 1] = { g.colright - 0.5, g.headrule - 0.6, g.textleft, g.headrule + 0.7 }   -- the head rule's leaf
+  if bottom == g.ybot then keepouts[#keepouts + 1] = { mid - 0.8, g.footy - 0.4, mid + 0.8, g.footy + 0.5 } end
+  local D, visitors = g.density or 1, g.visitors ~= false
+  local e = { t0 = 0, dur = 1 }
+  if g.anim then ink.record(true) ink.tag({ e, 0 }) end
+  M.tree(ink.rng(g.seed * 7919 + 13), { w = g.pw, h = g.ph, keepouts = keepouts, season = season, ink = blue and "blue" or nil,
+    crown = D < 0.7 and "open" or nil, bare = D < 0.25 or nil,
+    cats = visitors and (D < 0.5 and 1 or 2) or 0, eyes = (not visitors) and 0 or nil, extras = visitors })
+  local r = {}
+  if g.anim then
+    ink.tag(nil)
+    r = { rec = ink.take_recording(), total = 1 }
+  else
+    ink.flush()
+  end
+  ink.use_ramp(ramp)
+  return r
+end
+
+-- The initial: the letter is the tree, in the season of the page. florilegium.lua calls
+-- before_initial first, because the letter itself is painted before M.initial decorates it.
+local initial_opts
+function M.before_initial(age)
+  local season = season_of(age)
+  local ramp, blue = ink.get_ramp(), own_ink()
+  if not blue then M.season_ink(season) end
+  initial_opts = { season, { blue = blue } }
+  return function() ink.use_ramp(ramp) end
+end
+function M.initial(c) return M.initial_for(initial_opts[1], initial_opts[2])(c) end
+
 return M
