@@ -16,9 +16,10 @@ export const SEASONS = ['spring', 'summer', 'autumn', 'winter', 'dead'] as const
 export type Season = typeof SEASONS[number]
 export type Grows = 'gym' | 'oak' | 'cats'
 
+export const TEXT_COLOR = '#1b2a6b'
 export type Doc = {
   text: string; sizeKey: SizeKey; family: string; fontSize: number; seed: number; cats: number; pieces: number
-  grows: Grows; inkName: 'green' | 'blue'; crown: 'lush' | 'open'; season: Season; spanishmoss: boolean; drawn: Box[][]
+  grows: Grows; inkName: 'green' | 'blue'; crown: 'lush' | 'open'; season: Season; spanishmoss: boolean; textColor: string; drawn: Box[][]
 }
 
 const SAMPLE = `# Why my cat needs a gym
@@ -41,7 +42,7 @@ const startBox = (k: SizeKey): Box => {
 }
 export const newDoc = (): Doc => ({
   text: SAMPLE, sizeKey: 'insta', family: FAMILIES[0].css, fontSize: 26, seed: 3, cats: 2, pieces: 1.4,
-  grows: 'gym', inkName: 'blue', crown: 'lush', season: 'summer', spanishmoss: false, drawn: [[startBox('insta')]],
+  grows: 'gym', inkName: 'blue', crown: 'lush', season: 'summer', spanishmoss: false, textColor: TEXT_COLOR, drawn: [[startBox('insta')]],
 })
 
 const num = (v: unknown, lo: number, hi: number, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : fallback)
@@ -71,6 +72,7 @@ export function checkDoc(raw: unknown): Doc {
     crown: oneOf(o.crown, ['lush', 'open'] as const, d.crown),
     season: oneOf(o.season, SEASONS, d.season),
     spanishmoss: o.spanishmoss === true,
+    textColor: typeof o.textColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.textColor) ? o.textColor : d.textColor,
     drawn: drawn.length ? drawn : [[startBox(sizeKey)]],
   }
 }

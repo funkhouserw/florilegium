@@ -13,6 +13,7 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
 .panel label:has(input[type=checkbox]) { flex-direction: row; align-items: center; }
 .panel textarea { min-height: 200px; resize: vertical; font: 14px/1.4 Georgia, serif; padding: 8px; border: 1px solid #c3c9dc; border-radius: 4px; }
 .panel select, .panel input[type=number] { padding: 5px; border: 1px solid #c3c9dc; border-radius: 4px; font: inherit; }
+.panel input[type=color] { width: 100%; height: 30px; padding: 2px; border: 1px solid #c3c9dc; border-radius: 4px; background: #fff; cursor: pointer; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .row.three { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
 .hint code { font: 11px ui-monospace, Menlo, monospace; }

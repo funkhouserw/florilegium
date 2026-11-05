@@ -28,6 +28,7 @@ export function App() {
   const [crown, setCrown] = useState(initial.crown)
   const [season, setSeason] = useState<Season>(initial.season)
   const [spanishmoss, setSpanishmoss] = useState(initial.spanishmoss)
+  const [textColor, setTextColor] = useState(initial.textColor)
   const [drawn, setDrawn] = useState<Box[][]>(initial.drawn)
   const S = SIZES[sizeKey]
   const W = S.w * CM, H = S.h * CM
@@ -38,7 +39,7 @@ export function App() {
   const [unsaved, setUnsaved] = useState(false)
   const opener = useRef<HTMLInputElement>(null)
   const face = familyOf(family)
-  const style: TextStyle = useMemo(() => ({ family, size: fontSize, leading: 1.35, color: '#1b2a6b', headingBold: face.headingBold }), [family, fontSize, face])
+  const style: TextStyle = useMemo(() => ({ family, size: fontSize, leading: 1.35, color: textColor, headingBold: face.headingBold }), [family, fontSize, face, textColor])
   // Pretext measures with the browser's font and remembers: measure again once the web fonts have arrived
   const [fontsReady, setFontsReady] = useState(0)
   useEffect(() => {
@@ -55,8 +56,8 @@ export function App() {
   const fileBase = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'studio'
 
   // kept in this browser as you work; not during a drag, and a full disk must not stop the work
-  const doc: Doc = useMemo(() => ({ text, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, drawn }),
-    [text, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, drawn])
+  const doc: Doc = useMemo(() => ({ text, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, textColor, drawn }),
+    [text, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, textColor, drawn])
   useEffect(() => {
     if (dragging) return
     const timer = setTimeout(() => {
@@ -67,7 +68,7 @@ export function App() {
   useEffect(() => setNote(''), [doc])
   function applyDoc(d: Doc) {
     setText(d.text); setSizeKey(d.sizeKey); setFamily(d.family); setFontSize(d.fontSize); setSeed(d.seed); setCats(d.cats); setPieces(d.pieces)
-    setGrows(d.grows); setInkName(d.inkName); setCrown(d.crown); setSeason(d.season); setSpanishmoss(d.spanishmoss); setDrawn(d.drawn)
+    setGrows(d.grows); setInkName(d.inkName); setCrown(d.crown); setSeason(d.season); setSpanishmoss(d.spanishmoss); setTextColor(d.textColor); setDrawn(d.drawn)
     setError(''); setNote('')
   }
   async function openFile(file?: File) {
@@ -214,6 +215,9 @@ export function App() {
           <select value={family} onChange={(e) => setFamily(e.target.value)}>
             {FAMILIES.map((f) => <option key={f.css} value={f.css}>{f.label}</option>)}
           </select>
+        </label>
+        <label>Text color
+          <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} />
         </label>
         <div className="row">
           <NumberField label="Type size" min={10} max={90} value={fontSize} onChange={setFontSize} />
