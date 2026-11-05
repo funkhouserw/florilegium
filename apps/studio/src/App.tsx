@@ -216,10 +216,10 @@ export function App() {
           </select>
         </label>
         <div className="row">
-          <label>Type size<input type="number" min={10} max={90} value={fontSize} onChange={(e) => setFontSize(Math.max(10, Math.min(90, +e.target.value || 10)))} /></label>
-          <label>Cats a page<input type="number" min={0} max={6} value={cats} onChange={(e) => setCats(Math.max(0, Math.min(6, +e.target.value || 0)))} /></label>
-          <label>Piece size<input type="number" min={0.8} max={2.5} step={0.1} value={pieces} onChange={(e) => setPieces(Math.max(0.8, Math.min(2.5, +e.target.value || 1)))} /></label>
-          <label>Seed<input type="number" min={1} value={seed} onChange={(e) => setSeed(Math.max(1, Math.round(+e.target.value) || 1))} /></label>
+          <NumberField label="Type size" min={10} max={90} value={fontSize} onChange={setFontSize} />
+          <NumberField label="Cats a page" min={0} max={6} value={cats} onChange={setCats} />
+          <NumberField label="Piece size" min={0.8} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
+          <NumberField label="Seed" min={1} max={1e9} value={seed} onChange={setSeed} />
         </div>
         <button onClick={() => setSeed((s) => s + 1)}>Grow another</button>
         <div className="row three">
@@ -246,6 +246,35 @@ export function App() {
         ))}
       </main>
     </div>
+  )
+}
+
+// You can clear a field and type: the page follows whenever what's there is a usable number, and
+// leaving the field puts back the nearest one. A whole-number field unless it has a step.
+function NumberField({ label, value, min, max, step, onChange }: {
+  label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const usable = (t: string) => {
+    const v = t.trim() === '' ? NaN : +t
+    return Number.isFinite(v) && v >= min && v <= max && (step !== undefined || Number.isInteger(v)) ? v : null
+  }
+  return (
+    <label>{label}
+      <input type="number" min={min} max={max} step={step} value={draft ?? value}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          const v = usable(e.target.value)
+          if (v !== null) onChange(v)
+        }}
+        onBlur={() => {
+          if (draft !== null && usable(draft) === null && draft.trim() !== '' && Number.isFinite(+draft)) {
+            const near = Math.max(min, Math.min(max, +draft))
+            onChange(step === undefined ? Math.round(near) : near)
+          }
+          setDraft(null)
+        }} />
+    </label>
   )
 }
 
