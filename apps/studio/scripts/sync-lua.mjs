@@ -2,6 +2,6 @@
 import { copyFileSync, mkdirSync } from 'node:fs'
 const dir = new URL('../public/lua/', import.meta.url)
 mkdirSync(dir, { recursive: true })
-for (const m of ['florilegium-ink', 'florilegium-flora', 'florilegium-svg', 'florilegium-theme-cattree', 'florilegium-theme-oak', 'florilegium-theme-oldcats', 'florilegium-grow', 'florilegium-scene']) {
+for (const m of ['florilegium-ink', 'florilegium-pgfmath', 'florilegium-flora', 'florilegium-svg', 'florilegium-theme-cattree', 'florilegium-theme-oak', 'florilegium-theme-oldcats', 'florilegium-grow', 'florilegium-scene']) {
   copyFileSync(new URL(`../../../${m}.lua`, import.meta.url), new URL(`${m}.lua`, dir))
 }

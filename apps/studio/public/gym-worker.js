@@ -2,7 +2,7 @@
 // requires) in wasmoon, Lua 5.4 compiled to WebAssembly, as web/worker.js does for the playground.
 const WASMOON = 'https://cdn.jsdelivr.net/npm/wasmoon@1.16.0/dist/'
 importScripts(WASMOON + 'index.js')
-const MODULES = ['florilegium-ink', 'florilegium-flora', 'florilegium-svg', 'florilegium-theme-cattree', 'florilegium-theme-oak', 'florilegium-theme-oldcats', 'florilegium-grow', 'florilegium-scene']
+const MODULES = ['florilegium-ink', 'florilegium-pgfmath', 'florilegium-flora', 'florilegium-svg', 'florilegium-theme-cattree', 'florilegium-theme-oak', 'florilegium-theme-oldcats', 'florilegium-grow', 'florilegium-scene']
 
 const ready = (async () => {
   const factory = new self.wasmoon.LuaFactory(WASMOON + 'glue.wasm')
