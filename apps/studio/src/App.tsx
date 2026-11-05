@@ -637,7 +637,7 @@ export function App() {
     <div className="shell">
     <header className="top">
       <h1>Felilegium</h1>
-      <span>Grown from Kevin Raymond's <a href="https://github.com/kevinraymond/florilegium" target="_blank" rel="noreferrer">florilegium</a></span>
+      <a className="repo" href="https://github.com/funkhouserw/florilegium" target="_blank" rel="noreferrer">funkhouserw/florilegium on GitHub</a>
     </header>
     <div className="app">
       <aside className="panel">
@@ -806,7 +806,7 @@ export function App() {
     </div>
     <footer className="bottom">
       <span>© 2026 Ilse Funkhouser. All rights reserved.</span>
-      <span>Built on <a href="https://github.com/kevinraymond/florilegium" target="_blank" rel="noreferrer">florilegium</a> by Kevin Raymond (<a href="https://github.com/kevinraymond/florilegium/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT License</a>). Fonts: IM Fell (SIL Open Font License), Latin Modern (GUST Font License).</span>
+      <span>Grown with love from Kevin Raymond's <a href="https://github.com/kevinraymond/florilegium" target="_blank" rel="noreferrer">florilegium</a> (<a href="https://github.com/kevinraymond/florilegium/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT License</a>). Fonts: IM Fell (SIL Open Font License), Latin Modern (GUST Font License).</span>
     </footer>
     </div>
   )
