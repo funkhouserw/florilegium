@@ -5,7 +5,7 @@ package.path = root .. "/?.lua;" .. package.path
 local streams = {}
 tex = { sprint = function() end } luatexbase = { registernumber = function() return 0 end }
 node = { new = function() return {} end, write = function(n) streams[#streams + 1] = n.data end }
-local ink, svg, O = require("ink"), require("svg"), require("theme-oak")
+local ink, svg, O = require("florilegium-ink"), require("florilegium-svg"), require("florilegium-theme-oak")
 local name, W, H, seed, col = arg[1], tonumber(arg[2]), tonumber(arg[3]), tonumber(arg[4]), arg[5] or "green"
 local INK = { green = { 0x2F, 0x6B, 0x4F }, blue = { 0x24, 0x56, 0xC4 } }
 ink.set_ink(INK[col][1] / 255, INK[col][2] / 255, INK[col][3] / 255)

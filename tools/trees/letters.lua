@@ -8,7 +8,7 @@ node = { new = function() return {} end, write = function(n) streams[#streams + 
 local gfile = root .. "/scratch/glyphs.lua"
 kpse = { find_file = function(n) return n end }
 fonts = { handlers = { otf = { readers = { loadshapes = function() return dofile(gfile) end } } } }
-local ink, svg, O, initial = require("ink"), require("svg"), require("theme-oak"), require("initial")
+local ink, svg, O, initial = require("florilegium-ink"), require("florilegium-svg"), require("florilegium-theme-oak"), require("florilegium-initial")
 local OUT = arg[1] or (root .. "/build/trees/")
 local CM = 72 / 2.54
 local function write(name, w, h, fn)

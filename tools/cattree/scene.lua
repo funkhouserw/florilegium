@@ -11,7 +11,7 @@ if word then
   local tw = #word * fs * 0.55
   keep[1] = { W / 2 - tw / 2 - 0.8, H * 0.52 - fs * 0.6 - 0.8, W / 2 + tw / 2 + 0.8, H * 0.52 + fs * 0.8 + 0.8 }
 end
-local s = require("scene").page({ w = W, h = H, seed = seed, cats = ncats, size = size, keepouts = keep, background = "fefdfb", id = name })
+local s = require("florilegium-scene").page({ w = W, h = H, seed = seed, cats = ncats, size = size, keepouts = keep, background = "fefdfb", id = name })
 if word then
   s = s:gsub("</svg>$", string.format('<text x="%.1f" y="%.1f" text-anchor="middle" font-family="Georgia, serif" font-weight="bold" font-size="%.1f" fill="#1b2a6b">%s</text></svg>',
     W / 2 * CM, (H - H * 0.52) * CM + fs * 0.35 * CM, fs * 1.45 * CM, word))

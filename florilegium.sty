@@ -1,29 +1,34 @@
 %% florilegium.sty -- a procedurally generated floral page margin, drawn by Lua
 %% https://github.com/kevinraymond/florilegium
-%% Copyright (c) 2026 Kevin Raymond. MIT License, in full at the end of these notes.
+%% Copyright (c) 2026 Kevin Raymond. MIT License, in full at the end of these notes, for
+%% every file of florilegium but florilegium-pgfmath.lua, which reimplements part of pgf and
+%% is under the LaTeX Project Public License 1.3c, as its header says.
 %%
 %% LuaLaTeX only. The geometry of every petal, leaf and stem is computed in Lua
-%% (ink.lua, flora.lua) and written straight into the page as PDF path
-%% operators; TeX does no arithmetic. A page takes a second or two.
+%% (florilegium-ink.lua, florilegium-flora.lua, florilegium-native.lua) and written straight
+%% into the page as PDF path operators; TeX does no arithmetic. A page takes a few seconds.
 %%
 %% Usage
-%%   \usepackage{florilegium}          authored composition (hand-placed, authored.lua)
-%%   \usepackage[grown]{florilegium}   composition grown to fit the page (grow.lua)
+%%   \usepackage{florilegium}          authored composition (hand-placed, florilegium-authored.lua)
+%%   \usepackage[grown]{florilegium}   composition grown to fit the page (florilegium-grow.lua),
+%%                                      each main stem a plant of its own species, sampled
+%%                                      from a genome (florilegium-species.lua), four to a
+%%                                      page from a pool of eight per document
 %%   \usepackage[nomargin]{florilegium} no margin, only \florilegiumdraw
-%%   \usepackage[grown,novisitors]{florilegium}  no butterflies, bees, snails or birds
+%%   \usepackage[grown,novisitors]{florilegium}  no visitors (insects, snails, birds)
 %%   \usepackage[grown,sections]{florilegium}    a flower beside every numbered \section
 %%                                      and \subsection (standard classes)
 %%   \usepackage[grown,aging]{florilegium}       the garden ages from spring on the first
 %%                                      page to autumn on the last (two runs: the page
 %%                                      count is read from the .aux of the run before)
-%%   \usepackage[grown,theme=geometric]{florilegium} the same plant cut from flat shapes
-%%                                      with straight edges (theme-geometric.lua)
+%%   \usepackage[grown,theme=geometric]{florilegium} v1.3's garden cut from flat shapes
+%%                                      with straight edges (florilegium-theme-geometric.lua)
 %%   \usepackage[grown,theme=math]{florilegium}  no plant: figures, symbols and equations
-%%                                      cascading down the margin (theme-math.lua)
+%%                                      cascading down the margin (florilegium-theme-math.lua)
 %%   \usepackage[grown,density=0.4]{florilegium} less in the margin: 1 is full, 0.05 a
 %%                                      single vine
 %%   \usepackage[intensity=0.5]{florilegium}     a paler margin: 1 as painted, 0.3 faint
-%%   \florilegiumbloom[motif]          (grown) a flower, or any motif of grow.lua, in
+%%   \florilegiumbloom[motif]          (grown) a flower, or any motif of florilegium-grow.lua, in
 %%                                      the margin beside the current line
 %%   \florilegiumage{a}                (grown) the age of the following pages: 0 spring,
 %%                                      0.5 summer, 1 autumn
@@ -48,7 +53,7 @@
 %%                                      (default 1em); each one in a document differs,
 %%                                      seed=random gives a new shape on every build
 %%   \florilegiumdraw{flower}{1.2}      any primitive at the origin of the current TikZ
-%%                                      scope; see flora.lua for the list and options,
+%%                                      scope; see florilegium-flora.lua for the list and options,
 %%                                      e.g. \florilegiumdraw{leaf}{2.0, {depth=0.6}};
 %%                                      with a theme its primitives too, e.g. {rose}{1.5}
 %%
@@ -78,7 +83,7 @@
 %% SOFTWARE.
 %%
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{florilegium}[2026/10/30 v1.2 procedural floral margin, Lua-drawn]
+\ProvidesPackage{florilegium}[2026/11/03 v2.0.0 procedural floral margin, Lua-drawn]
 \ifdefined\directlua\else
   \PackageError{florilegium}{florilegium needs LuaLaTeX}{Compile with lualatex.}\fi
 \RequirePackage{tikz}
@@ -109,11 +114,17 @@
 
 %% ---------------------------------------------------------------- palette
 %% `ink` gives the hue and saturation; the ramp from navy to mist is derived
-%% from it in OKLCH (ink.lua). `accent` is used for the fine copper lines.
+%% from it in OKLCH (florilegium-ink.lua). `accent` is used for the fine copper lines.
 \definecolor{ink}{HTML}{2456C4}
 \definecolor{accent}{HTML}{B4662F}
 
 \directlua{florilegium = require("florilegium")}
+%% Every Lua file of a release carries its version, and florilegium.lua compares them
+%% and this file's \ProvidesPackage as it loads. A florilegium.lua from before that
+%% has no version at all, so this file says so itself.
+\directlua{if not florilegium.version then
+  tex.error("florilegium: florilegium.lua is from an earlier release than florilegium.sty",
+    {"Copy florilegium.sty and every florilegium*.lua from one release."}) end}
 \ifflorilegium@visitors\else\directlua{florilegium.visitors = false}\fi
 \ifdefined\florilegium@density\directlua{florilegium.density = tonumber("\florilegium@density") or 1}\fi
 \ifdefined\florilegium@intensity\directlua{florilegium.intensity = tonumber("\florilegium@intensity") or 1}\fi
@@ -127,29 +138,29 @@
 %% pass the current colors to Lua, and whether the pages are two-sided
 \def\florilegium@twoside{\directlua{florilegium.twoside = \if@twoside true\else false\fi}}
 \def\florilegium@colors{%
-  \extractcolorspecs{ink}{\flo@m}{\flo@s}\convertcolorspec{\flo@m}{\flo@s}{rgb}\flo@ink
-  \extractcolorspecs{accent}{\flo@m}{\flo@s}\convertcolorspec{\flo@m}{\flo@s}{rgb}\flo@acc
-  \directlua{florilegium.colors(\flo@ink, \flo@acc)}}
+  \extractcolorspecs{ink}{\flo@colm}{\flo@cols}\convertcolorspec{\flo@colm}{\flo@cols}{rgb}\flo@ink
+  \extractcolorspecs{accent}{\flo@colm}{\flo@cols}\convertcolorspec{\flo@colm}{\flo@cols}{rgb}\flo@accrgb
+  \directlua{florilegium.colors(\flo@ink, \flo@accrgb)}}
 
 %% one primitive inside a tikzpicture, under the current transformation
 \newcommand\florilegiumdraw[2]{\florilegium@colors\directlua{florilegium.draw("#1", #2)}}
 
 %% one primitive in the text, in a box the size of a letter (florilegium.lua):
 %% \florilegiumornament{leaf}, \florilegiumornament[size=2em,ink=5B2A1F,angle=20,seed=random]{flower}
-\newdimen\flo@o@size
+\newdimen\flo@orn@size
 \pgfqkeys{/florilegium/ornament}{
-  size/.store in=\flo@o@sz, size=1em,
-  ink/.store in=\flo@o@ink, ink=,
-  accent/.store in=\flo@o@acc, accent=,
-  angle/.store in=\flo@o@angle, angle=0,
-  seed/.store in=\flo@o@seed, seed=}
+  size/.store in=\flo@orn@sz, size=1em,
+  ink/.store in=\flo@orn@ink, ink=,
+  accent/.store in=\flo@orn@acc, accent=,
+  angle/.store in=\flo@orn@angle, angle=0,
+  seed/.store in=\flo@orn@seed, seed=}
 \newcommand\florilegiumornament[2][]{\leavevmode\begingroup
   \pgfqkeys{/florilegium/ornament}{#1}%
-  \flo@o@size=\flo@o@sz\relax
+  \flo@orn@size=\flo@orn@sz\relax
   \florilegium@colors
-  \hbox to\flo@o@size{\directlua{florilegium.ornament("\luaescapestring{#2}", \number\flo@o@size,
-      "\luaescapestring{\flo@o@ink}", "\luaescapestring{\flo@o@acc}", \flo@o@angle, "\luaescapestring{\flo@o@seed}")}%
-    \hss\vrule height .85\flo@o@size depth .15\flo@o@size width 0pt}%
+  \hbox to\flo@orn@size{\directlua{florilegium.ornament("\luaescapestring{#2}", \number\flo@orn@size,
+      "\luaescapestring{\flo@orn@ink}", "\luaescapestring{\flo@orn@acc}", \flo@orn@angle, "\luaescapestring{\flo@orn@seed}")}%
+    \hss\vrule height .85\flo@orn@size depth .15\flo@orn@size width 0pt}%
   \endgroup}
 
 %% ---------------------------------------------------------------- page seed

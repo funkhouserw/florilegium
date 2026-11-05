@@ -4,7 +4,7 @@ package.path = root .. "/?.lua;" .. package.path
 local streams = {}
 tex = { sprint = function() end } luatexbase = { registernumber = function() return 0 end }
 node = { new = function() return {} end, write = function(n) streams[#streams + 1] = n.data end }
-local ink, svg, C = require("ink"), require("svg"), require("theme-oldcats")
+local ink, svg, C = require("florilegium-ink"), require("florilegium-svg"), require("florilegium-theme-oldcats")
 local CM, W, H = 72 / 2.54, 21, 29.7
 ink.set_transform(ink.page_transform())
 local poses = { "curl", "stretch", "loaf", "up", "sit" }

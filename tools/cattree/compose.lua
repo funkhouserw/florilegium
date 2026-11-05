@@ -1,5 +1,5 @@
--- compose.lua -- a first, faked procedural composition for theme-cattree.lua.
--- Not grow.lua's free-space loop yet: a grammar in three zones, its choices made
+-- compose.lua -- a first, faked procedural composition for florilegium-theme-cattree.lua.
+-- Not florilegium-grow.lua's free-space loop yet: a grammar in three zones, its choices made
 -- by a seed, with a list of boxes so that nothing passes through anything else.
 --
 --   1. the floor tower: 2-3 posts on a base, of different heights in whole levels

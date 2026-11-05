@@ -6,7 +6,7 @@ local out
 tex = { sprint = function() end }
 luatexbase = { registernumber = function() return 0 end }
 node = { new = function() return {} end, write = function(n) out = n.data end }
-local ink, grow, svg = require("ink"), require("grow"), require("svg")
+local ink, grow, svg = require("florilegium-ink"), require("florilegium-grow"), require("florilegium-svg")
 local seed, N, spill = tonumber(arg[1] or 4), tonumber(arg[2] or 60), tonumber(arg[3] or 1)
 local g = { pw = 21, ph = 29.7, textleft = 6.8, textright = 18.8, ytop = 25.4, ybot = 3.0 }
 g.colright, g.headrule, g.footy = g.textleft - 0.4, g.ytop + 0.7, 1.9

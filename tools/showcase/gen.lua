@@ -3,8 +3,8 @@ local root = arg[0]:match("^(.*)/tools/") or "."
 package.path = root .. "/?.lua;" .. package.path
 local OUT = root .. "/build/showcase/svg/"
 local function write(name, s) local f = assert(io.open(OUT .. name .. ".svg", "w")) f:write(s) f:close() end
-local svg = require("svg")
-local scene = require("scene")
+local svg = require("florilegium-svg")
+local scene = require("florilegium-scene")
 local W, H = 21.59, 27.94
 local function margin(name, o)
   o.paper, o.theme, o.id = "letter", "cattree", name
@@ -93,7 +93,7 @@ do
   local gfile = root .. "/scratch/glyphs.lua"
   kpse = { find_file = function(n) return n end }
   fonts = { handlers = { otf = { readers = { loadshapes = function() return dofile(gfile) end } } } }
-  local ink, initial, C = require("ink"), require("initial"), require("theme-cattree")
+  local ink, initial, C = require("florilegium-ink"), require("florilegium-initial"), require("florilegium-theme-cattree")
   ink.set_ink(0x24 / 255, 0x56 / 255, 0xC4 / 255)
   local CM = 72 / 2.54
   for code = 65, 90 do

@@ -1,4 +1,4 @@
--- specimen sheets for theme-cattree.lua, as SVG, without TeX.
+-- specimen sheets for florilegium-theme-cattree.lua, as SVG, without TeX.
 --   lua5.4 tools/cattree/specimen.lua [--marks] [outdir]
 -- Every cell is labeled (A2a ...). Every sheet carries the scale (1:20) and a
 -- gray reference cat; sheet 3 puts reference cats where cats would go. With
@@ -15,9 +15,9 @@ tex = { sprint = function() end }
 luatexbase = { registernumber = function() return 0 end }
 node = { new = function() return {} end, write = function(n) streams[#streams + 1] = n.data end }
 
-local ink = require("ink")
-local svg = require("svg")
-local C = require("theme-cattree")
+local ink = require("florilegium-ink")
+local svg = require("florilegium-svg")
+local C = require("florilegium-theme-cattree")
 C.warn = function(m) io.stderr:write("warning: " .. m .. "\n") end
 local real, u = C.real, C.U
 local fmt = string.format
@@ -415,7 +415,7 @@ do
     f:close()
     kpse = { find_file = function(n) return n end }
     fonts = { handlers = { otf = { readers = { loadshapes = function() return dofile(gfile) end } } } }
-    local initial = require("initial")
+    local initial = require("florilegium-initial")
     cells = {}
     local letters = { "A", "T", "C", "M", "H", "W", "S", "O" }
     for i, L in ipairs(letters) do

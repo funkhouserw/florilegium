@@ -1,16 +1,18 @@
 -- Check that the growth animation ends on exactly the page: for each seed, the
 -- last frame of the recording must equal the normal page byte for byte (with and
--- without the spill under the text; in summer, in spring, and in autumn with a
--- heading and a \florilegiumbloom marked in the text; with the geometric theme, with the
--- geometric theme in autumn on a mirrored page, at density 0.4 and 0.05, and the math
--- theme with marks and mirrored at density 0.3). Runs without TeX:
+-- without the spill under the text; the species garden in summer, in spring (a page with
+-- a fern unrolls its fiddleheads), in autumn with a heading and a \florilegiumbloom marked
+-- in the text, in autumn with two levels of heading and a monocot's bloom on a mirrored
+-- page, at density 0.4 and 0.05; with the geometric theme, with the geometric theme in
+-- autumn on a mirrored page, and the math theme with marks and mirrored at density 0.3).
+-- Runs without TeX:
 --   texlua tools/animcheck.lua 1 2 3      (or: tools/in-docker texlua tools/animcheck.lua)
 tex = { sprint = function() end }
 luatexbase = { registernumber = function() return 0 end }
 local out
 node = { new = function() return {} end, write = function(n) out = n.data end }
 package.path = "./?.lua;" .. package.path
-local ink, grow = require("ink"), require("grow")
+local ink, grow = require("florilegium-ink"), require("florilegium-grow")
 
 -- an A4 page with a 68 mm left margin, roughly as in the demo documents
 local CASES = {
@@ -24,6 +26,8 @@ local CASES = {
   { name = "density 0.05", density = 0.05 },
   { name = "math, marks", theme = "math", marks = { { kind = "heading", arg = 1, y = 20 }, { kind = "bloom", arg = "knot", y = 9 } } },
   { name = "math, mirrored, density 0.3", theme = "math", mirror = true, density = 0.3 },
+  { name = "autumn, marks, mirrored", age = 0.95, mirror = true,
+    marks = { { kind = "heading", arg = 1, y = 20 }, { kind = "heading", arg = 2, y = 14 }, { kind = "bloom", arg = "monocot", y = 9 } } },
   { name = "oldcats, marks", theme = "oldcats", marks = { { kind = "heading", arg = 1, y = 20 }, { kind = "bloom", arg = "", y = 9 } } },
   { name = "oldcats, mirrored, density 0.4", theme = "oldcats", mirror = true, density = 0.4 },
   { name = "cattree", theme = "cattree" },
@@ -34,6 +38,7 @@ local function geometry(seed, spill, case)
   g.colright, g.headrule, g.footy = g.textleft - 0.4, g.ytop + 0.7, 1.9
   g.seed, g.spill, g.spilly = seed, spill, spill == 1 and 19.0 or 0
   g.age, g.marks, g.theme, g.mirror, g.density = case.age, case.marks, case.theme, case.mirror, case.density
+  g.docseed = seed                                      -- the species pool, as \florilegiumseed sets it
   return g
 end
 
