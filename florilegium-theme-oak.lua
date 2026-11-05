@@ -689,6 +689,69 @@ function M.skeleton(rng, o)
     local t = k / steps
     prev = add(prev.x + D * (tilt + bend * sin(t * 3.4)), prev.y + D, rng.sym(0.05), prev)
   end
+  -- Sweep limbs: where the page leaves a wide space beside the trunk (a short text, a text high on the
+  -- page), long limbs reach out nearly level from low on the trunk, sag a little and lift at the end,
+  -- as an oak in the open does. Planned before the growth, which then branches off them, and fed
+  -- with points of their own, so that leaves fill the underhang. Their own stream: a page with no
+  -- room for one draws nothing from the layout's.
+  if o.sweep then
+    local sw = o.sweep
+    local trunk_nodes = {}
+    for i, n in ipairs(nodes) do trunk_nodes[i] = n end
+    local top = trunk_nodes[#trunk_nodes]
+    local ground = o.base[2]
+    local minrun = max(6, o.fill.w * 0.3)
+    local function run(y, dir)
+      local x = top.x
+      while x > -0.5 and x < o.fill.w + 0.5 and allowed(x, y) do x = x + dir * 0.5 end
+      return abs(x - top.x)
+    end
+    local function limb(from, dir, ty, L)
+      local len = L * sw.range(0.82, 1)
+      local n_ = floor(len / D)
+      local sag, lift = sw.range(0.3, 1.1), sw.range(0.6, 1.8)
+      local prev_, wob = from, 0
+      local placed, next_ = 0, sw.int(5, 9)
+      for k = 1, n_ do
+        local t = k / n_
+        wob = wob * 0.8 + sw.sym(0.09)
+        local x = from.x + dir * k * D
+        local y = from.y + (ty - from.y) * (1 - math.exp(-3.4 * t)) - sag * sin(t * math.pi) ^ 2 + lift * t ^ 4 + wob
+        if y < ground + 1.5 then y = ground + 1.5 end
+        if not allowed(x, y) then
+          if allowed(x, prev_.y - 0.25) and prev_.y - 0.25 > ground + 1.5 then y = prev_.y - 0.25 else break end
+        end
+        local nn = add(x, y, sw.sym(0.05), prev_)
+        nn.sweep = t
+        -- side branches leave at wide, uneven intervals: from every node they would stand up in a row
+        if k >= next_ then next_ = k + sw.int(4, 9) else nn.closed = true end
+        prev_ = nn
+        placed = placed + 1
+        if t > 0.2 then
+          for _ = 1, 3 do
+            local px, py = x + sw.sym(2.4), y + sw.range(-1.9, 2.0)
+            if py > ground + 1.4 and allowed(px, py) then
+              pts[#pts + 1] = { px, py, sw.sym(1.5), near = nil, dist = di, sweep = true }
+            end
+          end
+        end
+      end
+      return placed
+    end
+    local sides = sw.chance(0.5) and { 1, -1 } or { -1, 1 }
+    local total = 0
+    for _, dir in ipairs(sides) do
+      local here = 0
+      for _, rise in ipairs({ sw.range(0.8, 1.8), sw.range(4, 5.5), sw.range(8, 10) }) do
+        if here < 2 and total < 3 then
+          local from = trunk_nodes[floor(#trunk_nodes * sw.range(0.62, 1))]
+          local ty = top.y + rise
+          local L = run(ty, dir)
+          if L >= minrun and limb(from, dir, ty, L) > 4 then here, total = here + 1, total + 1 end
+        end
+      end
+    end
+  end
   local function reach(list)
     for _, p in ipairs(pts) do
       if not p.dead then
@@ -696,14 +759,14 @@ function M.skeleton(rng, o)
           local dx, dy, dz = p[1] - n.x, p[2] - n.y, p[3] - n.z
           local d2 = dx * dx + dy * dy + dz * dz
           if d2 < dk * dk then p.dead = true break end
-          if d2 < p.dist * p.dist then p.dist, p.near = sqrt(d2), n end
+          if d2 < p.dist * p.dist and not n.closed then p.dist, p.near = sqrt(d2), n end
         end
       end
     end
   end
   reach(nodes)
   -- the trunk climbs until the crown can reach it
-  local function reached() for _, p in ipairs(pts) do if p.near and not p.dead then return true end end return false end
+  local function reached() for _, p in ipairs(pts) do if p.near and not p.dead and not p.sweep and not p.near.sweep then return true end end return false end
   for _ = 1, 200 do
     if reached() then break end
     if not allowed(prev.x, prev.y + D) then break end
@@ -854,7 +917,9 @@ local function chains(nodes)
       local function score(k)
         local dx, dy = k.x - n.x, k.y - n.y
         local d = sqrt(dx * dx + dy * dy) + 1e-9
-        return k.r * (1 + 0.9 * (dx * ax + dy * ay) / (d * aL))
+        local v = k.r * (1 + 0.9 * (dx * ax + dy * ay) / (d * aL))
+        if k.sweep and not n.sweep then v = v * 0.01 end   -- a sweep limb leaves the trunk from behind it
+        return v
       end
       table.sort(n.kids, function(p, q)
         local a_, b_ = score(p), score(q)
@@ -1496,7 +1561,14 @@ function M.tree(rng, o)
     end
     if x0 then basex, trunkw_ = x0, w0 end
   end
+  local sweep
+  if filling and o.sweeps ~= false then
+    local st = layout.save()
+    sweep = ink.rng(layout.int(1, 1073741823))
+    layout.load(st)
+  end
   local nodes = M.skeleton(layout, {
+    sweep = sweep,
     margin = filling and 0.45 or trunkw_ * 0.12,
     fill = filling and { w = W, h = H, ylo = groundy + max(3, (H - groundy) * 0.3), reach = o.reach or max(W, H) * 0.84 } or nil,
     envelope = { W * 0.5, H * 0.6, W * 0.6, H * 0.36, W * 0.3 },
@@ -1507,6 +1579,7 @@ function M.tree(rng, o)
   local rmax = nodes[1].r
   local function W_of(n)
     local w = trunkw * (n.r / rmax)
+    if n.sweep then w = max(w, trunkw * (0.05 + 0.25 * (1 - n.sweep))) end   -- a sweep limb stays thick all the way out
     if filling then                                    -- a limb near a text box narrows, it is not cut off by it
       if not n.room_ then
         local best = 99
@@ -1545,7 +1618,7 @@ function M.tree(rng, o)
     local lo_w = S.snap and 0.22 or 0.45
     for _, n in ipairs(nodes) do
       local w = W_of(n)
-      if n.parent and w > lo_w and w < 1.3 and size[n] > (S.snap and 6 or 18) and size[n] < #nodes * (S.snap and 0.2 or 0.1)
+      if n.parent and not n.sweep and w > lo_w and w < 1.3 and size[n] > (S.snap and 6 or 18) and size[n] < #nodes * (S.snap and 0.2 or 0.1)
         and (n.x - top_.x) ^ 2 + (n.y - top_.y) ^ 2 > 9 then
         cand[#cand + 1] = n
       end
@@ -2068,7 +2141,10 @@ function M.tree(rng, o)
   if o.heart ~= false then
     local hy = layout.range(groundy + 3.2, groundy + 3.2 + max(0.1, trunkw * 0.9))
     local hx
-    for _, n in ipairs(nodes) do
+    -- on the trunk: with sweep limbs, a node at this height may be far out along one
+    local swept = false
+    for _, n in ipairs(nodes) do if n.sweep then swept = true break end end
+    for _, n in ipairs(swept and chs[1].list or nodes) do
       if n.y >= hy then hx = n.x break end
     end
     if hx then
