@@ -18,12 +18,14 @@ const ready = (async () => {
   return lua
 })()
 
+const SEASONS = ['spring', 'summer', 'autumn', 'winter', 'dead']
 const num = (v) => (Number.isFinite(v) ? String(v) : '0')
 function literal(o) {
   const keep = (o.keepouts || []).map((q) => '{ ' + q.map(num).join(', ') + ' }').join(', ')
   return `{ w = ${num(o.w)}, h = ${num(o.h)}, seed = ${num(Math.round(o.seed))}, cats = ${num(Math.round(o.cats))},
     size = ${num(o.size)}, density = ${num(o.density)}, id = "p${num(Math.round(o.index))}-",
-    grows = "${o.grows === 'oak' ? 'oak' : o.grows === 'cats' ? 'cats' : 'gym'}", ink = "${o.ink === 'blue' ? 'blue' : 'green'}", keepouts = { ${keep} } }`
+    grows = "${o.grows === 'oak' ? 'oak' : o.grows === 'cats' ? 'cats' : 'gym'}", ink = "${o.ink === 'blue' ? 'blue' : 'green'}",
+    crown = "${o.crown === 'open' ? 'open' : 'lush'}", season = "${SEASONS.includes(o.season) ? o.season : 'summer'}", spanishmoss = ${o.spanishmoss === true}, keepouts = { ${keep} } }`
 }
 
 self.onmessage = async (e) => {

@@ -1,67 +1,79 @@
 // The studio: paste a post, draw boxes for the text on each page; Pretext lays the text out in
-// them, what does not fit goes to the next page, and a cat gym grows around the boxes.
+// them, what does not fit goes to the next page, and a cat gym grows around the boxes. Your work is
+// kept in this browser as you go, and in a file when you ask.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { flow, type Box, type FlowPage, type TextStyle } from './flow'
+import { clearCache } from '@chenglou/pretext'
+import { flow, fontOf, parse, plainText, type Box, type FlowPage, type TextStyle } from './flow'
 import { growGym } from './gym'
-import { download, pagePng, pagesToPdf } from './exporter'
+import { download, pagePng, pagesToHtml, pagesToPdf } from './exporter'
+import { CM, docFile, loadDoc, newBoxId, newDoc, readDocFile, saveDoc, SEASONS, SIZES, type Doc, type Grows, type Season, type SizeKey } from './doc'
+import { familyOf, FAMILIES } from './fonts'
 
-const CM = 72 / 2.54
-const SIZES = {
-  insta: { label: 'Instagram 4:5', w: 21, h: 26.25, px: 1080 },
-  square: { label: 'Square 1:1', w: 21, h: 21, px: 1080 },
-  story: { label: 'Story 9:16', w: 18, h: 32, px: 1080 },
-  a4: { label: 'A4 page', w: 21, h: 29.7, px: 1654 },
-  letter: { label: 'US Letter', w: 21.59, h: 27.94, px: 1700 },
-} as const
-type SizeKey = keyof typeof SIZES
-// The first two come with the app (web/fonts), so a PDF can embed them; a page can't read a system font's file
-const FAMILIES = ['"Studio Fell", serif', '"Florilegium Roman", serif', 'Georgia, serif', '"Times New Roman", serif', '"Helvetica Neue", Helvetica, Arial, sans-serif']
-const FONT_FILE: Record<string, string> = { '"Studio Fell", serif': 'fonts/fell.ttf', '"Florilegium Roman", serif': 'fonts/lmroman.ttf' }
 const PAPER = '#fefdfb'
-const SAMPLE = `Why my cat needs a gym
-
-Cats climb to see, and to be seen. A shelf by the window is good; a route from the floor to the top of the room, with somewhere to rest on the way, is better.
-
-Draw a box anywhere on a page and this text moves into it. Draw another, and it runs on from the first. What does not fit goes to the next page, and the gym grows around whatever you leave clear.
-
-A cat needs two things from a route: a way up, and a reason to stop. So every ladder here leads to a shelf, every shelf has room for a cat, and the highest perch ends the climb.`
-
-let nextBox = 1
-const box = (x: number, y: number, w: number, h: number): Box => ({ id: nextBox++, x, y, w, h })
-const startBox = (W: number, H: number) => box(W * 0.14, H * 0.1, W * 0.72, H * 0.36)
+const initial = loadDoc()
 type Drag =
   | { kind: 'draw'; page: number; x0: number; y0: number; id: number }
   | { kind: 'move' | 'size'; page: number; id: number; dx: number; dy: number }
 
 export function App() {
-  const [text, setText] = useState(SAMPLE)
-  const [sizeKey, setSizeKey] = useState<SizeKey>('insta')
-  const [family, setFamily] = useState(FAMILIES[0])
-  const [fontSize, setFontSize] = useState(26)
-  const [seed, setSeed] = useState(3)
-  const [cats, setCats] = useState(2)
-  const [pieces, setPieces] = useState(1.4)
-  const [grows, setGrows] = useState<'gym' | 'oak' | 'cats'>('gym')
-  const [inkName, setInkName] = useState<'green' | 'blue'>('blue')
-  const [crown, setCrown] = useState<'lush' | 'open'>('lush')
-  const [season, setSeason] = useState<'spring' | 'summer' | 'autumn' | 'winter' | 'dead'>('summer')
-  const [spanishmoss, setSpanishmoss] = useState(false)
+  const [text, setText] = useState(initial.text)
+  const [sizeKey, setSizeKey] = useState<SizeKey>(initial.sizeKey)
+  const [family, setFamily] = useState(initial.family)
+  const [fontSize, setFontSize] = useState(initial.fontSize)
+  const [seed, setSeed] = useState(initial.seed)
+  const [cats, setCats] = useState(initial.cats)
+  const [pieces, setPieces] = useState(initial.pieces)
+  const [grows, setGrows] = useState<Grows>(initial.grows)
+  const [inkName, setInkName] = useState(initial.inkName)
+  const [crown, setCrown] = useState(initial.crown)
+  const [season, setSeason] = useState<Season>(initial.season)
+  const [spanishmoss, setSpanishmoss] = useState(initial.spanishmoss)
+  const [drawn, setDrawn] = useState<Box[][]>(initial.drawn)
   const S = SIZES[sizeKey]
   const W = S.w * CM, H = S.h * CM
-  const [drawn, setDrawn] = useState<Box[][]>(() => [[startBox(W, H)]])
   const [dragging, setDragging] = useState(false)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
-  const style: TextStyle = useMemo(() => ({ family, size: fontSize, leading: 1.35, color: '#1b2a6b' }), [family, fontSize])
-  // Pretext measures with the browser's font: lay out again once a web font has arrived
+  const [note, setNote] = useState('')
+  const [unsaved, setUnsaved] = useState(false)
+  const opener = useRef<HTMLInputElement>(null)
+  const face = familyOf(family)
+  const style: TextStyle = useMemo(() => ({ family, size: fontSize, leading: 1.35, color: '#1b2a6b', headingBold: face.headingBold }), [family, fontSize, face])
+  // Pretext measures with the browser's font and remembers: measure again once the web fonts have arrived
   const [fontsReady, setFontsReady] = useState(0)
   useEffect(() => {
     let live = true
-    document.fonts.load(`${fontSize}px ${family}`).then(() => { if (live) setFontsReady((n) => n + 1) })
+    const looks = [{ bold: false, italic: false }, { bold: false, italic: true }, { bold: true, italic: false }]
+    Promise.all(looks.map((l) => document.fonts.load(fontOf(l, 40, family)))).then(() => {
+      if (live) { clearCache(); setFontsReady((n) => n + 1) }
+    })
     return () => { live = false }
-  }, [family, fontSize])
-  const pages = useMemo(() => flow(text, drawn, style), [text, drawn, style, fontsReady])
-  const fontFile = FONT_FILE[family]
+  }, [family])
+  const blocks = useMemo(() => parse(text, face.headingBold), [text, face])
+  const { pages, lost } = useMemo(() => flow(blocks, drawn, style), [blocks, drawn, style, fontsReady])
+  const title = blocks.length ? plainText(blocks[0]).slice(0, 120) : ''
+  const fileBase = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'studio'
+
+  // kept in this browser as you work; not during a drag, and a full disk must not stop the work
+  const doc: Doc = useMemo(() => ({ text, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, drawn }),
+    [text, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, drawn])
+  useEffect(() => {
+    if (dragging) return
+    const timer = setTimeout(() => {
+      try { saveDoc(doc); setUnsaved(false) } catch { setUnsaved(true) }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [doc, dragging])
+  useEffect(() => setNote(''), [doc])
+  function applyDoc(d: Doc) {
+    setText(d.text); setSizeKey(d.sizeKey); setFamily(d.family); setFontSize(d.fontSize); setSeed(d.seed); setCats(d.cats); setPieces(d.pieces)
+    setGrows(d.grows); setInkName(d.inkName); setCrown(d.crown); setSeason(d.season); setSpanishmoss(d.spanishmoss); setDrawn(d.drawn)
+    setError(''); setNote('')
+  }
+  async function openFile(file?: File) {
+    if (!file) return
+    try { applyDoc(readDocFile(await file.text())) } catch (e) { setError(`Could not open ${file.name}: ${e instanceof Error ? e.message : String(e)}`) }
+  }
 
   function changeSize(k: SizeKey) {
     const old = SIZES[sizeKey], next = SIZES[k]
@@ -73,7 +85,7 @@ export function App() {
   function edit(page: number, fn: (boxes: Box[]) => Box[]) {
     setDrawn((d) => {
       const copy = d.slice()
-      while (copy.length <= page) copy.push((copy[copy.length - 1] ?? []).map((b) => ({ ...b, id: nextBox++ })))
+      while (copy.length <= page) copy.push((copy[copy.length - 1] ?? []).map((b) => ({ ...b, id: newBoxId() })))
       copy[page] = fn(copy[page])
       return copy
     })
@@ -116,25 +128,42 @@ export function App() {
   }, [stableKey])
 
   async function exportPngs() {
+    setNote('')
     try {
       for (let i = 0; i < pages.length; i++) {
         setBusy(`Page ${i + 1} of ${pages.length}`)
-        download(await pagePng(await growGym(requests[i]), pages[i], style, S.px, W, H, PAPER), `cat-gym-${i + 1}.png`)
+        download(await pagePng(await growGym(requests[i]), pages[i], style, S.px, W, H, PAPER), `${fileBase}-${i + 1}.png`)
       }
     } catch (e) { setError('Export failed: ' + String(e)) } finally { setBusy('') }
   }
+  async function grownPages(ops: boolean) {
+    const out: string[] = []
+    for (let i = 0; i < pages.length; i++) {
+      setBusy(`Page ${i + 1} of ${pages.length}`)
+      out.push(await growGym(ops ? { ...requests[i], ops: true } : requests[i]))
+    }
+    return out
+  }
+  const told = (b: Blob) => setNote(`Saved, ${(b.size / 1048576).toFixed(1)} MB.`)
   async function exportPdf() {
+    setNote('')
     try {
-      const ops: string[] = []
-      for (let i = 0; i < pages.length; i++) {
-        setBusy(`Page ${i + 1} of ${pages.length}`)
-        ops.push(await growGym({ ...requests[i], ops: true }))
-      }
+      const ops = await grownPages(true)
       setBusy('Writing the PDF')
-      const title = text.trim().split('\n')[0].slice(0, 120)
-      const { pdf, missing } = await pagesToPdf(pages, ops, style, fontFile, W, H, title)
+      const { pdf, missing } = await pagesToPdf(pages, ops, style, face, W, H, title)
       if (missing.length) setError(`This typeface has no ${missing.slice(0, 12).join(' ')}: those characters will be missing from the PDF.`)
-      download(pdf, 'cat-gym.pdf')
+      download(pdf, `${fileBase}.pdf`)
+      told(pdf)
+    } catch (e) { setError('Export failed: ' + String(e)) } finally { setBusy('') }
+  }
+  async function exportHtml() {
+    setNote('')
+    try {
+      const svgs = await grownPages(false)
+      setBusy('Writing the HTML')
+      const html = await pagesToHtml(pages, svgs, style, face, W, H, title, PAPER)
+      download(html, `${fileBase}.html`)
+      told(html)
     } catch (e) { setError('Export failed: ' + String(e)) } finally { setBusy('') }
   }
 
@@ -143,10 +172,11 @@ export function App() {
       <aside className="panel">
         <h1>Studio</h1>
         <label>Your post<textarea aria-label="Your post" value={text} onChange={(e) => setText(e.target.value)} /></label>
+        <p className="hint"><code># Heading</code>, <code>## Smaller</code>, <code>**bold**</code>, <code>*italic*</code>; a blank line opens a space.</p>
         <p className="hint">Drag on a page to draw a text box. Drag a box to move it, its corner to resize. It regrows when you let go.</p>
         <div className="row">
           <label>What grows
-            <select value={grows} onChange={(e) => { const g = e.target.value as 'gym' | 'oak' | 'cats'; setGrows(g); setInkName(g === 'oak' ? 'green' : 'blue') }}>
+            <select value={grows} onChange={(e) => { const g = e.target.value as Grows; setGrows(g); setInkName(g === 'oak' ? 'green' : 'blue') }}>
               <option value="gym">Cat gym</option>
               <option value="oak">One huge oak</option>
               <option value="cats">Old cats</option>
@@ -168,12 +198,8 @@ export function App() {
               </select>
             </label>
             <label>Season
-              <select value={season} onChange={(e) => setSeason(e.target.value as typeof season)}>
-                <option value="spring">Spring</option>
-                <option value="summer">Summer</option>
-                <option value="autumn">Autumn</option>
-                <option value="winter">Winter</option>
-                <option value="dead">Dead</option>
+              <select value={season} onChange={(e) => setSeason(e.target.value as Season)}>
+                {SEASONS.map((v) => <option key={v} value={v}>{v[0].toUpperCase() + v.slice(1)}</option>)}
               </select>
             </label>
             <label><input type="checkbox" checked={spanishmoss} onChange={(e) => setSpanishmoss(e.target.checked)} /> Spanish moss</label>
@@ -186,7 +212,7 @@ export function App() {
         </label>
         <label>Typeface
           <select value={family} onChange={(e) => setFamily(e.target.value)}>
-            {FAMILIES.map((f) => <option key={f} value={f}>{f.split(',')[0].replace(/"/g, '').replace('Studio Fell', 'IM Fell')}</option>)}
+            {FAMILIES.map((f) => <option key={f.css} value={f.css}>{f.label}</option>)}
           </select>
         </label>
         <div className="row">
@@ -196,9 +222,21 @@ export function App() {
           <label>Seed<input type="number" min={1} value={seed} onChange={(e) => setSeed(Math.max(1, Math.round(+e.target.value) || 1))} /></label>
         </div>
         <button onClick={() => setSeed((s) => s + 1)}>Grow another</button>
-        <button className="primary" disabled={!!busy} onClick={exportPngs}>Download PNGs</button>
-        <button disabled={!!busy || !fontFile} onClick={exportPdf}>Download PDF</button>
-        <p className="hint">{busy || `${pages.length} page${pages.length === 1 ? '' : 's'}. ${fontFile ? 'The PDF is vector, with real text you can select.' : 'For a PDF, choose IM Fell or Florilegium Roman: a browser can only embed fonts that come with the app.'}`}</p>
+        <div className="row three">
+          <button className="primary" disabled={!!busy} onClick={exportPngs}>PNGs</button>
+          <button className="primary" disabled={!!busy || !face.files} onClick={exportPdf}>PDF</button>
+          <button className="primary" disabled={!!busy} onClick={exportHtml}>HTML</button>
+        </div>
+        <p className="hint">{busy || note || `${pages.length} page${pages.length === 1 ? '' : 's'}. ${face.files ? 'PDF and HTML keep real text you can select.' : `For a PDF, choose IM Fell or Florilegium Roman: a browser can only embed fonts that come with the app. An HTML file shows ${face.label} only to readers who have it.`}`}</p>
+        {lost && <p className="error" role="alert">Some of your text has nowhere to go: draw a bigger box, or one on the last page.</p>}
+        <div className="row three">
+          <button onClick={() => download(docFile(doc), `${fileBase}.studio.json`)}>Save file</button>
+          <button onClick={() => opener.current?.click()}>Open file</button>
+          <button onClick={() => { if (window.confirm('Start over? This clears the post and boxes kept in this browser.')) applyDoc(newDoc()) }}>Start over</button>
+        </div>
+        <input ref={opener} type="file" accept=".json,application/json" hidden aria-label="Open a studio file"
+          onChange={(e) => { void openFile(e.target.files?.[0]); e.target.value = '' }} />
+        <p className="hint">{unsaved ? 'This browser is out of room, so your latest changes are not kept here: save a file.' : 'Kept in this browser as you work. Save a file to keep it anywhere else.'}</p>
         {error && <p className="error" role="alert">{error}</p>}
       </aside>
       <main className="pages">
@@ -231,7 +269,7 @@ function PageView({ index, page, W, H, style, gym, growing, setDragging, edit }:
   }
   const onDown = (e: React.PointerEvent) => {
     const p = at(e)
-    const id = nextBox++
+    const id = newBoxId()
     edit(index, (bs) => [...bs, { id, x: p.x, y: p.y, w: 1, h: 1 }])
     begin(e, { kind: 'draw', page: index, x0: p.x, y0: p.y, id })
   }
@@ -265,8 +303,10 @@ function PageView({ index, page, W, H, style, gym, growing, setDragging, edit }:
         {url && <img src={url} alt="" />}
         <svg ref={ref} className="ink" viewBox={`0 0 ${W} ${H}`} role="application" aria-label={`Page ${index + 1}`}
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-          <g fontFamily={style.family} fontSize={style.size} fill={style.color} style={{ pointerEvents: 'none', whiteSpace: 'pre' }}>
-            {page.lines.map((l, i) => <text key={i} x={l.x} y={l.y}>{l.text.replace(/\n$/, '')}</text>)}
+          <g fontFamily={style.family} fill={style.color} style={{ pointerEvents: 'none', whiteSpace: 'pre' }}>
+            {page.lines.flatMap((l, i) => l.runs.map((r, j) => (
+              <text key={`${i}.${j}`} x={r.x} y={l.y} fontSize={l.size} fontWeight={r.bold ? 700 : 400} fontStyle={r.italic ? 'italic' : 'normal'}>{r.text}</text>
+            )))}
           </g>
           {page.boxes.map((b) => {
             const handle = 10 / scale, dr = 9 / scale

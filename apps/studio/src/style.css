@@ -1,5 +1,8 @@
 @font-face { font-family: "Studio Fell"; src: url("/fonts/fell.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Studio Fell"; font-style: italic; src: url("/fonts/fell-italic.woff2") format("woff2"); font-display: swap; }
 @font-face { font-family: "Florilegium Roman"; src: url("/fonts/lmroman.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Florilegium Roman"; font-style: italic; src: url("/fonts/lmroman-italic.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Florilegium Roman"; font-weight: 700; src: url("/fonts/lmroman-bold.woff2") format("woff2"); font-display: swap; }
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1b2a6b; background: #eceef4; }
@@ -7,9 +10,12 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
 .panel { background: #fff; border-right: 1px solid #d5d9e6; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
 .panel h1 { font: bold 18px Georgia, serif; margin: 0; }
 .panel label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #4a5688; }
+.panel label:has(input[type=checkbox]) { flex-direction: row; align-items: center; }
 .panel textarea { min-height: 200px; resize: vertical; font: 14px/1.4 Georgia, serif; padding: 8px; border: 1px solid #c3c9dc; border-radius: 4px; }
 .panel select, .panel input[type=number] { padding: 5px; border: 1px solid #c3c9dc; border-radius: 4px; font: inherit; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row.three { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.hint code { font: 11px ui-monospace, Menlo, monospace; }
 .panel button { padding: 8px 10px; border: 1px solid #2456c4; background: #fff; color: #2456c4; border-radius: 4px; font: inherit; cursor: pointer; }
 .panel button.primary { background: #2456c4; color: #fff; }
 .panel button:disabled { opacity: .5; cursor: default; }
