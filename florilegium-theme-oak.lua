@@ -399,9 +399,10 @@ end
 -- An oak leaf from the origin along +y, length L: rounded lobes along a stalked blade.
 local LOBE = { { 0.1, 0.07 }, { 0.26, 0.24 }, { 0.38, 0.13 }, { 0.54, 0.32 }, { 0.67, 0.17 }, { 0.82, 0.25 }, { 1, 0.03 } }
 local LOBE_SMALL = { { 0.34, 0.23 }, { 0.55, 0.13 }, { 0.78, 0.2 }, { 1, 0.01 } }
-local function leaf_outline(rng, L, small)
+local LOBE_PLAIN = { { 0.42, 0.22 }, { 0.8, 0.17 }, { 1, 0.01 } }   -- inside a mass, where edges hardly show
+local function leaf_outline(rng, L, small, plain)
   local left, right = {}, {}
-  for _, q in ipairs(small and LOBE_SMALL or LOBE) do
+  for _, q in ipairs(plain and LOBE_PLAIN or small and LOBE_SMALL or LOBE) do
     local j = 1 + rng.sym(0.08)
     left[#left + 1] = { -q[2] * L * j, q[1] * L }
     right[#right + 1] = { q[2] * L * (1 + rng.sym(0.08)), q[1] * L }
@@ -414,10 +415,10 @@ end
 function M.leaf(rng, L, o)
   o = o or {}
   local t0 = o.tone or rng.range(0.3, 0.45)
-  local out = leaf_outline(rng, L, L * ink.unit() < 0.62)
+  local out = leaf_outline(rng, L, o.small or L * ink.unit() < 0.62, o.plain)
   ink.smooth(out, true, 1)
   ink.fill(tone(t0), o.op)
-  if L * ink.unit() > 0.6 then
+  if L * ink.unit() > 0.6 and not o.plain and not o.small then
     streak3(0, 0, 0, L * 0.3, rng.sym(L * 0.03), L * 0.6, rng.sym(L * 0.03), L * 0.93, L * 0.035, L * 0.008, o.rib or white, 0.55)
   end
 end
@@ -439,7 +440,7 @@ end
 -- shade inside the crown: only a few lit leaves) or "front" (bright, with a shadow under each
 -- billow). o.n scales the number of leaves, o.leaf their length.
 local DEPTH = {
-  back = { core = 0.8, lo = 0.68, hi = 0.86, op = 0.85, n = 0.8, shade = 0, small = true },
+  back = { core = 0.8, lo = 0.68, hi = 0.86, op = 0.85, n = 1.05, shade = 0, small = true },
   mid = { core = 0.09, lo = 0.08, hi = 0.28, op = 1, n = 1.05, shade = 0 },
   front = { core = 0.2, lo = 0.17, hi = 0.68, op = 1, n = 1.1, shade = 0.22 },
 }
@@ -460,27 +461,22 @@ function M.clump(rng, R, depth, o)
     local solid = not o.clear or o.clear(bx, by) > r * 2 + 0.6   -- no shape cut off by a text box
     -- the shade inside it, well inside the leaves, soft-edged
     if not solid then -- leaves only
-    elseif D.small then
-      for _ = 1, 3 do                                   -- pale shade, broken up: never one smooth shape
-        ink.smooth(ink.blob(rng, bx + rng.sym(r * 0.3), by + rng.sym(r * 0.26), r * 0.3, r * 0.26, 0.4, 8), true)
-        ink.fill(tone(0.84), 0.5)
-      end
-    else
+    elseif not D.small then                             -- the back foliage is leaves alone: a shade behind it reads as a blob
       -- a little shade at its heart, broken up so it never reads as a smooth shape
-      for _ = 1, 3 do
-        ink.smooth(ink.blob(rng, bx + rng.sym(r * 0.2), by + rng.sym(r * 0.18), r * 0.34, r * 0.3, 0.35, 8), true)
+      for _ = 1, 2 do
+        ink.smooth(ink.blob(rng, bx + rng.sym(r * 0.2), by + rng.sym(r * 0.18), r * 0.34, r * 0.3, 0.35, 6), true)
         ink.fill(tone(D.core), D.op)
       end
     end
     if D.shade > 0 and solid then
-      ink.smooth(ink.blob(rng, bx, by - r * 0.5, r * 0.6, r * 0.22, 0.2, 8), true) ink.fill(tone(0.03), D.shade, true)
+      ink.smooth(ink.blob(rng, bx, by - r * 0.5, r * 0.6, r * 0.22, 0.2, 6), true) ink.fill(tone(0.03), D.shade, true)
     end
     -- leaves from the dark low side up to the lit top, each pointing out and drooping a little
-    local count = floor((o.n or 1) * D.n * (9 + 4.6 * r * r / (L * L)))
+    local count = floor((o.n or 1) * D.n * 0.8 * (9 + 4.6 * r * r / (L * L)))   -- most of the inside of a mass is hidden
     local ls = {}
     for k = 1, count do
       local a = rng.range(0, 2 * pi)
-      local d = r * (rng.chance(0.55) and rng.range(0.72, 1.02) or sqrt(rng.u()) * 0.8)
+      local d = r * (rng.chance(0.69) and rng.range(0.72, 1.02) or sqrt(rng.u()) * 0.8)
       ls[k] = { bx + d * cos(a) * 1.08, by + d * sin(a), a, d / r }
     end
     table.sort(ls, function(p, q) return p[2] < q[2] end)
@@ -493,7 +489,7 @@ function M.clump(rng, R, depth, o)
       local ang = q[3] / rad - 90 + rng.sym(32)
       if abs(ang % 360 - 180) < 70 then ang = ang + (rng.chance(0.5) and 40 or -40) end
       ink.push() ink.translate(q[1], q[2]) ink.rotate(ang)
-      M.leaf(rng, L * rng.range(0.8, 1.2), { tone = t, op = D.op < 1 and D.op or nil })
+      M.leaf(rng, L * rng.range(0.8, 1.2), { tone = t, op = D.op < 1 and D.op or nil, small = D.small, plain = not D.small and q[4] < 0.72 })
       ink.pop()
       end
     end
@@ -1761,7 +1757,7 @@ function M.tree(rng, o)
         end
       end
       M.limb(rng.fork(), sp, width, { knots = kn, burls = bl, moss = wm > 1.1 and 0.5 or 0.08, rough = 0.05,
-        plate = wm < 0.3 and 0.07 or max(0.1, min(0.21, wm * 0.14)), stretch = wm > 1 and 4.6 or 4.2, detail = wm > 1.8 and 0.16 or 9, flat = wm < 0.7, torn = not isroot, peel = S.peel })
+        plate = wm < 0.3 and 0.07 or max(0.1, min(0.21, wm * 0.14)), stretch = wm > 1 and 4.6 or 4.2, detail = wm > 1.8 and 0.16 or 9, flat = wm < 1, torn = not isroot, peel = S.peel })
       -- level enough to lie on?
       if wm > 0.42 and wm < 1.7 then
         for i = 1, #sp - 1 do
@@ -1820,6 +1816,28 @@ function M.tree(rng, o)
     flush_(run)
   end
   -- children first: a limb comes out from behind its parent, so the parent's bark and outline stay whole
+  -- more roots, drawn first, so they leave the trunk from behind it, in its own bark, and run out
+  -- along the ground. Below the ground line nothing shows.
+  if o.roots ~= false then
+    local rr = layout.fork()
+    local bx_ = nodes[1].x
+    local npe = #perches
+    for i = 1, rr.int(3, 5) do
+      local side = i % 2 == 0 and 1 or -1
+      local x0 = bx_ + side * trunkw * rr.range(0.12, 0.62)
+      local L = trunkw * rr.range(0.8, 1.9)
+      local sp_ = { { x0, groundy + 0.8 }, { x0 + side * L * 0.35, groundy + 0.2 }, { x0 + side * L * 0.7, groundy + 0.02 }, { x0 + side * L, groundy + 0.03 } }
+      local w0 = trunkw * rr.range(0.13, 0.22)
+      local clear_ = true
+      for _, q in ipairs(keeps) do
+        for _, p in ipairs(sp_) do
+          if p[1] > q[1] - 0.2 and p[1] < q[3] + 0.2 and p[2] > q[2] - 0.2 and p[2] < q[4] + 0.2 then clear_ = false end
+        end
+      end
+      if clear_ then stretch(sp_, { w0, w0 * 0.68, w0 * 0.3, w0 * 0.05 }, false, true, true) end
+    end
+    for k = #perches, npe + 1, -1 do perches[k] = nil end                  -- no cat lies on a root
+  end
   for ci = #chs, 1, -1 do
     local ch = chs[ci]
     local list = ch.list
