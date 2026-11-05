@@ -10,7 +10,6 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
 .panel { background: #fff; border-right: 1px solid #d5d9e6; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
 .panel h1 { font: bold 18px Georgia, serif; margin: 0; }
 .panel label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #4a5688; }
-.panel label:has(input[type=checkbox]) { flex-direction: row; align-items: center; }
 .panel textarea { min-height: 200px; resize: vertical; font: 14px/1.4 Georgia, serif; padding: 8px; border: 1px solid #c3c9dc; border-radius: 4px; }
 .panel select, .panel input[type=number] { padding: 5px; border: 1px solid #c3c9dc; border-radius: 4px; font: inherit; }
 .panel input[type=color] { width: 100%; height: 30px; padding: 2px; border: 1px solid #c3c9dc; border-radius: 4px; background: #fff; cursor: pointer; }
@@ -27,9 +26,31 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
 .pagelabel { font-size: 12px; color: #6a7396; display: flex; justify-content: space-between; gap: 8px; }
 .stage { user-select: none; -webkit-user-select: none; position: relative; background: #fefdfb; box-shadow: 0 1px 6px rgba(27, 42, 107, .25); touch-action: none; cursor: crosshair; }
 .stage img { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.stage svg.ink { position: absolute; inset: 0; width: 100%; height: 100%; }
+.stage svg.ink, .stage svg.under { position: absolute; inset: 0; width: 100%; height: 100%; }
+.stage svg.under { pointer-events: none; }
 .stage.growing img { opacity: .45; }
-.box { fill: rgba(36, 86, 196, .05); stroke: #2456c4; stroke-width: 1; stroke-dasharray: 5 4; cursor: move; vector-effect: non-scaling-stroke; }
+.box { fill: rgba(36, 86, 196, .03); stroke: #2456c4; stroke-width: 1; stroke-dasharray: 5 4; stroke-opacity: .55; cursor: text; vector-effect: non-scaling-stroke; }
+.box.live { stroke-opacity: 1; }
+.box.picked { stroke-dasharray: none; }
+.box.overflow { stroke: #c0282f; stroke-opacity: 1; fill: rgba(192, 40, 47, .05); }
+.linking .box { cursor: copy; fill: rgba(36, 86, 196, .12); }
+.edge { fill: none; stroke: transparent; stroke-width: 6; pointer-events: stroke; cursor: move; vector-effect: non-scaling-stroke; }
+.selection { fill: rgba(36, 86, 196, .28); pointer-events: none; }
+.caret { stroke: #1b2a6b; stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; animation: blink 1.06s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.chain { fill: #2456c4; font-family: -apple-system, Helvetica, Arial, sans-serif; pointer-events: none; }
+.typing { position: fixed; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; resize: none; overflow: hidden; pointer-events: none; font-size: 16px; }
+.typing.composing { width: 240px; height: 30px; padding: 3px; opacity: 1; background: #fff; border: 1px solid #2456c4; z-index: 10; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 3px; }
+.panel button.tool { width: 34px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-color: #c3c9dc; color: #1b2a6b; font-size: 12px; }
+.panel button.tool.on, .panel button.on { background: #2456c4; color: #fff; border-color: #2456c4; }
+.boxpanel { display: flex; flex-direction: column; gap: 8px; padding: 8px; background: #f4f6fb; border-radius: 4px; }
+.panel label.check { flex-direction: row; align-items: center; }
+.panel button.generate.stale { background: #c8591b; border-color: #c8591b; }
+.panel button.generate:not(.stale) { background: #fff; color: #2456c4; }
+.panel { min-height: 0; }
+.panel > * { flex-shrink: 0; }
+.pagelabel .link { border: 0; background: none; color: #6a7396; font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
 .handle { fill: #fff; stroke: #2456c4; stroke-width: 1.5; cursor: nwse-resize; vector-effect: non-scaling-stroke; }
 .del { fill: #2456c4; cursor: pointer; }
 .delx { stroke: #fff; stroke-width: 1.5; pointer-events: none; vector-effect: non-scaling-stroke; }

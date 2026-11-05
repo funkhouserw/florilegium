@@ -18,13 +18,19 @@ export async function pagePng(gym: string, page: FlowPage, style: TextStyle, pix
     const c = canvas.getContext('2d')!
     c.fillStyle = paper
     c.fillRect(0, 0, canvas.width, canvas.height)
-    c.drawImage(img, 0, 0, canvas.width, canvas.height)
-    c.scale(canvas.width / W, canvas.height / H)
-    c.fillStyle = style.color
-    for (const l of page.lines) for (const r of l.runs) {
-      c.font = fontOf(r, l.size, style.family)
-      c.fillText(r.text, r.x, l.y)
+    const write = (lines: Line[]) => {
+      c.save()
+      c.scale(canvas.width / W, canvas.height / H)
+      c.fillStyle = style.color
+      for (const l of lines) for (const r of l.runs) {
+        c.font = fontOf(r, l.size, style.family)
+        c.fillText(r.text, r.x, l.y)
+      }
+      c.restore()
     }
+    write(page.lines.filter((l) => l.layer === 'behind'))
+    c.drawImage(img, 0, 0, canvas.width, canvas.height)
+    write(page.lines.filter((l) => l.layer !== 'behind'))
     return await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('no PNG'))), 'image/png'))
   } finally { URL.revokeObjectURL(url) }
 }
@@ -57,17 +63,23 @@ export async function pagesToPdf(pages: FlowPage[], ops: string[], style: TextSt
       states[`flo${m[1]}${m[2]}`] = { Type: 'ExtGState', ca: op, CA: op, ...(m[1] === 'm' ? { BM: 'Multiply' } : {}) }
     }
     page.node.normalizedEntries().Resources.set(PDFName.of('ExtGState'), pdf.context.obj(states as never))
-    page.node.addContentStream(pdf.context.register(pdf.context.flateStream(ops[i])))
-    for (const l of p.lines) for (const r of l.runs) {
-      const face = faceOf(files, r.bold, r.italic)
-      const { font, known } = fonts.get(face.file)!
-      for (const ch of r.text) if (ch.trim() && !known.has(ch.codePointAt(0)!)) missing.add(ch)
-      if (!r.text.trim()) continue
-      // text state set outside the text object carries into it: fill and outline, a face made heavier
-      if (face.heavier) page.pushOperators(pushGraphicsState(), setTextRenderingMode(TextRenderingMode.FillAndOutline), setLineWidth(l.size * 0.02), setStrokingColor(color))
-      page.drawText(r.text, { x: r.x, y: H - l.y, size: l.size, font, color })
-      if (face.heavier) page.pushOperators(popGraphicsState())
+    const write = (lines: Line[]) => {
+      for (const l of lines) for (const r of l.runs) {
+        const face = faceOf(files, r.bold, r.italic)
+        const { font, known } = fonts.get(face.file)!
+        for (const ch of r.text) if (ch.trim() && !known.has(ch.codePointAt(0)!)) missing.add(ch)
+        if (!r.text.trim()) continue
+        // text state set outside the text object carries into it: fill and outline, a face made heavier
+        if (face.heavier) page.pushOperators(pushGraphicsState(), setTextRenderingMode(TextRenderingMode.FillAndOutline), setLineWidth(l.size * 0.02), setStrokingColor(color))
+        page.drawText(r.text, { x: r.x, y: H - l.y, size: l.size, font, color })
+        if (face.heavier) page.pushOperators(popGraphicsState())
+      }
     }
+    write(p.lines.filter((l) => l.layer === 'behind'))
+    page.node.addContentStream(pdf.context.register(pdf.context.flateStream(ops[i])))
+    // pdf-lib writes into the stream it last made: without this the rest would land under the drawing
+    ;(page as unknown as { contentStream?: unknown }).contentStream = undefined
+    write(p.lines.filter((l) => l.layer !== 'behind'))
   })
   return { pdf: new Blob([await pdf.save()], { type: 'application/pdf' }), missing: [...missing] }
 }
@@ -109,31 +121,48 @@ export async function pagesToHtml(pages: FlowPage[], gyms: string[], style: Text
     fontCss.push(`@font-face{font-family:"${familyName}";font-weight:${f.weight};font-style:${f.style};src:url("${(await dataUrl(blob)).replace(/^data:[^;]*/, 'data:font/woff2')}") format("woff2")}`)
   }
   const lineHtml = (l: Line) => {
+    const first = l.runs.find((r) => r.from >= 0)
+    const leftOf = first ? first.x : l.originX
     const runs = l.runs.map((r) => {
       let t = (r.gap ? ' ' : '') + esc(r.text)
+      if (r.from < 0) return `<i class="m" aria-hidden="true" style="left:${cq(r.x - leftOf)}">${t}</i>`
       if (r.italic) t = `<em>${t}</em>`
       if (r.bold) t = `<strong>${t}</strong>`
       return t
     }).join('')
-    return `<span style="left:${cq(l.x)};top:${cq(l.y - l.size * top)};font-size:${cq(l.size)}">${runs}</span>`
+    const spacing = l.wordSpacing ? `;word-spacing:${cq(l.wordSpacing)}` : ''
+    return `<span style="left:${cq(leftOf)};top:${cq(l.y - l.size * top)};font-size:${cq(l.size)}${spacing}">${runs}</span>`
+  }
+  const blocksOf = (lines: Line[]) => {
+    const out: string[] = []
+    let open = ''
+    let tag = ''
+    let list: string | null = null
+    const closeBlock = () => { if (tag) out.push(`</${tag}>`); tag = '' }
+    const closeList = () => { if (list) out.push(`</${list}>`); list = null }
+    for (const l of lines) {
+      const key = `${l.story}.${l.block}`
+      if (key !== open) {
+        closeBlock()
+        const want = l.list === 'bullet' ? 'ul' : l.list === 'ordered' ? 'ol' : null
+        if (want !== list) { closeList(); if (want) { list = want; out.push(`<${want}>`) } }
+        open = key
+        tag = l.list ? 'li' : l.tag
+        out.push(`<${tag}>`)
+      }
+      out.push(lineHtml(l))
+    }
+    closeBlock()
+    closeList()
+    return out.join('\n')
   }
   const body: string[] = []
   for (let i = 0; i < pages.length; i++) {
     const image = await dataUrl(new Blob([gyms[i]], { type: 'image/svg+xml' }))
-    const blocks: string[] = []
-    let open = -1
-    let tag = ''
-    for (const l of pages[i].lines) {
-      if (l.block !== open) {
-        if (tag) blocks.push(`</${tag}>`)
-        open = l.block
-        tag = l.tag
-        blocks.push(`<${tag}>`)
-      }
-      blocks.push(lineHtml(l))
-    }
-    if (tag) blocks.push(`</${tag}>`)
-    body.push(`<section class="page" aria-label="Page ${i + 1}">\n<img src="${image}" alt="" decoding="async">\n${blocks.join('\n')}\n</section>`)
+    // later in the file paints on top: text behind the drawing comes before its image
+    const under = blocksOf(pages[i].lines.filter((l) => l.layer === 'behind'))
+    const above = blocksOf(pages[i].lines.filter((l) => l.layer !== 'behind'))
+    body.push(`<section class="page" aria-label="Page ${i + 1}">\n${under}\n<img src="${image}" alt="" decoding="async">\n${above}\n</section>`)
   }
   const html = `<!doctype html>
 <html lang="en">
@@ -147,7 +176,8 @@ ${fontCss.join('\n')}
 body{margin:0;padding:1rem;background:#eceef4}
 .page{position:relative;container-type:inline-size;width:min(100%,${+(W * 4 / 3).toFixed(1)}px);aspect-ratio:${+W.toFixed(2)}/${+H.toFixed(2)};margin:0 auto 1.5rem;overflow:hidden;background:${paper};box-shadow:0 1px 6px rgba(27,42,107,.25);font-family:${style.family};color:${style.color}}
 .page img{position:absolute;inset:0;width:100%;height:100%}
-.page h1,.page h2,.page p{margin:0;font:inherit}
+.page h1,.page h2,.page h3,.page p,.page ul,.page ol,.page li{margin:0;padding:0;font:inherit;list-style:none}
+.page i.m{position:absolute;font-style:normal;white-space:pre}
 .page span{position:absolute;white-space:pre;line-height:1}
 .page strong{font-weight:700}
 @page{size:${+W.toFixed(2)}pt ${+H.toFixed(2)}pt;margin:0}
