@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { flow, type Box, type FlowPage, type TextStyle } from './flow'
 import { growGym } from './gym'
-import { download, pageSvg, pngsToPdf, svgToPng } from './exporter'
+import { download, pagePng, pagesToPdf } from './exporter'
 
 const CM = 72 / 2.54
 const SIZES = {
@@ -14,7 +14,9 @@ const SIZES = {
   letter: { label: 'US Letter', w: 21.59, h: 27.94, px: 1700 },
 } as const
 type SizeKey = keyof typeof SIZES
-const FAMILIES = ['Georgia, serif', '"Times New Roman", serif', '"Helvetica Neue", Helvetica, Arial, sans-serif']
+// The first two come with the app (web/fonts), so a PDF can embed them; a page can't read a system font's file
+const FAMILIES = ['"Studio Fell", serif', '"Florilegium Roman", serif', 'Georgia, serif', '"Times New Roman", serif', '"Helvetica Neue", Helvetica, Arial, sans-serif']
+const FONT_FILE: Record<string, string> = { '"Studio Fell", serif': 'fonts/fell.ttf', '"Florilegium Roman", serif': 'fonts/lmroman.ttf' }
 const PAPER = '#fefdfb'
 const SAMPLE = `Why my cat needs a gym
 
@@ -51,7 +53,15 @@ export function App() {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const style: TextStyle = useMemo(() => ({ family, size: fontSize, leading: 1.35, color: '#1b2a6b' }), [family, fontSize])
-  const pages = useMemo(() => flow(text, drawn, style), [text, drawn, style])
+  // Pretext measures with the browser's font: lay out again once a web font has arrived
+  const [fontsReady, setFontsReady] = useState(0)
+  useEffect(() => {
+    let live = true
+    document.fonts.load(`${fontSize}px ${family}`).then(() => { if (live) setFontsReady((n) => n + 1) })
+    return () => { live = false }
+  }, [family, fontSize])
+  const pages = useMemo(() => flow(text, drawn, style), [text, drawn, style, fontsReady])
+  const fontFile = FONT_FILE[family]
 
   function changeSize(k: SizeKey) {
     const old = SIZES[sizeKey], next = SIZES[k]
@@ -105,22 +115,27 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stableKey])
 
-  async function renderAll(): Promise<Blob[]> {
-    const out: Blob[] = []
-    for (let i = 0; i < pages.length; i++) {
-      setBusy(`Page ${i + 1} of ${pages.length}`)
-      const gym = await growGym(requests[i])
-      out.push(await svgToPng(pageSvg(gym, pages[i], style, W, H, PAPER), S.px, W, H))
-    }
-    return out
-  }
   async function exportPngs() {
-    try { (await renderAll()).forEach((b, i) => download(b, `cat-gym-${i + 1}.png`)) }
-    catch (e) { setError('Export failed: ' + String(e)) } finally { setBusy('') }
+    try {
+      for (let i = 0; i < pages.length; i++) {
+        setBusy(`Page ${i + 1} of ${pages.length}`)
+        download(await pagePng(await growGym(requests[i]), pages[i], style, S.px, W, H, PAPER), `cat-gym-${i + 1}.png`)
+      }
+    } catch (e) { setError('Export failed: ' + String(e)) } finally { setBusy('') }
   }
   async function exportPdf() {
-    try { download(await pngsToPdf(await renderAll(), W, H), 'cat-gym.pdf') }
-    catch (e) { setError('Export failed: ' + String(e)) } finally { setBusy('') }
+    try {
+      const ops: string[] = []
+      for (let i = 0; i < pages.length; i++) {
+        setBusy(`Page ${i + 1} of ${pages.length}`)
+        ops.push(await growGym({ ...requests[i], ops: true }))
+      }
+      setBusy('Writing the PDF')
+      const title = text.trim().split('\n')[0].slice(0, 120)
+      const { pdf, missing } = await pagesToPdf(pages, ops, style, fontFile, W, H, title)
+      if (missing.length) setError(`This typeface has no ${missing.slice(0, 12).join(' ')}: those characters will be missing from the PDF.`)
+      download(pdf, 'cat-gym.pdf')
+    } catch (e) { setError('Export failed: ' + String(e)) } finally { setBusy('') }
   }
 
   return (
@@ -171,7 +186,7 @@ export function App() {
         </label>
         <label>Typeface
           <select value={family} onChange={(e) => setFamily(e.target.value)}>
-            {FAMILIES.map((f) => <option key={f} value={f}>{f.split(',')[0].replace(/"/g, '')}</option>)}
+            {FAMILIES.map((f) => <option key={f} value={f}>{f.split(',')[0].replace(/"/g, '').replace('Studio Fell', 'IM Fell')}</option>)}
           </select>
         </label>
         <div className="row">
@@ -182,8 +197,8 @@ export function App() {
         </div>
         <button onClick={() => setSeed((s) => s + 1)}>Grow another</button>
         <button className="primary" disabled={!!busy} onClick={exportPngs}>Download PNGs</button>
-        <button disabled={!!busy} onClick={exportPdf}>Download PDF</button>
-        <p className="hint">{busy || `${pages.length} page${pages.length === 1 ? '' : 's'}. In the PDF the pages are images, so the text can't be selected.`}</p>
+        <button disabled={!!busy || !fontFile} onClick={exportPdf}>Download PDF</button>
+        <p className="hint">{busy || `${pages.length} page${pages.length === 1 ? '' : 's'}. ${fontFile ? 'The PDF is vector, with real text you can select.' : 'For a PDF, choose IM Fell or Florilegium Roman: a browser can only embed fonts that come with the app.'}`}</p>
         {error && <p className="error" role="alert">{error}</p>}
       </aside>
       <main className="pages">

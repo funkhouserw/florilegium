@@ -53,6 +53,7 @@ function M.page(o)
   end)
   tex, node, luatexbase = saved.tex, saved.node, saved.luatexbase
   if not ok then error(err, 0) end
+  M.last_streams = streams                             -- the drawing as PDF operators (the studio's PDF)
   local svg = require("florilegium-svg")
   local CM = 72 / 2.54
   local out = { string.format('<svg xmlns="http://www.w3.org/2000/svg" width="%.2f" height="%.2f" viewBox="0 0 %.2f %.2f">', w * CM, h * CM, w * CM, h * CM) }

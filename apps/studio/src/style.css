@@ -1,3 +1,5 @@
+@font-face { font-family: "Studio Fell"; src: url("/fonts/fell.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Florilegium Roman"; src: url("/fonts/lmroman.woff2") format("woff2"); font-display: swap; }
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1b2a6b; background: #eceef4; }

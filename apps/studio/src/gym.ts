@@ -2,7 +2,7 @@
 export type GymRequest = {
   grows: 'gym' | 'oak' | 'cats'; ink: 'green' | 'blue'
   w: number; h: number; seed: number; cats: number; size: number; density: number; index: number
-  keepouts: number[][]
+  keepouts: number[][]; ops?: boolean                 // ops: PDF operators instead of an SVG
 }
 const worker = new Worker(new URL('gym-worker.js', document.baseURI))
 const cache = new Map<string, Promise<string>>()

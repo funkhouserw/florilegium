@@ -31,7 +31,10 @@ self.onmessage = async (e) => {
   let lua
   try {
     lua = await ready
-    const svg = await lua.doString(`return require("florilegium-scene").page(${literal(options)})`)
+    // options.ops: the same drawing as PDF operators, in page points, y up
+    const svg = await lua.doString(options.ops
+      ? `local S = require("florilegium-scene") S.page(${literal(options)}) return table.concat(S.last_streams, "\\n")`
+      : `return require("florilegium-scene").page(${literal(options)})`)
     self.postMessage({ id, svg })
   } catch (err) {
     self.postMessage({ id, error: String((err && err.message) || err) })
