@@ -1,5 +1,5 @@
-// The studio: draw boxes on a page and type in them. Each box holds a story of its own or carries on
-// one that started in another box; the text flows as you type, and the drawing grows around the boxes
+// Felilegium: draw boxes on a page and type in them. A new box carries on the text you were writing, or
+// is unlinked to hold a story of its own; the text flows as you type, and the drawing grows around the boxes
 // when you ask. Your work is kept in this browser as you go, and in a file when you ask.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { EditorState, type Transaction } from 'prosemirror-state'
@@ -80,7 +80,7 @@ export function App() {
   const activeLines = (activeId !== null && byStory.get(activeId)) || []
   const titleBlock = texts.flatMap((t) => { const out: string[] = []; t.doc.forEach((b) => { if (b.textContent.trim()) out.push(b.textContent) }); return out })[0] ?? ''
   const title = titleBlock.slice(0, 120)
-  const fileBase = title.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'studio'
+  const fileBase = title.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'felilegium'
   const boxCount = (story: number) => drawn.reduce((n, p) => n + p.filter((b) => b.story === story).length, 0)
 
   // kept in this browser as you work; a full disk must not stop the work
@@ -384,9 +384,17 @@ export function App() {
       return copy
     })
   }
+  // A new box carries on the text you're in, or else the nearest text before it. Unlinking is one click.
+  function storyToContinue(page: number) {
+    if (activeId !== null && boxCount(activeId) > 0) return activeId
+    const lastOn = (i: number) => pages[i]?.boxes[pages[i].boxes.length - 1]?.story
+    for (let i = page; i >= 0; i--) { const s = lastOn(i); if (s !== undefined) return s }
+    for (let i = page + 1; i < pages.length; i++) { const s = pages[i].boxes[0]?.story; if (s !== undefined) return s }
+    return null
+  }
   function drawBox(page: number, x: number, y: number) {
     const id = newBoxId()
-    let story = linking
+    let story = linking ?? storyToContinue(page)
     if (story === null) {
       story = newStoryId()
       const made = story
@@ -405,7 +413,17 @@ export function App() {
       if (box && boxCount(box.story) <= 1) setStories((all) => all.filter((s) => s.id !== box.story || s.state.doc.textContent))
       setActiveId(null)
       setSelected(null)
-    } else focusTyping()
+    } else {
+      // the cursor goes to what the new box now holds, or to the end of the text if it reaches no further
+      const box = pages[page]?.boxes.find((b) => b.id === id)
+      if (box) {
+        const first = (byStory.get(box.story) ?? []).find((l) => l.page === page && l.box === id)
+        forgetTyped()
+        goalX.current = null
+        update(box.story, (st) => selectTo(st, first ? first.from : st.doc.content.size - 1, false))
+      }
+      focusTyping()
+    }
   }
   function removeBox(page: number, box: Box) {
     const story = stories.find((s) => s.id === box.story)
@@ -458,6 +476,8 @@ export function App() {
     setStories((all) => [...all, { id, state: newState(newStoryDoc()), auto: false }])
     editPage(page, (bs) => bs.map((b) => (b.id === box.id ? { ...b, story: id } : b)))
     setActiveId(id)
+    setSelected({ page, id: box.id })
+    forgetTyped()
     focusTyping()
   }
   const selectedBox = selected ? pages[selected.page]?.boxes.find((b) => b.id === selected.id) ?? null : null
@@ -560,7 +580,8 @@ export function App() {
   return (
     <div className="app">
       <aside className="panel">
-        <h1>Studio</h1>
+        <h1>Felilegium</h1>
+        <p className="hint">Grown from Kevin Raymond's <a href="https://github.com/kevinraymond/florilegium" target="_blank" rel="noreferrer">florilegium</a>.</p>
         <div className="toolbar" role="toolbar" aria-label="Text formatting">
           {tool('H1', 'Large heading', kind === 1, () => edit((s) => setBlock(s, 1)))}
           {tool('H2', 'Heading', kind === 2, () => edit((s) => setBlock(s, 2)))}
@@ -572,7 +593,7 @@ export function App() {
           {tool('1.', 'Numbered list', here?.attrs.list === 'ordered', () => edit((s) => toggleList(s, 'ordered')))}
           {(['left', 'center', 'right', 'justify'] as Align[]).map((a) => tool(<AlignIcon align={a} />, `Align ${a}`, here?.attrs.align === a, () => edit((s) => setAlign(s, a))))}
         </div>
-        <p className="hint">{active ? 'Markdown works as you type: # heading, - list, **bold**, *italic*.' : 'Click into a box to type. Drag on an empty part of a page to draw a new one.'}</p>
+        <p className="hint">{active ? 'Markdown works as you type: # heading, - list, **bold**, *italic*.' : 'Click into a box to type. Drag on an empty part of a page to draw a new box: it carries on your text, or click Unlink on it to give it its own.'}</p>
 
         {selectedBox && active && (
           <div className="boxpanel">
@@ -698,6 +719,7 @@ export function App() {
               linking={linking !== null} activeStory={activeId} selectedId={selected?.page === i ? selected.id : null}
               chainLabel={(b) => { const ch = chainOf(b.story); return ch.length > 1 ? `${ch.findIndex((c) => c.page === i && c.id === b.id) + 1}/${ch.length}` : '' }}
               setDragging={setDragging} editPage={editPage} drawBox={drawBox} afterDraw={afterDraw} startText={startText} removeBox={removeBox} removePage={drawn.length > 1 && i < drawn.length ? () => removePage(i) : undefined} select={(id) => setSelected({ page: i, id })}
+              unlink={(b) => unlink(i, b)}
               startLink={(b) => { setSelected({ page: i, id: b.id }); setActiveId(b.story); setLinking(linking === null ? b.story : null) }} />
           )
         })}
@@ -760,7 +782,7 @@ function LinesOf({ lines, style }: { lines: Line[]; style: TextStyle }) {
   )
 }
 
-function PageView({ index, page, W, H, margins, style, gym, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink }: {
+function PageView({ index, page, W, H, margins, style, gym, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink, unlink }: {
   index: number; page: FlowPage; W: number; H: number; margins: Margins; style: TextStyle; gym?: string; growing: boolean
   svgRef: (el: SVGSVGElement | null) => void; caretRef: React.RefObject<SVGLineElement | null>
   caret?: Caret; composition: string | null; rects: { x: number; y: number; w: number; h: number }[]
@@ -768,7 +790,7 @@ function PageView({ index, page, W, H, margins, style, gym, growing, svgRef, car
   setDragging: (b: boolean) => void; editPage: (page: number, fn: (b: Box[]) => Box[]) => void
   drawBox: (page: number, x: number, y: number) => number; afterDraw: (page: number, id: number, ok: boolean) => void
   startText: (e: React.PointerEvent, page: number, box: Box) => void; removeBox: (page: number, box: Box) => void
-  removePage?: () => void; select: (id: number) => void; startLink: (b: Box) => void
+  removePage?: () => void; select: (id: number) => void; startLink: (b: Box) => void; unlink: (b: Box) => void
 }) {
   const ref = useRef<SVGSVGElement | null>(null)
   const drag = useRef<Drag | null>(null)
@@ -862,7 +884,10 @@ function PageView({ index, page, W, H, margins, style, gym, growing, svgRef, car
                   <circle cx={b.x + b.w} cy={b.y + b.h / 2} r={dr} />
                   <path d={`M${b.x + b.w - dr * 0.5} ${b.y + b.h / 2}h${dr}m${-dr * 0.4} ${-dr * 0.4}l${dr * 0.4} ${dr * 0.4}l${-dr * 0.4} ${dr * 0.4}`} />
                 </g>
-                {label && <text className="chain" x={b.x} y={b.y - 5 / scale} fontSize={11 / scale}>{label}</text>}
+                {label && <text className="chain" x={b.x} y={b.y - 5 / scale} fontSize={11 / scale}>{label}{' · '}
+                  <tspan className="unlink" role="button" aria-label="Unlink this box, so it holds its own text"
+                    onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); unlink(b) }}>Unlink</tspan>
+                </text>}
               </g>
             )
           })}

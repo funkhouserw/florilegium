@@ -77,7 +77,8 @@ export function flow(stories: StoryText[], drawn: Box[][], style: TextStyle): Fl
     const lines: Line[] = []
     byStory.set(story.id, lines)
     const chain: { page: number; box: Box }[] = []
-    drawn.forEach((boxes, page) => boxes.forEach((box) => { if (box.story === story.id) chain.push({ page, box }) }))
+    // a box still being drawn takes no text until it could hold some, or it would chop a line of the story into letters
+    drawn.forEach((boxes, page) => boxes.forEach((box) => { if (box.story === story.id && box.w >= 30 && box.h >= 20) chain.push({ page, box }) }))
     if (!chain.length) continue
     const blocks: { node: Node; start: number; number: number }[] = []
     let number = 0

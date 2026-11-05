@@ -43,6 +43,8 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
 .caret { stroke: #1b2a6b; stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; animation: blink 1.06s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 .chain { fill: #2456c4; font-family: -apple-system, Helvetica, Arial, sans-serif; pointer-events: none; }
+.unlink { pointer-events: all; cursor: pointer; text-decoration: underline; }
+.unlink:hover { fill: #b5532a; }
 .typing { position: fixed; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; resize: none; overflow: hidden; pointer-events: none; font-size: 16px; }
 .composition { text-decoration: underline; pointer-events: none; white-space: pre; paint-order: stroke; stroke: #fefdfb; stroke-width: 3px; }
 .linker { cursor: pointer; }
