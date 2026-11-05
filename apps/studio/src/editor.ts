@@ -59,6 +59,16 @@ export function insertText(state: EditorState, text: string): Transaction {
   return shortcuts(tr, text)
 }
 
+// what the invisible field says changed: an accent picker replaces the letter just typed
+export function replaceBefore(state: EditorState, removed: number, text: string): Transaction {
+  const { head, empty, $head } = state.selection
+  const tr = state.tr
+  if (removed > 0 && empty) tr.delete(Math.max($head.start(), head - removed), head)
+  if (!text) return tr
+  tr.insertText(text)
+  return shortcuts(tr, text)
+}
+
 // Markdown typed as you go: "# " at a line's start, "**word**"
 function shortcuts(tr: Transaction, typed: string): Transaction {
   const $h = tr.selection.$head

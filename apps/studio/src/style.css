@@ -40,7 +40,14 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
 @keyframes blink { 50% { opacity: 0; } }
 .chain { fill: #2456c4; font-family: -apple-system, Helvetica, Arial, sans-serif; pointer-events: none; }
 .typing { position: fixed; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; resize: none; overflow: hidden; pointer-events: none; font-size: 16px; }
-.typing.composing { width: 240px; height: 30px; padding: 3px; opacity: 1; background: #fff; border: 1px solid #2456c4; z-index: 10; }
+.composition { text-decoration: underline; pointer-events: none; white-space: pre; paint-order: stroke; stroke: #fefdfb; stroke-width: 3px; }
+.linker { cursor: pointer; }
+.linker circle { fill: #fff; stroke: #2456c4; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.linker path { fill: none; stroke: #2456c4; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.linker:hover circle { fill: #2456c4; }
+.linker:hover path { stroke: #fff; }
+.banner { position: fixed; top: 10px; left: 344px; right: 24px; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; background: #2456c4; color: #fff; border-radius: 4px; font-size: 13px; }
+.banner button { border: 1px solid #fff; background: none; color: #fff; border-radius: 4px; padding: 3px 10px; font: inherit; cursor: pointer; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 3px; }
 .panel button.tool { width: 34px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-color: #c3c9dc; color: #1b2a6b; font-size: 12px; }
 .panel button.tool.on, .panel button.on { background: #2456c4; color: #fff; border-color: #2456c4; }

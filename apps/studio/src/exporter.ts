@@ -1,8 +1,8 @@
 // exporter.ts -- finished pages: a PNG; a PDF, the drawing as vector operators and the text as real
 // text in embedded fonts, so it can be selected and printed; and one self-contained HTML file.
 import fontkit from '@pdf-lib/fontkit'
-import { PDFDocument, PDFName, popGraphicsState, pushGraphicsState, rgb, setLineWidth, setStrokingColor, setTextRenderingMode, TextRenderingMode, type PDFFont } from 'pdf-lib'
-import { fontOf, type FlowPage, type Line, type TextStyle } from './flow'
+import { PDFDocument, PDFName, popGraphicsState, pushGraphicsState, rgb, setLineWidth, setStrokingColor, setTextRenderingMode, TextRenderingMode, type PDFFont, type PDFImage } from 'pdf-lib'
+import { fontOf, measure, type FlowPage, type Line, type Run, type TextStyle } from './flow'
 import { faceOf, type Family } from './fonts'
 
 // The gym as an image, the text on the canvas: an SVG in an <img> can't see the page's web fonts.
@@ -35,6 +35,34 @@ export async function pagePng(gym: string, page: FlowPage, style: TextStyle, pix
   } finally { URL.revokeObjectURL(url) }
 }
 
+// A PDF can't hold color emoji as text and these fonts have none, so each is drawn by the browser
+// and placed as a small image at the position it has on the page.
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+const EMOJI = /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20E3/u
+function emojiPng(g: string): Promise<ArrayBuffer> {
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = EMOJI_PX * 2
+  const c = canvas.getContext('2d')!
+  c.font = `${EMOJI_PX}px serif`
+  c.textBaseline = 'alphabetic'
+  c.fillText(g, EMOJI_PX * 0.5, EMOJI_PX * 1.25)
+  return new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b.arrayBuffer()) : rej(new Error('no emoji'))), 'image/png'))
+}
+const EMOJI_PX = 128
+// a run's text cut where emoji start and stop, each piece with its x
+function pieces(r: Run, size: number, family: string): { text: string; x: number; emoji: boolean }[] {
+  const out: { text: string; x: number; emoji: boolean }[] = []
+  let at = 0
+  for (const s of graphemes.segment(r.text)) {
+    const emoji = EMOJI.test(s.segment)
+    const last = out[out.length - 1]
+    if (last && !last.emoji && !emoji) last.text += s.segment
+    else out.push({ text: s.segment, x: r.x + measure(r.text.slice(0, at), r, size, family), emoji })
+    at = s.index + s.segment.length
+  }
+  return out
+}
+
 const hexColor = (h: string) => rgb(parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255)
 
 // ops: one page's drawing from florilegium-ink.lua, which names its opacity and multiply states
@@ -53,6 +81,10 @@ export async function pagesToPdf(pages: FlowPage[], ops: string[], style: TextSt
     fonts.set(file, { font, known: new Set(font.getCharacterSet()) })
   }
   const missing = new Set<string>()
+  const emojiImages = new Map<string, PDFImage>()
+  for (const l of pages.flatMap((p) => p.lines)) for (const r of l.runs) for (const q of pieces(r, l.size, style.family)) {
+    if (q.emoji && !emojiImages.has(q.text)) emojiImages.set(q.text, await pdf.embedPng(await emojiPng(q.text)))
+  }
   if (title) pdf.setTitle(title)
   const color = hexColor(style.color)
   pages.forEach((p, i) => {
@@ -67,12 +99,20 @@ export async function pagesToPdf(pages: FlowPage[], ops: string[], style: TextSt
       for (const l of lines) for (const r of l.runs) {
         const face = faceOf(files, r.bold, r.italic)
         const { font, known } = fonts.get(face.file)!
-        for (const ch of r.text) if (ch.trim() && !known.has(ch.codePointAt(0)!)) missing.add(ch)
-        if (!r.text.trim()) continue
-        // text state set outside the text object carries into it: fill and outline, a face made heavier
-        if (face.heavier) page.pushOperators(pushGraphicsState(), setTextRenderingMode(TextRenderingMode.FillAndOutline), setLineWidth(l.size * 0.02), setStrokingColor(color))
-        page.drawText(r.text, { x: r.x, y: H - l.y, size: l.size, font, color })
-        if (face.heavier) page.pushOperators(popGraphicsState())
+        for (const q of pieces(r, l.size, style.family)) {
+          if (q.emoji) {
+            // the image is twice the emoji's size, with its baseline 1.25 emoji down from the top
+            const side = l.size * 2
+            page.drawImage(emojiImages.get(q.text)!, { x: q.x - l.size * 0.5, y: H - l.y - l.size * 0.75, width: side, height: side })
+            continue
+          }
+          for (const ch of q.text) if (ch.trim() && !known.has(ch.codePointAt(0)!)) missing.add(ch)
+          if (!q.text.trim()) continue
+          // text state set outside the text object carries into it: fill and outline, a face made heavier
+          if (face.heavier) page.pushOperators(pushGraphicsState(), setTextRenderingMode(TextRenderingMode.FillAndOutline), setLineWidth(l.size * 0.02), setStrokingColor(color))
+          page.drawText(q.text, { x: q.x, y: H - l.y, size: l.size, font, color })
+          if (face.heavier) page.pushOperators(popGraphicsState())
+        }
       }
     }
     write(p.lines.filter((l) => l.layer === 'behind'))

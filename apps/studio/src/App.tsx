@@ -3,7 +3,7 @@
 // when you ask. Your work is kept in this browser as you go, and in a file when you ask.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { EditorState, type Transaction } from 'prosemirror-state'
-import { blockAt, deleteBack, deleteForward, enter, insertText, marksHere, newState, redo, replaceDoc, run, selectAll, selectRange, selectTo, setAlign, setBlock, step, toggle, toggleList, undo, wordAt } from './editor'
+import { blockAt, deleteBack, deleteForward, enter, marksHere, newState, redo, replaceBefore, replaceDoc, run, selectAll, selectRange, selectTo, setAlign, setBlock, step, toggle, toggleList, undo, wordAt } from './editor'
 import { flow, fontOf, lineOfPos, posOfX, remeasure, xOfPos, type Box, type FlowPage, type Layer, type Line, type TextStyle } from './flow'
 import { growGym } from './gym'
 import { download, pagePng, pagesToHtml, pagesToPdf } from './exporter'
@@ -20,6 +20,7 @@ const mac = /Mac|iPhone|iPad/.test(navigator.platform)
 type Drag =
   | { kind: 'draw'; page: number; x0: number; y0: number; id: number }
   | { kind: 'move' | 'size'; page: number; id: number; dx: number; dy: number }
+type Caret = { x: number; y0: number; y1: number; base: number; size: number }
 type TextDrag = { story: number; anchor: number; unit: 'char' | 'word' | 'block'; lo: number; hi: number }
 
 export function App() {
@@ -54,7 +55,8 @@ export function App() {
   const goalX = useRef<number | null>(null)                  // where up and down are aiming
   const [activeId, setActiveId] = useState<number | null>(null)
   const [focused, setFocused] = useState(false)
-  const [composing, setComposing] = useState(false)
+  const [composition, setComposition] = useState<string | null>(null)   // an accent or other text still being composed
+  const lastTyped = useRef('')
   const [selected, setSelected] = useState<{ page: number; id: number } | null>(null)
   const [linking, setLinking] = useState<number | null>(null)
   const [plain, setPlain] = useState<string | null>(null)
@@ -77,7 +79,7 @@ export function App() {
   const activeLines = (activeId !== null && byStory.get(activeId)) || []
   const titleBlock = texts.flatMap((t) => { const out: string[] = []; t.doc.forEach((b) => { if (b.textContent.trim()) out.push(b.textContent) }); return out })[0] ?? ''
   const title = titleBlock.slice(0, 120)
-  const fileBase = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'studio'
+  const fileBase = title.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'studio'
   const boxCount = (story: number) => drawn.reduce((n, p) => n + p.filter((b) => b.story === story).length, 0)
 
   // kept in this browser as you work; a full disk must not stop the work
@@ -161,6 +163,7 @@ export function App() {
     const l = nearest(lines, page, p.x, p.y, box.id)
     if (!l) return
     const pos = posOfX(l, p.x, style)
+    forgetTyped()
     setActiveId(box.story)
     setSelected({ page, id: box.id })
     goalX.current = null
@@ -228,12 +231,12 @@ export function App() {
     edit((st) => selectTo(st, n ? posOfX(n, x, style) : dir < 0 ? 1 : st.doc.content.size - 1, extend))
   }
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.nativeEvent.isComposing || !active) return
+    if (e.nativeEvent.isComposing || e.keyCode === 229 || !active) return
     const st = active.state
     const mod = mac ? e.metaKey : e.ctrlKey
     const alt = e.altKey
     const shift = e.shiftKey
-    const stop = () => e.preventDefault()
+    const stop = () => { e.preventDefault(); forgetTyped() }   // the cursor moves or the text changes some other way
     const k = e.key
     const keepsGoal = k === 'ArrowUp' || k === 'ArrowDown'
     if (!keepsGoal) goalX.current = null
@@ -276,12 +279,26 @@ export function App() {
       else if (l === 'y') { stop(); edit((s) => run(s, redo)) }
     }
   }
-  function onInput(e: React.FormEvent<HTMLTextAreaElement>) {
-    const ta = e.currentTarget
-    if (composing || (e.nativeEvent as InputEvent).isComposing) return
-    const v = ta.value
-    ta.value = ''
-    if (v) { goalX.current = null; edit((s) => insertText(s, v)) }
+  // The invisible field keeps the last few characters typed, because the Mac's accent picker (hold a
+  // key) replaces the letter before the cursor in it: what changed there is what changes in the story.
+  function syncTyping() {
+    const ta = typing.current
+    if (!ta) return
+    const old = lastTyped.current, now = ta.value
+    if (old === now) return
+    let i = 0
+    while (i < old.length && i < now.length && old[i] === now[i]) i++
+    if (i > 0 && /[\uD800-\uDBFF]/.test(old[i - 1])) i--          // never halfway through an emoji
+    const removed = old.length - i, added = now.slice(i)
+    const kept = now.slice(-8)
+    ta.value = kept
+    lastTyped.current = kept
+    goalX.current = null
+    edit((s) => replaceBefore(s, removed, added))
+  }
+  const forgetTyped = () => {
+    if (typing.current) typing.current.value = ''
+    lastTyped.current = ''
   }
   function onCopy(e: React.ClipboardEvent, cut: boolean) {
     if (!active || active.state.selection.empty) return
@@ -297,18 +314,19 @@ export function App() {
     const html = e.clipboardData.getData('text/html')
     const text = e.clipboardData.getData('text/plain')
     const slice = html ? sliceFromHtml(html) : text ? sliceFromMarkdown(text) : null
+    forgetTyped()
     if (slice) edit((s) => s.tr.replaceSelection(slice))
   }
 
   // the cursor and the highlight, page by page
   const marks = useMemo(() => {
-    const out = new Map<number, { rects: { x: number; y: number; w: number; h: number }[]; caret?: { x: number; y0: number; y1: number } }>()
+    const out = new Map<number, { rects: { x: number; y: number; w: number; h: number }[]; caret?: Caret }>()
     if (!active) return out
     const sel = active.state.selection
     const at = (page: number) => { let m = out.get(page); if (!m) out.set(page, (m = { rects: [] })); return m }
     if (sel.empty) {
       const l = lineOfPos(activeLines, sel.head)
-      if (l) at(l.page).caret = { x: xOfPos(l, sel.head, style), y0: l.y - l.size * 0.85, y1: l.y + l.size * 0.25 }
+      if (l) at(l.page).caret = { x: xOfPos(l, sel.head, style), y0: l.y - l.size * 0.85, y1: l.y + l.size * 0.25, base: l.y, size: l.size }
     } else {
       for (const l of activeLines) {
         if (l.to < sel.from || l.from > sel.to) continue
@@ -335,6 +353,12 @@ export function App() {
   })
 
   // ---- the boxes ----
+  useEffect(() => {
+    if (linking === null) return
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setLinking(null) }
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [linking])
   function changeSize(k: SizeKey) {
     const old = SIZES[sizeKey], next = SIZES[k]
     const sx = next.w / old.w, sy = next.h / old.h
@@ -398,19 +422,26 @@ export function App() {
     setSelected(null)
     if (activeId !== null && ids.has(activeId) && !drawn.some((p, i) => i !== page && p.some((b) => b.story === activeId))) setActiveId(null)
   }
+  // Linking two boxes makes them one chain, whichever you started from. Text in both joins up in
+  // reading order; an empty box just takes its place in the other's chain.
   function linkTo(box: Box) {
     const from = linking!
     setLinking(null)
     if (box.story === from) return
-    // the target's text joins the end of the story, and its boxes join the chain
-    const other = stories.find((s) => s.id === box.story)
-    setStories((all) => all.filter((s) => s.id !== box.story).map((s) => {
-      if (s.id !== from || !other?.state.doc.textContent.trim()) return s
-      const tr = s.state.tr.insert(s.state.doc.content.size, other.state.doc.content)
-      return { ...s, state: s.state.apply(tr) }
+    const pageOf = (id: number) => pages.findIndex((p) => p.boxes.some((b) => b.story === id))
+    const a = stories.find((s) => s.id === from), b = stories.find((s) => s.id === box.story)
+    if (!a || !b) return
+    const aEmpty = !a.state.doc.textContent.trim(), bEmpty = !b.state.doc.textContent.trim()
+    const first = aEmpty ? b : bEmpty ? a : pageOf(a.id) <= pageOf(b.id) ? a : b
+    const second = first === a ? b : a
+    setStories((all) => all.filter((s) => s.id !== second.id).map((s) => {
+      if (s.id !== first.id) return s
+      const has = second.state.doc.textContent.trim()
+      const state = has ? s.state.apply(s.state.tr.insert(s.state.doc.content.size, second.state.doc.content)) : s.state
+      return { ...s, state, auto: a.auto || b.auto }
     }))
-    setDrawn((d) => d.map((p) => p.map((b) => (b.story === box.story ? { ...b, story: from } : b))))
-    setActiveId(from)
+    setDrawn((d) => d.map((p) => p.map((q) => (q.story === second.id ? { ...q, story: first.id } : q))))
+    setActiveId(first.id)
   }
   function unlink(page: number, box: Box) {
     const id = newStoryId()
@@ -543,10 +574,9 @@ export function App() {
               </select>
             </label>
             <div className="row">
-              <button onMouseDown={keep} className={linking !== null ? 'on' : ''} onClick={() => setLinking(linking === null ? active.id : null)}>{linking !== null ? 'Cancel link' : 'Flow into…'}</button>
+              <button onMouseDown={keep} className={linking !== null ? 'on' : ''} onClick={() => setLinking(linking === null ? active.id : null)}>{linking !== null ? 'Cancel link' : 'Link to a box…'}</button>
               <button onMouseDown={keep} disabled={boxCount(active.id) < 2} onClick={() => unlink(selected!.page, selectedBox)}>Unlink box</button>
             </div>
-            {linking !== null && <p className="hint">Click the box the text should carry on into, or draw a new one.</p>}
             <label className="check"><input type="checkbox" checked={active.auto} onChange={(e) => { const v = e.target.checked; setStories((all) => all.map((s) => (s.id === active.id ? { ...s, auto: v } : s))) }} /> Add pages when the text runs over</label>
           </div>
         )}
@@ -633,21 +663,29 @@ export function App() {
         {error && <p className="error" role="alert">{error}</p>}
       </aside>
       <main className="pages">
+        {linking !== null && (
+          <div className="banner" role="status">
+            <span>Click the box to link, or draw a new one. Text flows through linked boxes in page order.</span>
+            <button onClick={() => setLinking(null)}>Cancel</button>
+          </div>
+        )}
         {pages.map((p, i) => {
           const m = marks.get(i)
           return (
             <PageView key={i} index={i} page={p} W={W} H={H} style={style} gym={gyms[i]} growing={growing}
-              svgRef={(el) => { svgs.current[i] = el }} caretRef={caretEl} caret={focused ? m?.caret : undefined} rects={m?.rects ?? []}
+              svgRef={(el) => { svgs.current[i] = el }} caretRef={caretEl} caret={focused ? m?.caret : undefined} composition={composition} rects={m?.rects ?? []}
               linking={linking !== null} activeStory={activeId} selectedId={selected?.page === i ? selected.id : null}
               chainLabel={(b) => { const ch = chainOf(b.story); return ch.length > 1 ? `${ch.findIndex((c) => c.page === i && c.id === b.id) + 1}/${ch.length}` : '' }}
-              setDragging={setDragging} editPage={editPage} drawBox={drawBox} afterDraw={afterDraw} startText={startText} removeBox={removeBox} removePage={drawn.length > 1 && i < drawn.length ? () => removePage(i) : undefined} select={(id) => setSelected({ page: i, id })} />
+              setDragging={setDragging} editPage={editPage} drawBox={drawBox} afterDraw={afterDraw} startText={startText} removeBox={removeBox} removePage={drawn.length > 1 && i < drawn.length ? () => removePage(i) : undefined} select={(id) => setSelected({ page: i, id })}
+              startLink={(b) => { setSelected({ page: i, id: b.id }); setActiveId(b.story); setLinking(linking === null ? b.story : null) }} />
           )
         })}
       </main>
-      <textarea ref={typing} className={'typing' + (composing ? ' composing' : '')} aria-label="Text of the box you are editing" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-        onKeyDown={onKey} onInput={onInput} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-        onCompositionStart={() => setComposing(true)}
-        onCompositionEnd={(e) => { setComposing(false); const t = e.currentTarget; const v = t.value; t.value = ''; if (v) edit((s) => s.tr.insertText(v)) }}
+      <textarea ref={typing} className="typing" aria-label="Text of the box you are editing" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+        onKeyDown={onKey} onInput={() => { if (composition === null) syncTyping() }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        onCompositionStart={() => setComposition('')}
+        onCompositionUpdate={(e) => setComposition(e.data)}
+        onCompositionEnd={() => { setComposition(null); syncTyping() }}
         onCopy={(e) => onCopy(e, false)} onCut={(e) => onCopy(e, true)} onPaste={onPaste} />
     </div>
   )
@@ -701,15 +739,15 @@ function LinesOf({ lines, style }: { lines: Line[]; style: TextStyle }) {
   )
 }
 
-function PageView({ index, page, W, H, style, gym, growing, svgRef, caretRef, caret, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select }: {
+function PageView({ index, page, W, H, style, gym, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink }: {
   index: number; page: FlowPage; W: number; H: number; style: TextStyle; gym?: string; growing: boolean
   svgRef: (el: SVGSVGElement | null) => void; caretRef: React.RefObject<SVGLineElement | null>
-  caret?: { x: number; y0: number; y1: number }; rects: { x: number; y: number; w: number; h: number }[]
+  caret?: Caret; composition: string | null; rects: { x: number; y: number; w: number; h: number }[]
   linking: boolean; activeStory: number | null; selectedId: number | null; chainLabel: (b: Box) => string
   setDragging: (b: boolean) => void; editPage: (page: number, fn: (b: Box[]) => Box[]) => void
   drawBox: (page: number, x: number, y: number) => number; afterDraw: (page: number, id: number, ok: boolean) => void
   startText: (e: React.PointerEvent, page: number, box: Box) => void; removeBox: (page: number, box: Box) => void
-  removePage?: () => void; select: (id: number) => void
+  removePage?: () => void; select: (id: number) => void; startLink: (b: Box) => void
 }) {
   const ref = useRef<SVGSVGElement | null>(null)
   const drag = useRef<Drag | null>(null)
@@ -786,10 +824,16 @@ function PageView({ index, page, W, H, style, gym, growing, svgRef, caretRef, ca
                 <circle className="del" cx={b.x + b.w} cy={b.y} r={dr} role="button" aria-label="Delete this text box"
                   onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); removeBox(index, b) }} />
                 <path className="delx" d={`M${b.x + b.w - dr / 2} ${b.y - dr / 2}l${dr} ${dr}m0 ${-dr}l${-dr} ${dr}`} />
+                <g className="linker" role="button" aria-label="Link this box to another" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); startLink(b) }}>
+                  <title>Link this box to another, so text flows between them</title>
+                  <circle cx={b.x + b.w} cy={b.y + b.h / 2} r={dr} />
+                  <path d={`M${b.x + b.w - dr * 0.5} ${b.y + b.h / 2}h${dr}m${-dr * 0.4} ${-dr * 0.4}l${dr * 0.4} ${dr * 0.4}l${-dr * 0.4} ${dr * 0.4}`} />
+                </g>
                 {label && <text className="chain" x={b.x} y={b.y - 5 / scale} fontSize={11 / scale}>{label}</text>}
               </g>
             )
           })}
+          {caret && composition && <text className="composition" x={caret.x} y={caret.base} fontSize={caret.size} fontFamily={style.family} fill={style.color}>{composition}</text>}
           {caret && <line ref={caretRef} className="caret" x1={caret.x} x2={caret.x} y1={caret.y0} y2={caret.y1} />}
         </svg>
       </div>
