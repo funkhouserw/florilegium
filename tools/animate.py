@@ -5,23 +5,24 @@ installed, an MP4. The last frame is held for a few seconds before the GIF loops
 
     python3 tools/animate.py --seed 7 [--explain] [--fps 20] [--seconds 13] [--jobs 8]
                              [--width 1080] [--gif-width 640] [--hold 3] [--run tools/in-docker]
+                             [--theme cattree]
 
 Writes build/grow-7.gif and build/grow-7.mp4 (build/grow-7-explain.* with --explain);
 --out sets the path without the extension.
 """
 import argparse, glob, os, shlex, shutil, subprocess, sys
 from concurrent.futures import ThreadPoolExecutor
-from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def build(job, a, frames, run, explain, width, framedir):
     """lualatex for frames a..b of `frames`, then one PNG per page, named by frame."""
     first, last = job
-    name = f"build/anim-{a.seed}{'-explain' if explain else ''}-{first:04d}"
+    name = f"build/anim-{a.theme or 'grow'}-{a.seed}{'-explain' if explain else ''}-{first:04d}"
     defs = (rf"\def\florilegiumseed{{{a.seed}}}\def\animframes{{{frames}}}"
             rf"\def\animfrom{{{first}}}\def\animto{{{last}}}"
-            + (r"\def\animexplain{explain}" if explain else ""))
+            + (r"\def\animexplain{explain}" if explain else "")
+            + (rf"\def\animtheme{{{a.theme}}}" if a.theme else ""))
     cmd = shlex.split(run) + ["lualatex", "-interaction=nonstopmode", "-halt-on-error",
                               f"-jobname={name}", defs + r"\input{animation.tex}"]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
@@ -41,6 +42,7 @@ def build(job, a, frames, run, explain, width, framedir):
 
 def gif_pillow(framedir, n, out, fps, hold, width):
     # fallback without ffmpeg: one palette from the last (fullest) frame for every frame
+    from PIL import Image
     ims = [Image.open(os.path.join(framedir, f"{k:04d}.png")).convert("RGB") for k in range(1, n + 1)]
     h = round(ims[0].height * width / ims[0].width)
     ims = [im.resize((width, h), Image.LANCZOS) for im in ims]
@@ -60,10 +62,11 @@ def main():
     ap.add_argument("--width", type=int, default=1080, help="frame width in pixels (MP4)")
     ap.add_argument("--gif-width", type=int, default=640)
     ap.add_argument("--run", default="", help="command prefix for lualatex, e.g. tools/in-docker")
+    ap.add_argument("--theme", help="animate this theme instead of the garden")
     ap.add_argument("--out", help="output path without extension (default build/grow-SEED[-explain])")
     a = ap.parse_args()
 
-    out = a.out or os.path.join("build", f"grow-{a.seed}{'-explain' if a.explain else ''}")
+    out = a.out or os.path.join("build", f"{a.theme or 'grow'}-{a.seed}{'-explain' if a.explain else ''}")
     out = os.path.join(ROOT, out)
     framedir = out + "-frames"
     shutil.rmtree(framedir, ignore_errors=True)

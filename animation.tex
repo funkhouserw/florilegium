@@ -1,12 +1,14 @@
 %% animation.tex -- the growth of one garden, one page per frame; used by tools/animate.py.
 %%   lualatex -jobname=build/anim "\def\florilegiumseed{7}\def\animframes{260}\input{animation.tex}"
 %% Optional: \def\animfrom{..}\def\animto{..} for a range of frames (parallel jobs),
-%% \def\animexplain{explain} to mark the free disc that each branch grows to.
+%% \def\animexplain{explain} to mark the free disc that each branch grows to,
+%% \def\animtheme{cattree} to animate a theme (tools/animate.py --theme).
 \documentclass[11pt,a4paper]{article}
 \renewcommand\rmdefault{cmr}\renewcommand\sfdefault{cmss}\renewcommand\ttdefault{cmtt}
 \usepackage[T1]{fontenc}
 \usepackage[a4paper,left=68mm,right=22mm,top=32mm,bottom=30mm,headsep=8mm]{geometry}
 \usepackage{fancyhdr}
+\ifdefined\animtheme\PassOptionsToPackage{theme=\animtheme}{florilegium}\fi
 \usepackage[grown]{florilegium}
 \pagestyle{fancy}\fancyhf{}
 \fancyhead[R]{\small\textsc{3\quad Procedural ornament}}
@@ -22,6 +24,16 @@
   % every frame is the same page: same number, same text, same seed
   \setcounter{page}{1}\setcounter{section}{3}\setcounter{subsection}{2}
   \florilegiumframe[\animexplain]{\the\animk}{\animframes}
+  \ifdefined\animtheme
+  \subsection{Watch it get built}
+
+  This gym is built from seed \texttt{\ifx\florilegiumseed\empty page\else\florilegiumseed\fi}.
+  It starts on the floor: a tower of posts wound with sisal, in whole levels, the shorter ones
+  holding up platforms the taller ones run through. Then the route climbs the wall the way a
+  cat would, each piece joined to the last, and what room is left fills with shelves, steps and
+  toys. Because the text stops here, the gym spreads along the floor beneath it. The cats come
+  last. The final frame is exactly the page that this seed always gives.
+  \else
   \subsection{Watch it grow}
 
   This garden grows from seed \texttt{\ifx\florilegiumseed\empty page\else\florilegiumseed\fi}.
@@ -31,6 +43,7 @@
   chooses a motif of that stem's plant that fits it, and grows a branch to it. Big holes
   come first, so the large clusters land early; the last small gaps get buds and small
   leaves. The final frame is exactly the page that this seed always gives.
+  \fi
   \florilegiumtextend
   \clearpage
   \advance\animk by 1
