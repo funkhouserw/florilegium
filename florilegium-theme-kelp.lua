@@ -257,62 +257,435 @@ function M.fish(rng, kind, L)
   end
 end
 
--- a sea otter on its back at the surface, head toward +x, a clam held on its chest in its forepaws, hind
--- feet up; L = length nose to tail tip
-function M.otter(rng, L)
-  local fur, dark, pale = tone(0.22), tone(0.12), tone(0.72)
-  -- tail, flat and tapering
-  fill({ { -L * 0.3, -L * 0.02 }, { -L * 0.48, L * 0.03 }, { -L * 0.55, L * 0.0 }, { -L * 0.48, -L * 0.06 }, { -L * 0.3, -L * 0.08 } }, dark)
-  -- the body, lying on its back
-  local body = {}
-  for k = 0, 22 do
-    local a = 2 * pi * k / 22
-    local x, y = L * 0.33 * cos(a), L * 0.085 * sin(a)
-    if y > 0 then y = y * 1.2 end
-    body[#body + 1] = { x - L * 0.02, y }
+-- the sea otter, a rig of a spine with radius profiles, a head frame, flippers and paws that each pose fills in
+-- (by marginalia-partner): o.pose "clam", "asleep", "pup" or "dive", o.age 0..1, o.water (a waterline at y = 0).
+-- Drawn at the origin, head toward +x, L = nose to tail tip, in cm.
+local OT = (function()
+  local M = {}
+
+  local sin, cos, pi, abs, max, min, sqrt, floor = math.sin, math.cos, math.pi, math.abs, math.max, math.min, math.sqrt, math.floor
+  local tone, white = ink.tone, ink.white
+  local rad = pi / 180
+  local CM = 72 / 2.54
+  local function lerp(a, b, t) return a + (b - a) * t end
+  local function clamp(v, a, b) return max(a, min(b, v)) end
+
+  -- ---------------------------------------------------------------- helpers
+  local function area(p)
+    local s = 0
+    for i = 1, #p do local a, b = p[i], p[i % #p + 1] s = s + a[1] * b[2] - b[1] * a[2] end
+    return s
   end
-  fill(body, fur)
-  -- hind feet, webbed, up out of the water
-  for _, dx in ipairs({ -0.24, -0.17 }) do
-    local fx = L * dx
-    fill({ { fx, L * 0.06 }, { fx - L * 0.05, L * 0.16 }, { fx - L * 0.02, L * 0.2 }, { fx + L * 0.02, L * 0.19 }, { fx + L * 0.04, L * 0.16 }, { fx + L * 0.02, L * 0.06 } }, dark)
-    if fine() then for k = -1, 1 do ink.moveto(fx, L * 0.1) ink.lineto(fx + k * L * 0.025, L * 0.185) end ink.stroke(tone(0.3), 0.25) end
+  local function ccw(p)
+    if area(p) >= 0 then return p end
+    local r = {}
+    for i = #p, 1, -1 do r[#r + 1] = p[i] end
+    return r
   end
-  if fine() then
-    fill(ellipse(L * 0.05, L * 0.045, L * 0.24, L * 0.045, 16), tone(0.32), 0.9)   -- the lighter chest
-    for _ = 1, 30 do                                   -- fur
-      local x, y = rng.range(-L * 0.3, L * 0.28), rng.range(-L * 0.06, L * 0.08)
-      ink.moveto(x, y) ink.lineto(x - L * 0.02, y + rng.sym(L * 0.01))
+  local function ellipse(cx, cy, rx, ry, n, a0)
+    local out = {}
+    n = n or 16
+    local ca, sa = cos(a0 or 0), sin(a0 or 0)
+    for k = 0, n - 1 do
+      local a = 2 * pi * k / n
+      local x, y = rx * cos(a), ry * sin(a)
+      out[#out + 1] = { cx + x * ca - y * sa, cy + x * sa + y * ca }
     end
-    ink.stroke(tone(0.14), 0.25, 0.6)
+    return out
   end
-  -- the head, lifted toward +x: round, a pale whiskered face, small ears
-  local hx, hy = L * 0.36, L * 0.07
-  fill(ellipse(hx, hy, L * 0.09, L * 0.085, 16), fur)
-  fill(ellipse(hx + L * 0.035, hy - L * 0.01, L * 0.065, L * 0.06, 14), pale)
-  fill(ellipse(hx - L * 0.05, hy + L * 0.07, L * 0.02, L * 0.018, 8), dark)       -- ear
-  ink.circle(hx + L * 0.02, hy + L * 0.025, L * 0.011) ink.circle(hx + L * 0.06, hy + L * 0.03, L * 0.011) ink.fill(tone(0.04))
-  fill(ellipse(hx + L * 0.085, hy - L * 0.002, L * 0.016, L * 0.012, 8), tone(0.04))  -- nose
-  if fine() then
-    ink.moveto(hx + L * 0.08, hy - L * 0.025) ink.curveto(hx + L * 0.07, hy - L * 0.04, hx + L * 0.05, hy - L * 0.04, hx + L * 0.045, hy - L * 0.03)
-    ink.stroke(tone(0.1), 0.3)
-    for k = -1, 1 do
-      ink.moveto(hx + L * 0.08, hy - L * 0.012) ink.lineto(hx + L * 0.15, hy - L * 0.012 + k * L * 0.018)
-      ink.moveto(hx + L * 0.05, hy - L * 0.015) ink.lineto(hx - L * 0.0, hy - L * 0.035 + k * L * 0.012)
+  -- a smooth curve through pts, as f(v) -> x, y by arclength, and its length
+  local function curve(pts)
+    local c = ink.catmull(pts, 10)
+    local s = { 0 }
+    for i = 2, #c do s[i] = s[i - 1] + sqrt((c[i][1] - c[i - 1][1]) ^ 2 + (c[i][2] - c[i - 1][2]) ^ 2) end
+    local T = s[#c]
+    return function(v)
+      local t = clamp(v, 0, 1) * T
+      local lo, hi = 1, #c
+      while hi - lo > 1 do local m = (lo + hi) // 2 if s[m] <= t then lo = m else hi = m end end
+      local f = (t - s[lo]) / max(1e-9, s[hi] - s[lo])
+      return lerp(c[lo][1], c[hi][1], f), lerp(c[lo][2], c[hi][2], f)
+    end, T
+  end
+  -- a piecewise-linear profile from { {v, value}, ... }, eased
+  local function profile(t)
+    return function(v)
+      for i = 2, #t do
+        if v <= t[i][1] then
+          local f = (v - t[i - 1][1]) / (t[i][1] - t[i - 1][1])
+          f = f * f * (3 - 2 * f)
+          return lerp(t[i - 1][2], t[i][2], f)
+        end
+      end
+      return t[#t][2]
     end
-    ink.stroke(tone(0.3), 0.2, 0.8)
   end
-  -- the clam on its chest, the forepaws round it
-  ink.in_accent(function()
-    local cx, cy = L * 0.17, L * 0.12
-    local sh = {}
-    for k = 0, 12 do local a = pi * k / 12 sh[#sh + 1] = { cx + L * 0.045 * cos(a), cy + L * 0.035 * sin(a) } end
-    fill(sh, tone(0.45))
-    if fine() then for k = 1, 5 do local a = pi * k / 6 ink.moveto(cx, cy) ink.lineto(cx + L * 0.042 * cos(a), cy + L * 0.033 * sin(a)) end ink.stroke(tone(0.25), 0.25) end
-  end)
-  fill(ellipse(L * 0.12, L * 0.11, L * 0.022, L * 0.03, 10, 0.4), dark)
-  fill(ellipse(L * 0.22, L * 0.11, L * 0.022, L * 0.03, 10, -0.4), dark)
-end
+  -- a frame: local (u, w) -> rig (x, y), at (x, y) turned by a degrees, scaled s, mirrored by m (-1 flips w)
+  local function frame(x, y, a, s, m)
+    local c, sn = cos(a * rad), sin(a * rad)
+    m = m or 1
+    return function(u, w) u = u * m return x + s * (u * c - w * sn), y + s * (u * sn + w * c) end
+  end
+  local function mapped(F, pts) local out = {} for i, p in ipairs(pts) do out[i] = { F(p[1], p[2]) } end return out end
+
+  -- ---------------------------------------------------------------- poses: each fills in a rig, in units of L
+  local POSES = {}
+
+  local function floatrig(rng)
+    local lift = rng.range(6, 28)                      -- the head held up off the water, degrees
+    local girth = rng.range(0.9, 1.12)                 -- a lean animal or a stout one
+    local ch = rng.range(-0.012, 0.016)                -- how high the chest rides
+    local r = {
+      up = true, water = 0,
+      -- tail tip to base, flat on the water; the spine from the rump through the hips, belly and chest to
+      -- the neck (inside the head): the chest rides highest, the hips at the waterline
+      tail = { { -0.5, 0.022 + rng.sym(0.01) }, { -0.38, 0.012 }, { -0.21, 0.004 } },
+      tailw = 0.034,
+      spine = { { -0.29, -0.004 }, { -0.16, 0.002 }, { -0.02, 0.024 + ch * 0.4 }, { 0.1, 0.052 + ch * 0.8 }, { 0.2, 0.083 + ch }, { 0.27, 0.118 + ch }, { 0.33, 0.15 + ch } },
+      top = profile({ { 0, 0.0 }, { 0.05, 0.036 }, { 0.2, 0.064 }, { 0.5, 0.094 }, { 0.66, 0.1 }, { 0.82, 0.088 }, { 1, 0.04 } }),
+      bot = profile({ { 0, 0.0 }, { 0.05, 0.032 }, { 0.25, 0.058 }, { 0.55, 0.074 }, { 0.78, 0.07 }, { 1, 0.04 } }),
+      head = { 0.352, 0.155 + ch, lift, 0.09 },
+      -- hind flippers: hip (where the leg leaves the body), heel, angle of the foot (degrees from +x), length, far?
+      feet = {
+        { -0.17, 0.045, -0.2, 0.1, 104 + rng.sym(10), 0.105, true },
+        { -0.13, 0.05, -0.155, 0.105, 88 + rng.sym(10), 0.11, false },
+      },
+    }
+    local t, b = r.top, r.bot
+    r.top = function(v) return t(v) * girth end
+    r.bot = function(v) return b(v) * girth end
+    if rng.chance(0.25) then table.remove(r.feet, 1) end   -- one foot down in the water
+    r.ch = ch
+    return r
+  end
+
+  local function lift(r, dy) for _, a in ipairs(r.arms or {}) do a[2], a[4] = a[2] + dy, a[4] + dy end end
+  POSES.clam = function(rng)
+    local r = floatrig(rng)
+    r.arms = { { 0.21, 0.12, 0.105, 0.172, true }, { 0.2, 0.115, 0.2, 0.19, false } }
+    r.prop = "clam"
+    r.clam = { 0.15, 0.192 + r.ch }
+    lift(r, r.ch)
+    return r
+  end
+  POSES.asleep = function(rng)
+    local r = floatrig(rng)
+    r.head[3] = rng.range(0, 6)                        -- the head back on the water
+    r.face = "asleep"
+    r.arms = { { 0.21, 0.12, 0.14, 0.168, true }, { 0.2, 0.115, 0.205, 0.178, false } }   -- paws folded on the chest
+    r.prop = "kelp"
+    lift(r, r.ch)
+    return r
+  end
+  POSES.pup = function(rng)
+    local r = floatrig(rng)
+    r.arms = { { 0.21, 0.12, 0.04, 0.2, true }, { 0.2, 0.115, 0.1, 0.215, false } }    -- holding the pup
+    r.prop = "pup"
+    lift(r, r.ch)
+    return r
+  end
+  POSES.dive = function(rng)
+    local b = rng.range(0.9, 1.15)                     -- how steeply it goes down
+    return {
+      up = false, water = nil,
+      tail = { { -0.47, 0.17 * b }, { -0.36, 0.11 * b }, { -0.25, 0.065 * b } },
+      tailw = 0.04,
+      spine = { { -0.27, 0.07 * b }, { -0.15, 0.04 * b }, { -0.01, -0.0 }, { 0.13, -0.05 * b }, { 0.22, -0.1 * b }, { 0.3, -0.17 * b } },
+      top = profile({ { 0, 0.0 }, { 0.06, 0.034 }, { 0.15, 0.05 }, { 0.45, 0.065 }, { 0.75, 0.062 }, { 1, 0.04 } }),   -- the back
+      bot = profile({ { 0, 0.0 }, { 0.06, 0.035 }, { 0.2, 0.055 }, { 0.5, 0.07 }, { 0.8, 0.062 }, { 1, 0.04 } }),         -- the belly
+      head = { 0.345, -0.205 * b, -38 * b, 0.08 },
+      feet = {
+        { -0.2, 0.03 * b, -0.27, 0.0 * b, 190 + rng.sym(10), 0.12, true },
+        { -0.16, 0.02 * b, -0.24, -0.03 * b, 200 + rng.sym(10), 0.125, false },
+      },
+      arms = { { 0.17, -0.1 * b, 0.22, -0.17 * b, true }, { 0.16, -0.11 * b, 0.21, -0.18 * b, false } },   -- tucked to the chest
+    }
+  end
+
+  -- ---------------------------------------------------------------- the otter
+  function M.otter(rng, L, o)
+    o = o or {}
+    local pose = POSES[o.pose] and o.pose or "clam"
+    local R = POSES[pose](rng)
+    local age = o.age or rng.range(0, 1)
+    local t0 = (o.tone or 0.24) + rng.sym(0.03)
+    ink.push()
+    ink.scale(L)
+    local D = ink.unit()                                -- the otter's length on the page, cm
+    local fine = D > 3.2 and ink.get_lift() < 0.3       -- fur, whiskers, toe lines
+    local bp = function(f) return f * D * CM end        -- a width as a fraction of L, in bp
+    local water = R.water
+    if o.water == false then water = nil end
+
+    -- the body's outline: a blade along the spine, tufted on top when fine
+    local sp = curve(R.spine)
+    local ph = rng.range(0, 2 * pi)
+    local tuft = fine and function(v, side) local q = (v * 46 + ph + side * 0.5) % 1 return 0.004 * (q < 0.25 and q / 0.25 or 1 - (q - 0.25) / 0.75) ^ 2 * sin(pi * v) end or nil
+    local body = ccw((ink.blade(sp, 40, R.top, R.bot, tuft)))
+    local tl = curve(R.tail)
+    local tw = R.tailw
+    local tail = ccw((ink.blade(tl, 20, function(v) return tw * (0.6 + 0.4 * sin(pi * min(1, v * 1.08)) ^ 0.35) * (1.05 - 0.25 * abs(v - 0.55)) end,
+      function(v) return tw * 0.8 * (0.6 + 0.4 * sin(pi * min(1, v * 1.08)) ^ 0.35) end)))
+
+    -- the head, in its own frame: nose toward +u, r its radius
+    local h = R.head
+    local hr = h[4] * rng.range(0.96, 1.06)
+    local H = frame(h[1], h[2], h[3], hr)
+    local skull = ccw(mapped(H, ellipse(0, 0, 1, 0.9, 18)))
+    local pads = ccw(mapped(H, ellipse(0.72, -0.28, 0.56, 0.46, 14)))        -- the wide whisker pads
+    local jowl = ccw(mapped(H, ellipse(0.25, -0.5, 0.65, 0.42, 14)))
+    local ear = ccw(mapped(H, ellipse(-0.42, 0.8, 0.2, 0.13, 10, 0.5)))
+
+    local function silhouette()
+      ink.smooth(tail, true)
+      ink.smooth(body, true)
+      ink.smooth(skull, true) ink.smooth(pads, true) ink.smooth(jowl, true) ink.smooth(ear, true, 0.5)
+    end
+
+    -- hind flipper from its heel (hx, hy), pointing at a (degrees), length f: a broad webbed fan,
+    -- five toes, the outer one longest
+    local function flipper(hip_x, hip_y, hx, hy, a, f, far)
+      local c = tone(t0 - (far and 0.08 or 0.0))
+      -- the leg, short and thick
+      ink.smooth(ink.ribbon({ { hip_x, hip_y }, { lerp(hip_x, hx, 0.5), lerp(hip_y, hy, 0.5) + 0.005 }, { hx, hy } }, function(u) return lerp(0.06, 0.04, u) end), true)
+      ink.fill(c)
+      local F = frame(hx, hy, a - 90, f, R.up and 1 or -1)
+      local pts = { { 0.16, 0.02 }, { 0.3, 0.45 } }
+      local toes = { 0.86, 0.93, 0.97, 1.0, 1.05 }        -- inner to outer
+      for k = 1, 5 do
+        local u = lerp(0.34, -0.4, (k - 1) / 4)
+        local tip = toes[k]
+        pts[#pts + 1] = { u + 0.06, tip - 0.035 }
+        pts[#pts + 1] = { u, tip }
+        pts[#pts + 1] = { u - 0.06, tip - 0.035 }
+        if k < 5 then pts[#pts + 1] = { u - 0.092, tip - 0.06 } end   -- the web between toes, shallow
+      end
+      pts[#pts + 1] = { -0.42, 0.45 }
+      pts[#pts + 1] = { -0.14, 0.02 }
+      local P = mapped(F, pts)
+      ink.smooth(P, true, 0.8) ink.fill(c)
+      if fine then
+        for k = 1, 5 do
+          local u = lerp(0.34, -0.4, (k - 1) / 4)
+          local a1, b1 = F(u * 0.4, 0.35)
+          local a2, b2 = F(u, toes[k] - 0.12)
+          ink.moveto(a1, b1) ink.lineto(a2, b2)
+        end
+        ink.stroke(tone(t0 + 0.14), bp(0.0035), 0.6)
+        -- a lit edge on the outer toe
+        local e = {}
+        for _, q in ipairs({ { -0.14, 0.05 }, { -0.36, 0.45 }, { -0.36, 0.95 } }) do e[#e + 1] = { F(q[1], q[2]) } end
+        ink.smooth(e, false) ink.stroke(white, bp(0.004), 0.25)
+      end
+    end
+
+    -- forearm from the shoulder (sx, sy) to the paw (px, py): short, ending in a round mitten
+    local function arm(sx, sy, px, py, far)
+      local c = tone(t0 - (far and 0.09 or 0.02))
+      local mx, my = lerp(sx, px, 0.5), lerp(sy, py, 0.5) + 0.012
+      ink.smooth(ink.ribbon({ { sx, sy }, { mx, my }, { px, py } }, function(u) return lerp(0.05, 0.034, u) end), true)
+      ink.fill(c)
+      ink.smooth(ellipse(px, py, 0.026, 0.021, 12, 0.3), true) ink.fill(tone(t0 - (far and 0.13 or 0.08)))
+      if fine and not far then
+        ink.moveto(mx - 0.01, my + 0.016) ink.lineto(px - 0.006, py + 0.02)
+        ink.stroke(white, bp(0.004), 0.22)
+      end
+    end
+
+    -- ---------------------------------------------------------------- painting, back to front
+    for _, f in ipairs(R.feet) do if f[7] then flipper(f[1], f[2], f[3], f[4], f[5], f[6], true) end end
+    if R.arms then for _, a in ipairs(R.arms) do if a[5] and pose == "dive" then arm(a[1], a[2], a[3], a[4], true) end end end
+
+    silhouette() ink.stroke(tone(t0 - 0.14), bp(0.007))
+    silhouette() ink.fill(tone(t0))
+    silhouette() ink.clip()
+      -- the side away from the light: the back when floating, the belly's far side when diving
+      local under = ink.blade(sp, 30, function() return 0 end, function(v) return R.bot(v) * 1.2 end)
+      ink.smooth(under, true) ink.fill(tone(t0 - 0.1), 0.6)
+      ink.smooth(ink.blade(tl, 16, function() return 0 end, function() return tw * 1.2 end), true) ink.fill(tone(t0 - 0.1), 0.5)
+      -- the chest and belly paler on a float (the fur is lighter there, and lit)
+      for b = 1, 3 do                                 -- the lit side in three soft bands
+        local k = ({ 0.0, 0.35, 0.62 })[b]
+        ink.smooth(ink.blade(sp, 30, function(v) return R.top(v) * 1.1 end, function(v) return -R.top(v) * k end), true)
+        ink.fill(tone(t0 + (R.up and 0.1 or 0.06)), 0.32)
+      end
+      -- fur: short ticks along the spine, dark and light
+      local n = fine and floor(12 + 8 * D) or 0
+      for pass = 1, 2 do
+        for _ = 1, n do
+          local v = rng.range(0.02, 0.98)
+          local x, y = sp(v)
+          local x2, y2 = sp(v + 0.02)
+          local dx, dy = x2 - x, y2 - y
+          local l = sqrt(dx * dx + dy * dy) + 1e-9
+          dx, dy = dx / l, dy / l
+          local off = (rng.chance(0.5) and R.top(v) or -R.bot(v)) * rng.range(0.55, 0.92)
+          local px, py = x - dy * off, y + dx * off
+          local k = 0.014 * rng.range(0.6, 1.2)
+          ink.moveto(px, py) ink.curveto(px - dx * k * 0.4, py - dy * k * 0.4 + 0.003, px - dx * k * 0.8, py - dy * k * 0.8 + 0.003, px - dx * k, py - dy * k)
+        end
+        if pass == 1 then ink.stroke(tone(t0 - 0.12), bp(0.0028), 0.4) else ink.stroke(tone(t0 + 0.24), bp(0.0024), 0.35) end
+      end
+      -- the lit streak along the top of the body
+      local streak = {}
+      for k = 0, 8 do
+        local v = 0.08 + 0.8 * k / 8
+        local x, y = sp(v)
+        streak[#streak + 1] = { x, y + R.top(v) * 0.72 }
+      end
+      ink.smooth(streak, false) ink.stroke(white, bp(R.up and 0.012 or 0.008), R.up and 0.22 or 0.16)
+      -- the face: pale, more so with age, grizzled
+      local pale = tone(lerp(0.55, 0.88, age))
+      for b = 1, 6 do
+        local g = 1.02 - 0.08 * b
+        ink.smooth(mapped(H, ellipse(0.66 - 0.12 * g, -0.12 + 0.05 * g, 0.86 * g, 0.8 * g, 18, -0.2)), true)
+        ink.fill(pale, lerp(0.1, 0.24, age))
+      end
+      if age > 0.4 then                               -- an old animal's pale reaches the chest
+        local cx, cy = H(0.05, -0.8)
+        ink.smooth(ellipse(cx, cy, 0.07, 0.04, 12, h[3] * rad), true) ink.fill(tone(0.75), (age - 0.4) * 0.45)
+      end
+      if fine then
+        for _ = 1, floor(10 + 30 * age) do
+          local u, w = rng.range(-0.6, 1.2), rng.range(-0.8, 0.8)
+          local x, y = H(u, w)
+          ink.circle(x, y, 0.0022)
+        end
+        ink.fill(white, 0.7)
+      end
+    ink.unclip()
+
+    -- the near flipper, then the water over what is below it
+    for _, f in ipairs(R.feet) do if not f[7] then flipper(f[1], f[2], f[3], f[4], f[5], f[6], false) end end
+
+    -- props behind the paws
+    if R.prop == "kelp" then
+      local sx = rng.range(-0.04, 0.04)
+      local strap = { { sx - 0.11, -0.05 }, { sx - 0.07, 0.04 }, { sx - 0.03, 0.115 }, { sx + 0.03, 0.15 }, { sx + 0.09, 0.14 }, { sx + 0.12, 0.08 }, { sx + 0.14, -0.02 } }
+      local kc = curve(strap)
+      local wob = function(v, s_) return fine and 0.0025 * sin(v * 80 + s_) or 0 end
+      local k = ink.blade(kc, 36, function(v) return 0.014 + 0.003 * sin(v * 19) end, function(v) return 0.014 + 0.003 * sin(v * 15 + 1) end, wob)
+      ink.smooth(k, true) ink.fill(tone(0.5))
+      local mid = {}
+      for q = 1, 9 do mid[#mid + 1] = { kc(q / 10) } end
+      ink.smooth(mid, false) ink.stroke(tone(0.34), bp(0.003), 0.7)
+      -- a blade of it floating on the water by the hips, and its float
+      local bl = curve({ { sx - 0.1, 0.0 }, { sx - 0.2, 0.012 }, { sx - 0.3, 0.004 }, { sx - 0.38, 0.016 } })
+      ink.smooth(ink.blade(bl, 24, function(v) return 0.012 * sin(pi * v) ^ 0.6 end, function(v) return 0.006 * sin(pi * v) ^ 0.6 end, wob), true)
+      ink.fill(tone(0.4))
+      ink.circle(sx - 0.1, 0.004, 0.012) ink.fill(tone(0.34))
+      if fine then ink.circle(sx - 0.104, 0.009, 0.004) ink.fill(white, 0.5) end
+    end
+    if R.prop == "pup" then
+      -- a pup on the chest, head toward +x as its mother's: rounder, fluffier, paler, a big head
+      local px, py = 0.06, 0.19 + R.ch
+      local pt = min(0.62, t0 + 0.3)
+      local function fluff(cx, cy, rx, ry, n)
+        local out = {}
+        for q = 0, n - 1 do
+          local a = 2 * pi * q / n
+          local rr = 1 + 0.035 * (q % 2 == 0 and 1 or -1)
+          out[#out + 1] = { cx + rx * rr * cos(a), cy + ry * rr * sin(a) }
+        end
+        return ccw(out)
+      end
+      local pb = fluff(px, py, 0.1, 0.048, 40)
+      local phd = fluff(px + 0.115, py + 0.03, 0.058, 0.054, 30)
+      ink.smooth(pb, true) ink.smooth(phd, true) ink.stroke(tone(pt - 0.2), bp(0.006))
+      ink.smooth(pb, true) ink.smooth(phd, true) ink.fill(tone(pt))
+      ink.smooth(ellipse(px - 0.01, py + 0.02, 0.07, 0.018, 12), true) ink.fill(white, 0.3)
+      ink.smooth(ellipse(px + 0.135, py + 0.025, 0.04, 0.036, 14), true) ink.fill(tone(min(0.9, pt + 0.18)), 0.8)
+      -- the pup's face
+      ink.circle(px + 0.135, py + 0.045, 0.0075) ink.fill(tone(0.06))
+      ink.smooth(ellipse(px + 0.168, py + 0.026, 0.011, 0.008, 8), true) ink.fill(tone(0.08))
+      if fine then ink.circle(px + 0.133, py + 0.047, 0.0024) ink.fill(white, 0.9) end
+      -- its tiny hind feet sticking up at the back
+      ink.smooth(ellipse(px - 0.085, py + 0.045, 0.011, 0.022, 10, 0.4), true) ink.fill(tone(pt - 0.15))
+    end
+
+    -- the forepaws
+    if R.arms then for _, a in ipairs(R.arms) do if not (a[5] and pose == "dive") then arm(a[1], a[2], a[3], a[4], a[5]) end end end
+    if R.prop == "clam" then
+      local cx, cy = R.clam[1], R.clam[2]
+      ink.in_accent(function()
+        local sh = {}
+        for k = 0, 14 do local a = pi * (0.05 + 0.9 * k / 14) sh[#sh + 1] = { cx + 0.04 * cos(a), cy - 0.012 + 0.034 * sin(a) } end
+        sh[#sh + 1] = { cx + 0.012, cy - 0.022 } sh[#sh + 1] = { cx - 0.012, cy - 0.022 }
+        ink.smooth(sh, true, 0.8) ink.fill(tone(0.42))
+        if D > 2.5 then
+          for k = 1, 6 do local a = pi * (0.12 + 0.76 * k / 7) ink.moveto(cx, cy - 0.016) ink.lineto(cx + 0.037 * cos(a), cy - 0.014 + 0.031 * sin(a)) end
+          ink.stroke(tone(0.22), bp(0.003), 0.8)
+          ink.moveto(cx - 0.03, cy + 0.01) ink.curveto(cx - 0.01, cy + 0.024, cx + 0.01, cy + 0.024, cx + 0.03, cy + 0.01)
+          ink.stroke(white, bp(0.004), 0.4)
+        end
+      end)
+      -- the near paw over the front of the shell
+      local a = R.arms[2]
+      ink.smooth(ellipse(a[3] - 0.012, a[4] - 0.004, 0.022, 0.018, 12, 0.3), true) ink.fill(tone(t0 - 0.06))
+    end
+
+    -- the face's features, in the head frame
+    do
+      -- the nose: big, dark, a rounded triangle
+      local nose = mapped(H, { { 1.12, 0.06 }, { 1.38, 0.0 }, { 1.36, -0.2 }, { 1.2, -0.3 }, { 1.06, -0.16 } })
+      ink.smooth(nose, true, 0.8) ink.fill(tone(0.05))
+      if D > 2.5 then
+        local x, y = H(1.22, -0.02)
+        ink.circle(x, y, hr * 0.05) ink.fill(white, 0.45)
+      end
+      -- the mouth, under the pads
+      local m = mapped(H, { { 1.18, -0.32 }, { 1.1, -0.56 }, { 0.9, -0.66 }, { 0.68, -0.6 } })
+      ink.smooth(m, false) ink.stroke(tone(t0 - 0.1), bp(0.004), 0.8)
+      -- the eye, small and dark
+      local ex, ey = H(0.52, 0.28)
+      if R.face == "asleep" then
+        local a1, b1 = H(0.38, 0.32) local a2, b2 = H(0.52, 0.22) local a3, b3 = H(0.66, 0.3)
+        ink.moveto(a1, b1) ink.curveto(a2, b2, a2, b2, a3, b3) ink.stroke(tone(0.05), bp(0.005))
+      else
+        ink.circle(ex, ey, hr * 0.13) ink.fill(tone(0.03))
+        ink.circle(ex - hr * 0.035, ey + hr * 0.045, hr * 0.045) ink.fill(white, 0.9)
+      end
+      -- the ear's opening
+      local ax, ay = H(-0.4, 0.78)
+      ink.circle(ax, ay, hr * 0.07) ink.fill(tone(0.06), 0.8)
+      if fine then
+        -- whisker rows on the pads, and the whiskers, long and pale
+        for q = 1, 9 do local x, y = H(0.62 + 0.09 * (q % 3), -0.12 - 0.11 * (q // 3)) ink.circle(x, y, hr * 0.02) end
+        ink.fill(tone(t0 - 0.05), 0.8)
+        for q = 0, 3 do                             -- forward and down, past the chin
+          local x0, y0 = H(1.0 - q * 0.05, -0.3 - q * 0.05)
+          local x1, y1 = H(1.45, -0.45 - q * 0.12)
+          local x2, y2 = H(1.75 - q * 0.08, -0.75 - q * 0.22)
+          ink.moveto(x0, y0) ink.curveto(x1, y1, x1, y1, x2, y2)
+        end
+        ink.stroke(white, bp(0.0024), 0.85)
+        -- eyebrow whiskers
+        local b0x, b0y = H(0.5, 0.42) local b1x, b1y = H(0.7, 0.8)
+        ink.moveto(b0x, b0y) ink.lineto(b1x, b1y) ink.stroke(white, bp(0.002), 0.7)
+      end
+    end
+
+    -- the water across a float: what lies under it paled, and a broken line of ripples
+    if water then
+      silhouette() ink.clip()
+        ink.poly({ { -0.6, water - 0.3 }, { 0.6, water - 0.3 }, { 0.6, water }, { -0.6, water } }, true) ink.fill(tone(0.88), 0.55)
+      ink.unclip()
+      local w0 = water
+      for k = 0, 9 do
+        local x = lerp(-0.58, 0.55, k / 9) + rng.sym(0.02)
+        local l = rng.range(0.05, 0.1)
+        ink.moveto(x, w0 + rng.sym(0.004)) ink.curveto(x + l * 0.3, w0 + 0.008, x + l * 0.7, w0 + 0.008, x + l, w0)
+      end
+      ink.stroke(tone(0.55), bp(0.004), 0.8)
+    end
+    ink.pop()
+  end
+
+  M.POSES = { "clam", "asleep", "pup", "dive" }
+  return M
+end)()
+function M.otter(rng, L, o) return OT.otter(rng, L, o) end
+M.OTTER_POSES = OT.POSES
 
 -- a crab seen head on, standing at the origin: a wide shell, eyes on stalks, both claws raised, four jointed
 -- legs a side splayed out and down to the ground; s = shell width
@@ -890,14 +1263,17 @@ function M.forest(rng, o)
     -- little; it only needs the water to be clear of text and of other otters
     local L = rng.range(4.0, 5.0)
     for _ = 1, 60 do
-      local x, y = rng.range(L * 0.55, W - L * 0.55), surface - rng.range(0.1, 0.5)
-      local a, b, c, d = x - L * 0.55, y - L * 0.1, x + L * 0.55, y + L * 0.2
+      -- its waterline (y) low enough that the head, paws and flippers above it stay on the page
+      local x, y = rng.range(L * 0.55, W - L * 0.55), H - L * rng.range(0.3, 0.36)
+      local a, b, c, d = x - L * 0.55, y - L * 0.1, x + L * 0.55, y + L * 0.3
       local ok = true
       for _, q in ipairs(keeps) do if a < q[3] and c > q[1] and b < q[4] and d > q[2] then ok = false end end
       for _, q in ipairs(boxes) do if q[5] == "otter" and a < q[3] and c > q[1] then ok = false end end
       if ok then
         reg(a, b, c, d, "otter")
-        ink.push() ink.translate(x, y) ink.scale(rng.chance(0.5) and 1 or -1, 1) M.otter(rng.fork(), L) ink.pop()
+        ink.push() ink.translate(x, y) ink.scale(rng.chance(0.5) and 1 or -1, 1)
+        M.otter(rng.fork(), L, { pose = rng.pick({ "clam", "clam", "asleep", "pup" }), age = rng.range(0, 0.8) })
+        ink.pop()
         bubbles(rng, x + rng.sym(L * 0.3), y - L * 0.15, 0.05, 3)
         break
       end
