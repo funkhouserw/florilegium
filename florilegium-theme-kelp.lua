@@ -56,8 +56,17 @@ function M.blade(rng, x, y, ang, L, W, cur, t0)
     ink.smooth(mid, false) ink.stroke(tone(t0 - 0.12), 0.35, 0.5)   -- the fold down the blade
   end
   -- the float at its foot
-  ink.smooth(ellipse(x, y, W * 0.45, W * 0.7, 10, a), true) ink.fill(tone(t0 - 0.1))
-  if fine() then ink.circle(x - W * 0.12, y + W * 0.15, W * 0.15) ink.fill(white, 0.5) end
+  local da, db = sin(a), cos(a)
+  local pear = {}
+  for k = 0, 13 do
+    local th = 2 * pi * k / 14
+    local u = (1 - cos(th)) / 2                     -- 0 at the neck, 1 at the round end
+    local sw = sin(th) * W * 0.62 * u ^ 0.7
+    local l = u * W * 1.5
+    pear[#pear + 1] = { x + l * da + sw * db, y + l * db - sw * da }
+  end
+  fill(pear, tone(t0 - 0.12))
+  if fine() then ink.circle(x + W * 1.05 * da - W * 0.18 * db, y + W * 1.05 * db + W * 0.18 * da, W * 0.17) ink.fill(white, 0.45) end
 end
 
 -- the holdfast: a low cone of fine, branching haptera, from the stipes' foot at (x, y + w * 0.45) spreading
@@ -1015,6 +1024,272 @@ function M.eelgrass(rng, h, cur)
     local pts = {}
     for k = 0, 10 do local t = k / 10 pts[#pts + 1] = { x0 + cur * L * 0.35 * t * t + h * 0.04 * sin(t * 5 + x0 * 9), L * t } end
     ink.smooth(ink.ribbon(pts, function(t) return h * lerp(0.035, 0.02, t) end), true) ink.fill(tone(rng.range(0.3, 0.42)))
+  end
+end
+
+-- a lens-shaped leaflet from (x, y) along angle a (radians from up), l long, w half wide
+local function leaflet(x, y, a, l, w, c)
+  local ca, sa = cos(a), sin(a)
+  local pts = {}
+  for k = 0, 9 do
+    local th = 2 * pi * k / 10
+    local u = (1 - cos(th)) / 2
+    local s = sin(th) * w * (1 - u * 0.3)
+    pts[#pts + 1] = { x + u * l * sa + s * ca, y + u * l * ca - s * sa }
+  end
+  fill(pts, c)
+end
+
+-- oarweed (Laminaria): a stout stipe and one blade split into straps that fan out and trail
+function M.oarweed(rng, h, cur)
+  local sx, sy = h * 0.05 * cur, h * 0.36
+  ink.smooth(ink.ribbon({ { 0, 0 }, { sx * 0.4, sy * 0.5 }, { sx, sy } }, function(t) return h * lerp(0.045, 0.03, t) end), true) ink.fill(tone(0.2))
+  fill(ellipse(sx, sy + h * 0.05, h * 0.08, h * 0.07, 14), tone(0.28))
+  local n = rng.int(5, 8)
+  for k = 1, n do
+    local u = (k - 0.5) / n
+    local a = (lerp(-30, 30, u) + cur * 14) * rad
+    local L = h * rng.range(0.42, 0.62)
+    local tr = cur * rng.range(0.15, 0.4)
+    local ph = rng.range(0, 6)
+    local x0, y0 = sx + lerp(-h * 0.06, h * 0.06, u), sy + h * 0.05
+    local spine = function(v)
+      local sv, lx = v * L, tr * v * v * L + 0.03 * L * sin(v * 5 + ph) * v
+      return x0 + lx * cos(a) + sv * sin(a), y0 - lx * sin(a) + sv * cos(a)
+    end
+    local hw = function(v) return h * 0.022 * (1 - 0.5 * v) * min(1, (1 - v) * 7 + 0.05) end
+    ink.smooth(ink.blade(spine, 14, hw, hw), true) ink.fill(tone(0.24 + 0.12 * rng.range(0, 1)))
+  end
+end
+
+-- feather boa (Egregia): a long flat strap fringed both sides with little blades and floats
+function M.boa(rng, h, cur)
+  local ph = rng.range(0, 6)
+  local spine = function(t) return cur * h * 0.32 * t * t + h * 0.05 * sin(t * 4 + ph), h * t end
+  local pts = {}
+  for k = 0, 16 do pts[#pts + 1] = { spine(k / 16) } end
+  ink.smooth(ink.ribbon(pts, function(t) return h * lerp(0.018, 0.01, t) end), true) ink.fill(tone(0.18))
+  local n = floor(h * 22)
+  for k = 2, n do
+    local t = k / (n + 1)
+    local x, y = spine(t)
+    for side = -1, 1, 2 do
+      if rng.chance(0.85) then
+        if rng.chance(0.12) then
+          ink.circle(x + side * h * 0.018, y, h * 0.011) ink.fill(tone(0.16))
+        else
+          leaflet(x, y, (side * rng.range(40, 75) + cur * 25) * rad, h * rng.range(0.045, 0.08) * (1 - 0.4 * t), h * 0.011, tone(0.26 + rng.range(0, 0.1)))
+        end
+      end
+    end
+  end
+end
+
+-- sargassum: a bushy, branching weed of small toothed leaflets and berry-like floats
+function M.sargassum(rng, h, cur)
+  local function branch(x, y, a, len, depth)
+    local n = 8
+    local pts, cx, cy, ca = { { x, y } }, x, y, a
+    for _ = 1, n do
+      ca = ca + (cur * 4 + rng.sym(7)) * rad
+      cx, cy = cx + len / n * sin(ca), cy + len / n * cos(ca)
+      pts[#pts + 1] = { cx, cy }
+    end
+    ink.smooth(ink.ribbon(pts, function(t) return h * lerp(0.011, 0.006, t) * (depth == 0 and 1.4 or 1) end), true) ink.fill(tone(0.2))
+    for k = 2, n + 1 do
+      local p, q = pts[k], pts[k - 1]
+      local side = (k % 2 == 0) and 1 or -1
+      local la = math.atan(p[1] - q[1], p[2] - q[2]) + side * rng.range(35, 70) * rad
+      if depth < 2 and k % 3 == 0 and len > h * 0.15 then
+        branch(p[1], p[2], a + (side * rng.range(30, 55) + cur * 10) * rad, len * rng.range(0.4, 0.6), depth + 1)
+      elseif rng.chance(0.3) then
+        local ex, ey = p[1] + h * 0.025 * sin(la), p[2] + h * 0.025 * cos(la)
+        ink.circle(ex, ey, h * 0.013) ink.fill(tone(0.15))
+        if fine() then ink.circle(ex - h * 0.004, ey + h * 0.004, h * 0.004) ink.fill(white, 0.5) end
+      else
+        leaflet(p[1], p[2], la, h * rng.range(0.05, 0.08), h * 0.012, tone(0.3 + rng.range(0, 0.12)))
+      end
+    end
+    leaflet(cx, cy, ca, h * 0.06, h * 0.012, tone(0.34))
+  end
+  branch(0, 0, rng.sym(8) * rad, h * 0.9, 0)
+end
+
+-- bladder wrack (Fucus): flat fronds with a midrib, forking, paired air bladders, swollen speckled tips
+function M.wrack(rng, h)
+  local function frond(x, y, a, len, w, depth)
+    local ex, ey = x + len * sin(a), y + len * cos(a)
+    local mx, my = lerp(x, ex, 0.5) + rng.sym(0.02), lerp(y, ey, 0.5)
+    ink.smooth(ink.ribbon({ { x, y }, { mx, my }, { ex, ey } }, function() return w end), true) ink.fill(tone(0.24))
+    if fine() then ink.smooth({ { x, y }, { mx, my }, { ex, ey } }, false) ink.stroke(tone(0.13), 0.4) end
+    if rng.chance(0.55) and len > w * 3 then
+      local px, py = lerp(x, ex, 0.45), lerp(y, ey, 0.45)
+      for sd = -1, 1, 2 do
+        local bx, by = px + sd * w * 0.9 * cos(a), py - sd * w * 0.9 * sin(a)
+        fill(ellipse(bx, by, w * 0.75, w * 1.1, 10), tone(0.19))
+        if fine() then ink.circle(bx - w * 0.2, by + w * 0.3, w * 0.25) ink.fill(white, 0.4) end
+      end
+    end
+    if depth == 0 or len < 0.08 then
+      local tx, ty = ex + w * 0.7 * sin(a), ey + w * 0.7 * cos(a)
+      leaflet(ex, ey, a, w * 3, w * 1.1, tone(0.3))
+      if fine() then for _ = 1, 4 do ink.circle(tx + rng.sym(w * 0.5), ty + rng.sym(w * 0.9), w * 0.13) ink.fill(tone(0.17)) end end
+      return
+    end
+    local sp = rng.range(0.25, 0.45)
+    frond(ex, ey, a - sp, len * rng.range(0.7, 0.85), w * 0.85, depth - 1)
+    frond(ex, ey, a + sp, len * rng.range(0.7, 0.85), w * 0.85, depth - 1)
+  end
+  frond(0, 0, rng.sym(0.1), h * 0.25, h * 0.03, rng.int(3, 4))
+end
+
+-- Neptune's necklace (Hormosira): chains of hollow beads that arch over and fork
+function M.beads(rng, h)
+  local function chain(x, y, a, n, r, depth)
+    local bend = (a >= 0 and 1 or -1) * rng.range(3, 7) * rad
+    for k = 1, n do
+      local rr = r * rng.range(0.85, 1.15)
+      x, y = x + rr * 1.65 * sin(a), y + rr * 1.65 * cos(a)
+      fill(ellipse(x, y, rr * 0.82, rr, 10), tone(0.24 + rng.range(0, 0.12)))
+      if fine() then ink.circle(x - rr * 0.3, y + rr * 0.3, rr * 0.25) ink.fill(white, 0.45) end
+      a = a + bend + rng.sym(8) * rad
+      if depth < 2 and k >= 2 and rng.chance(0.18) then chain(x, y, a + rng.pick({ -1, 1 }) * rng.range(30, 50) * rad, floor(n * 0.6), r * 0.85, depth + 1) end
+    end
+  end
+  for _ = 1, rng.int(1, 3) do chain(rng.sym(h * 0.05), 0, rng.sym(35) * rad, rng.int(8, 13), h * 0.027, 0) end
+end
+
+-- Padina, the peacock's tail: thin fans on short stalks, banded in rings
+function M.padina(rng, h)
+  for _ = 1, rng.int(2, 4) do
+    local a = rng.sym(40) * rad
+    local R = h * rng.range(0.32, 0.5)
+    local bx = rng.sym(h * 0.08)
+    local spread = rng.range(50, 80) * rad
+    local ph = rng.range(0, 6)
+    local fx, fy = bx + h * 0.12 * sin(a), h * 0.12 * cos(a)
+    ink.smooth(ink.ribbon({ { bx, 0 }, { lerp(bx, fx, 0.5), fy * 0.5 }, { fx, fy } }, function() return h * 0.014 end), true) ink.fill(tone(0.22))
+    local edge = function(th, rr) return fx + rr * sin(a + th), fy + rr * cos(a + th) end
+    local pts = { { fx, fy } }
+    for k = 0, 24 do pts[#pts + 1] = { edge(lerp(-spread, spread, k / 24), R * (1 + 0.08 * sin(k * 1.7 + ph))) } end
+    fill(pts, tone(rng.range(0.36, 0.46)))
+    if fine() then
+      for b = 1, 4 do
+        local arc = {}
+        for k = 0, 16 do arc[#arc + 1] = { edge(lerp(-spread, spread, k / 16) * 0.96, R * b / 5 * (1 + 0.05 * sin(k * 1.7 + ph))) } end
+        ink.smooth(arc, false) ink.stroke(tone(0.26), 0.45, 0.7)
+      end
+    end
+  end
+end
+
+-- Halimeda: chains of flat, kidney-shaped discs, now and then forking
+function M.halimeda(rng, h)
+  local function seg(x, y, a, r, depth)
+    if r < h * 0.02 or depth > 9 then return end
+    local cx, cy = x + r * 0.8 * sin(a), y + r * 0.8 * cos(a)
+    fill(ellipse(cx, cy, r, r * 0.78, 12), tone(0.3 + 0.025 * depth))
+    if fine() then ink.circle(cx, cy - r * 0.55, r * 0.14) ink.fill(tone(0.2)) end
+    local tx, ty = x + r * 1.35 * sin(a), y + r * 1.35 * cos(a)
+    if rng.chance(depth < 4 and 0.5 or 0.2) then
+      seg(tx, ty, a - rng.range(20, 40) * rad, r * rng.range(0.82, 0.94), depth + 1)
+      seg(tx, ty, a + rng.range(20, 40) * rad, r * rng.range(0.82, 0.94), depth + 1)
+    else seg(tx, ty, a + rng.sym(15) * rad, r * rng.range(0.85, 0.96), depth + 1) end
+  end
+  seg(0, 0, rng.sym(10) * rad, h * 0.055, 0)
+end
+
+-- sea grapes (Caulerpa racemosa): a runner on the sand, upright stalks crowded with little spheres
+function M.grapes(rng, h)
+  local w = h * 0.7
+  local st = {}
+  for k = 0, 8 do st[#st + 1] = { lerp(-w / 2, w / 2, k / 8), h * 0.02 * sin(k * 1.3) } end
+  ink.smooth(ink.ribbon(st, function() return h * 0.012 end), true) ink.fill(tone(0.28))
+  for k = 1, rng.int(3, 5) do
+    local x = lerp(-w / 2, w / 2, (k - 0.5) / 5) + rng.sym(h * 0.04)
+    local ht = h * rng.range(0.3, 0.6)
+    local tx = x + rng.sym(h * 0.04)
+    ink.smooth(ink.ribbon({ { x, 0 }, { lerp(x, tx, 0.5), ht * 0.5 }, { tx, ht } }, function() return h * 0.01 end), true) ink.fill(tone(0.28))
+    local y, side = ht * 0.25, 1
+    while y <= ht do
+      local gx = lerp(x, tx, y / ht) + side * h * 0.02
+      ink.circle(gx, y, h * 0.022) ink.fill(tone(0.34 + rng.range(0, 0.08)))
+      if fine() then ink.circle(gx - h * 0.007, y + h * 0.007, h * 0.007) ink.fill(white, 0.5) end
+      y, side = y + h * 0.03, -side
+    end
+    ink.circle(tx, ht + h * 0.01, h * 0.024) ink.fill(tone(0.36))
+  end
+end
+
+-- sugar kelp (Saccharina): one long blade on a short stipe, its edges frilled, its middle a smooth band
+function M.sugarkelp(rng, h, cur)
+  local ph = rng.range(0, 6)
+  local sy = h * 0.12
+  ink.smooth(ink.ribbon({ { 0, 0 }, { 0, sy } }, function(t) return h * 0.02 end), true) ink.fill(tone(0.2))
+  local tr = cur * rng.range(0.25, 0.5)
+  local spine = function(v) return tr * v * v * h + 0.04 * h * sin(v * 5 + ph) * v, sy + v * h * 0.88 end
+  local hw = function(v) return h * 0.08 * sin(pi * min(1, v * 1.1) ^ 0.4) * (1 - 0.3 * v) + h * 0.004 end
+  local frill = fine() and function(v, side) return h * 0.008 * sin(v * 40 + side * 2 + ph) * min(1, v * 4) end or nil
+  ink.smooth(ink.blade(spine, max(16, floor(h * 14)), hw, hw, frill), true) ink.fill(tone(rng.range(0.38, 0.48)))
+  if fine() then
+    local band = function(v) return hw(v) * 0.35 end
+    ink.smooth(ink.blade(spine, max(12, floor(h * 10)), band, band), true) ink.fill(tone(0.22), 0.6)
+  end
+end
+
+-- thongweed (Himanthalia): a little button on the rock and long thin straps that fork two or three times
+function M.thongweed(rng, h, cur)
+  local function thong(x, y, a, len, w, depth)
+    local pts, cx, cy, ca = { { x, y } }, x, y, a
+    for _ = 1, 8 do
+      ca = ca + (cur * 3 + rng.sym(5)) * rad
+      cx, cy = cx + len / 8 * sin(ca), cy + len / 8 * cos(ca)
+      pts[#pts + 1] = { cx, cy }
+    end
+    ink.smooth(ink.ribbon(pts, function(t) return w * lerp(1, 0.75, t) end), true) ink.fill(tone(0.22 + 0.04 * depth))
+    if depth < 2 then
+      thong(cx, cy, ca - rng.range(6, 14) * rad, len * rng.range(0.6, 0.9), w * 0.85, depth + 1)
+      thong(cx, cy, ca + rng.range(6, 14) * rad, len * rng.range(0.6, 0.9), w * 0.85, depth + 1)
+    end
+  end
+  fill(ellipse(0, h * 0.04, h * 0.09, h * 0.05, 12), tone(0.24))
+  for _ = 1, rng.int(1, 2) do thong(rng.sym(h * 0.03), h * 0.05, rng.sym(8) * rad, h * rng.range(0.4, 0.5), h * 0.017, 0) end
+end
+
+-- dulse: a dark, flat, fan of a frond, splitting into broad lobes with small leaflets at the edges
+function M.dulse(rng, h)
+  local function lobe(x, y, a, len, w, depth)
+    local ex, ey = x + len * sin(a), y + len * cos(a)
+    local hw = function(t) return w * (1 + 0.6 * t) * min(1, (1 - t) * 4 + 0.25) end
+    ink.smooth(ink.ribbon({ { x, y }, { lerp(x, ex, 0.5) + rng.sym(len * 0.08), lerp(y, ey, 0.5) }, { ex, ey } }, hw), true) ink.fill(tone(0.12 + 0.03 * depth))
+    if fine() and depth > 0 then for _ = 1, rng.int(0, 2) do
+      local t = rng.range(0.3, 0.8)
+      local sd = rng.pick({ -1, 1 })
+      leaflet(lerp(x, ex, t), lerp(y, ey, t), a + sd * rng.range(50, 80) * rad, len * 0.35, w * 0.3, tone(0.16))
+    end end
+    if depth >= 3 or len < 0.12 then return end
+    for i = 1, rng.int(2, 3) do lobe(ex, ey, a + rng.range(-40, 40) * rad, len * rng.range(0.6, 0.8), w * 0.85, depth + 1) end
+  end
+  lobe(0, 0, rng.sym(0.1), h * 0.38, h * 0.06, 0)
+end
+
+-- sea lettuce (Ulva): a thin, crumpled sheet, paler, its edge rippled
+function M.lettuce(rng, h)
+  for k = 1, rng.int(2, 3) do
+    local pts = {}
+    local cx, cy, R = rng.sym(h * 0.15), h * rng.range(0.25, 0.4), h * rng.range(0.22, 0.32)
+    local ph = rng.range(0, 6)
+    for j = 0, 27 do
+      local a = 2 * pi * j / 28
+      local r = R * (1 + 0.18 * sin(a * 3 + ph) + 0.08 * sin(a * 9 + ph * 2))
+      pts[#pts + 1] = { cx + r * cos(a) * 0.8, max(0, cy + r * sin(a) * 1.1) }
+    end
+    fill(pts, tone(rng.range(0.46, 0.56)))
+    if fine() then for _ = 1, 3 do
+      local a = rng.range(0, 2 * pi)
+      ink.smooth({ { cx + R * 0.2 * cos(a), cy + R * 0.2 * sin(a) }, { cx + R * 0.55 * cos(a + 0.3), cy + R * 0.6 * sin(a + 0.3) }, { cx + R * 0.8 * cos(a), cy + R * 0.9 * sin(a) } }, false)
+      ink.stroke(tone(0.38), 0.4, 0.6)
+    end end
   end
 end
 
@@ -2097,6 +2372,10 @@ end)()
 M.crab, M.star, M.anemone, M.whelk, M.eggcase, M.urchin = SF.crab, SF.star, SF.anemone, SF.whelk, SF.eggcase, SF.urchin
 
 -- ---------------------------------------------------------------- the forest
+-- the understory's mix (a kind twice is twice as likely), and how much taller than the rest a kind grows
+local WEEDS = { "palm", "red", "eel", "red", "eel", "oar", "oar", "boa", "sarg", "sarg", "wrack", "wrack", "beads", "padina", "hali", "grapes", "sugar", "sugar", "thong", "dulse", "dulse", "lettuce" }
+local TALL = { sugar = 1.8, thong = 2.4, dulse = 0.9, lettuce = 0.6, boa = 2.6, sarg = 1.5, oar = 1.3, beads = 0.7, grapes = 0.6, padina = 0.7, hali = 0.8 }
+
 function M.forest(rng, o)
   local W, H = o.w, o.h
   local cur = o.current or 1
@@ -2415,15 +2694,51 @@ function M.forest(rng, o)
   end
   -- 4. the understory: in the gaps between the rocks, on the sand
   ink.layer(L_UNDER)
-  for _ = 1, floor(W * 1.6) do
+  local function weed(kind, x, y, h)
+    ink.push() ink.translate(x, y)
+    local wr = rng.fork()
+    if kind == "palm" then M.seapalm(wr, h, cur) elseif kind == "red" then M.redweed(wr, h, rng.range(0.25, 0.4))
+    elseif kind == "eel" then M.eelgrass(wr, h, cur) elseif kind == "oar" then M.oarweed(wr, h, cur)
+    elseif kind == "boa" then M.boa(wr, h, cur) elseif kind == "sarg" then M.sargassum(wr, h, cur)
+    elseif kind == "wrack" then M.wrack(wr, h) elseif kind == "beads" then M.beads(wr, h)
+    elseif kind == "sugar" then M.sugarkelp(wr, h, cur) elseif kind == "thong" then M.thongweed(wr, h, cur)
+    elseif kind == "dulse" then M.dulse(wr, h) elseif kind == "lettuce" then M.lettuce(wr, h)
+    elseif kind == "padina" then M.padina(wr, h) elseif kind == "hali" then M.halimeda(wr, h) else M.grapes(wr, h) end
+    ink.pop()
+  end
+  for _ = 1, floor(W * 2.4) do
     local x = rng.range(0.3, W - 0.3)
-    local h = rng.range(0.9, 2.2)
-    if free(x - h * 0.35, sandtop - 0.2, x + h * 0.35, sandtop + h) then
-      ink.push() ink.translate(x, sandtop - 0.1)
-      local kind = rng.pick({ "palm", "red", "eel", "red", "eel", "red" })
-      if kind == "palm" then M.seapalm(rng.fork(), h, cur) elseif kind == "red" then M.redweed(rng.fork(), h, rng.range(0.25, 0.4)) else M.eelgrass(rng.fork(), h, cur) end
-      ink.pop()
+    local kind = rng.pick(WEEDS)
+    local h = rng.range(1.3, 2.8) * (TALL[kind] or 1)
+    if free(x - h * 0.3, sandtop - 0.2, x + h * 0.3, sandtop + h * 0.8) then
+      weed(kind, x, sandtop - 0.1, h)
       reg(x - h * 0.3, sandtop - 0.2, x + h * 0.3, sandtop + h * 0.6, "weed")
+    end
+  end
+  -- the taller weeds among the kelp: feather boas, sugar kelp, thongweed, sargassum, oarweed, each a
+  -- different shape at the scale of the stipes, so the forest is more than one plant
+  ink.layer(L_KELP)
+  local TALLW = { "boa", "sugar", "thong", "sarg", "oar", "sugar", "boa", "wrack", "dulse" }
+  for _ = 1, floor(W * rng.range(0.3, 0.5)) do
+    local x = rng.range(0.6, W - 0.6)
+    local kind = rng.pick(TALLW)
+    local h = rng.range(2.2, 4.2) * (TALL[kind] or 1)
+    if not blocked(x, sandtop + h * 0.5, 0.4) and not blocked(x + cur * h * 0.3, sandtop + h, 0.4) and sandtop + h < H - 1 then
+      weed(kind, x, sandtop - 0.1, h)
+    end
+  end
+  ink.layer(L_UNDER)
+  -- and on the rocks' shoulders, in front of the kelp's holdfasts: a weed or two on most stones
+  for _, r in ipairs(rocks) do
+    if r.top then
+      for _ = 1, rng.int(0, 2) do
+        local u = rng.sym(0.8)
+        local x = r.x + u * r.w * 0.45
+        local y = r.top - 0.12 - (r.top - (r.base or sandtop)) * 0.35 * u * u
+        local kind = rng.pick(WEEDS)
+        local h = rng.range(1.0, 2.2) * (TALL[kind] or 1)
+        if not blocked(x, y + h * 0.5, 0.3) and not blocked(x, y + h, 0.3) and y + h < H - 0.5 then weed(kind, x, y, h) end
+      end
     end
   end
 
