@@ -25,7 +25,7 @@ function literal(o) {
   return `{ w = ${num(o.w)}, h = ${num(o.h)}, seed = ${num(Math.round(o.seed))}, cats = ${num(Math.round(o.cats))},
     size = ${num(o.size)}, density = ${num(o.density)}, id = "p${num(Math.round(o.index))}-", page = ${num(Math.round(o.page ?? o.index))},
     grows = "${['oak', 'flowers'].includes(o.grows) ? o.grows : 'gym'}", ink = "${o.ink === 'blue' ? 'blue' : 'green'}",
-    crown = "${o.crown === 'open' ? 'open' : 'lush'}", season = "${SEASONS.includes(o.season) ? o.season : 'summer'}", spanishmoss = ${o.spanishmoss === true}, keepouts = { ${keep} } }`
+    crown = "${o.crown === 'open' ? 'open' : 'lush'}", season = "${SEASONS.includes(o.season) ? o.season : 'summer'}", spanishmoss = ${o.spanishmoss === true}, heart = ${o.heart === 'always' ? 'true' : o.heart === 'never' ? 'false' : 'nil'}, keepouts = { ${keep} } }`
 }
 
 self.onmessage = async (e) => {

@@ -7,7 +7,7 @@ import { blockAt, deleteBack, deleteForward, enter, marksHere, newState, redo, r
 import { flow, fontOf, lineOfPos, posOfX, remeasure, xOfPos, type Box, type FlowPage, type Layer, type Line, type TextStyle } from './flow'
 import { growGym } from './gym'
 import { download, pagePng, pagesToHtml, pagesToPdf } from './exporter'
-import { CM, docFile, fitMargins, followMargins, loadDoc, marginLimit, newBoxId, newDoc, newStoryDoc, newStoryId, readDocFile, resizeBoxes, saveDoc, SEASONS, SIZES, type Doc, type Grows, type Margins, type PerPage, type Season, type SizeKey } from './doc'
+import { CM, docFile, fitMargins, followMargins, loadDoc, marginLimit, newBoxId, newDoc, newStoryDoc, newStoryId, readDocFile, resizeBoxes, saveDoc, SEASONS, SIZES, type Doc, type Grows, type Heart, type Margins, type PerPage, type Season, type SizeKey } from './doc'
 import { familyOf, FAMILIES } from './fonts'
 import { fromMarkdown, sliceFromHtml, sliceFromMarkdown, sliceToHtml, sliceToText, toMarkdown, type Align } from './schema'
 
@@ -56,6 +56,7 @@ export function App() {
   const [season, setSeason] = useState<Season>(initial.season)
   const [spanishmoss, setSpanishmoss] = useState(initial.spanishmoss)
   const [perPage, setPerPage] = useState<PerPage>(initial.perPage)
+  const [heart, setHeart] = useState<Heart>(initial.heart)
   // phones: the panel is a sheet over the pages, one tab at a time (null: closed)
   const narrow = useMedia(NARROW)
   const coarse = useMedia('(pointer: coarse)')          // a finger: taps type, a drag scrolls, a box is drawn in draw mode
@@ -175,8 +176,8 @@ export function App() {
   const boxCount = (story: number) => drawn.reduce((n, p) => n + p.filter((b) => b.story === story).length, 0)
 
   // kept in this browser as you work; a full disk must not stop the work
-  const doc: Doc = useMemo(() => ({ stories: texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, perPage, textColor, margins, drawn }),
-    [texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, perPage, textColor, margins, drawn])
+  const doc: Doc = useMemo(() => ({ stories: texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, heart, perPage, textColor, margins, drawn }),
+    [texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, heart, perPage, textColor, margins, drawn])
   // PNGs made ready to save or share are of the work as it was: a change puts them away
   useEffect(() => { setShareFiles(null); setReadyPage(null) }, [doc, scale2x])
   docNow.current = doc
@@ -190,7 +191,7 @@ export function App() {
   }, [doc])
   function applyDoc(d: Doc) {
     setStories(storiesOf(d)); setSizeKey(d.sizeKey); setFamily(d.family); setFontSize(d.fontSize); setSeed(d.seed); setCats(d.cats); setPieces(d.pieces)
-    setGrows(d.grows); setInkName(d.inkName); setCrown(d.crown); setSeason(d.season); setSpanishmoss(d.spanishmoss); setPerPage(d.perPage); setTextColor(d.textColor); setMargins(d.margins); setDrawn(d.drawn)
+    setGrows(d.grows); setInkName(d.inkName); setCrown(d.crown); setSeason(d.season); setSpanishmoss(d.spanishmoss); setPerPage(d.perPage); setHeart(d.heart); setTextColor(d.textColor); setMargins(d.margins); setDrawn(d.drawn)
     setError(''); setNote(''); setActiveId(null); setSelected(null); setLinking(null); setPlain(null)
     setGrowTick((t) => t + 1)
     growOnFonts.current = d.family !== family
@@ -716,7 +717,7 @@ export function App() {
   const requests = useMemo(() => pages.map((p, index) => ({
     // page: whose drawing a page grows, its own or (perPage 'match') every page's, so pages laid out alike match;
     // flowers: the work's seed picks its plants, the page its garden
-    grows, ink: inkName, crown, season, spanishmoss, w: S.w, h: S.h, page: perPage === 'match' ? 0 : index,
+    grows, ink: inkName, crown, season, spanishmoss, heart, w: S.w, h: S.h, page: perPage === 'match' ? 0 : index,
     seed: grows === 'flowers' || perPage === 'match' ? seed : seed + index * 101, cats,
     size: pieces, density: 1, index,
     keepouts: p.boxes.filter((b) => b.layer === 'clear').map((b) => {
@@ -726,7 +727,7 @@ export function App() {
       const pad = fontSize * 0.5                       // a little air around the text, and its descenders
       return [b.x - pad, H - (b.y + h + pad), b.x + b.w + pad, H - b.y + pad].map((v) => +(v / CM).toFixed(2))
     }).filter((q): q is number[] => q !== null),
-  })), [pages, S, seed, cats, pieces, H, texts, fontSize, grows, inkName, crown, season, spanishmoss, perPage])
+  })), [pages, S, seed, cats, pieces, H, texts, fontSize, grows, inkName, crown, season, spanishmoss, heart, perPage])
   const [grown, setGrown] = useState(requests)
   const [growTick, setGrowTick] = useState(0)
   // the first drawing, or an opened file's, waits for its fonts, since they decide where the text ends
@@ -954,6 +955,13 @@ export function App() {
               </select>
             </label>
             <label className="check"><input type="checkbox" checked={spanishmoss} onChange={(e) => setSpanishmoss(e.target.checked)} /> Spanish moss</label>
+            <label>Carved heart (I + C)
+              <select value={heart} onChange={(e) => setHeart(e.target.value as Heart)}>
+                <option value="sometimes">Now and then</option>
+                <option value="never">Never</option>
+                <option value="always">Always</option>
+              </select>
+            </label>
           </>
         )}
         {grows === 'flowers' && (

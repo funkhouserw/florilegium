@@ -736,14 +736,30 @@ function M.skeleton(rng, o)
     end
     local sides = sw.chance(0.5) and { 1, -1 } or { -1, 1 }
     local total = 0
+    local here = {}
     for _, dir in ipairs(sides) do
-      local here = 0
+      here[dir] = 0
       for _, rise in ipairs({ sw.range(0.8, 1.8), sw.range(4, 5.5), sw.range(8, 10) }) do
-        if here < 2 and total < 3 then
+        if here[dir] < 2 and total < 3 then
           local from = trunk_nodes[floor(#trunk_nodes * sw.range(0.62, 1))]
           local ty = top.y + rise
           local L = run(ty, dir)
-          if L >= minrun and limb(from, dir, ty, L) > 4 then here, total = here + 1, total + 1 end
+          if L >= minrun and limb(from, dir, ty, L) > 4 then here[dir], total = here[dir] + 1, total + 1 end
+        end
+      end
+    end
+    -- under a text box the heights above the trunk's top run into the text, and the room beside the trunk
+    -- under it stays empty: then limbs leave from lower down the trunk too, level, into that room
+    if total < 2 then
+      for _, dir in ipairs(sides) do
+        for _, drop in ipairs({ sw.range(1.2, 2.6), sw.range(3.4, 5) }) do
+          local ty = top.y - drop
+          if here[dir] < 1 and total < 3 and ty > ground + 3.2 then
+            local from
+            for _, n_ in ipairs(trunk_nodes) do if n_.y <= ty + 0.3 then from = n_ end end
+            local L = from and run(ty, dir) or 0
+            if L >= minrun and limb(from, dir, ty, L) > 4 then here[dir], total = here[dir] + 1, total + 1 end
+          end
         end
       end
     end
@@ -822,7 +838,7 @@ function M.skeleton(rng, o)
     local function back(n, k) for _ = 1, k do n = n.parent or n end return n end
     for _, n in ipairs(nodes) do
       if n.parent and n.parent.cut then n.cut = true
-      else
+      elseif not n.sweep then                         -- a planned long limb leaves the trunk at a right angle on purpose
         local a, b = back(n, 2), back(n, 8)
         local c = back(b, 2)
         local dx, dy, ex, ey = n.x - a.x, n.y - a.y, b.x - c.x, b.y - c.y
@@ -855,7 +871,7 @@ function M.skeleton(rng, o)
         for _, k in ipairs(n.kids) do biggest = max(biggest, size[k]) end
         for _, k in ipairs(n.kids) do
           -- nor a weak shoot off a great limb: it would only loop around it
-          local weak = size[n] > 150 and size[k] < size[n] * 0.05
+          local weak = size[n] > 150 and size[k] < size[n] * 0.05 and not k.sweep   -- a planned long limb is meant to be bare
           if (size[k] >= (o.minbranch or 4) and not weak) or size[k] == biggest then kept[#kept + 1] = k else k.pruned = true end
         end
         n.kids = kept
@@ -2158,21 +2174,25 @@ function M.tree(rng, o)
       end
     end
   end
-  -- the heart: I + C, cut into the trunk years ago
-  if o.heart ~= false then
+  -- the heart: I + C, cut into the trunk years ago. o.heart true: always; false: never; else now and then
+  -- (one tree in twelve). It is never wider than about half the wood it is cut into, and left out when that
+  -- would make it too small to read
+  if o.heart == true or (o.heart == nil and layout.chance(0.08)) then
     local hy = layout.range(groundy + 3.2, groundy + 3.2 + max(0.1, trunkw * 0.9))
-    local hx
+    local hx, hn
     -- on the trunk: with sweep limbs, a node at this height may be far out along one
     local swept = false
     for _, n in ipairs(nodes) do if n.sweep then swept = true break end end
     for _, n in ipairs(swept and chs[1].list or nodes) do
-      if n.y >= hy then hx = n.x break end
+      if n.y >= hy then hx, hn = n.x, n break end
     end
     if hx then
-      hx = hx + layout.range(-0.12, 0.12) * trunkw
-      if not blocked(hx, hy, 1.4) then
+      local wood = W_of(hn)
+      hx = hx + layout.range(-0.12, 0.12) * min(trunkw, wood)
+      local hs = min(layout.range(0.72, 0.9) * trunkw / 4.3, wood * 0.5 / 2)      -- M.heart is 2 cm wide at s 1
+      if hs >= 0.22 and not blocked(hx, hy, 1.4) then
         local old = ink.layer(2)
-        ink.push() ink.translate(hx, hy) ink.rotate(layout.sym(11)) M.heart(layout.fork(), layout.range(0.72, 0.9) * trunkw / 4.3) ink.pop()
+        ink.push() ink.translate(hx, hy) ink.rotate(layout.sym(11)) M.heart(layout.fork(), hs) ink.pop()
         ink.layer(old)
         stats.heart = true
       end
