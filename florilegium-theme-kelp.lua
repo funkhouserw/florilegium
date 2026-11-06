@@ -347,8 +347,8 @@ local OT = (function()
       head = { 0.352, 0.155 + ch, lift, 0.09 },
       -- hind flippers: hip (where the leg leaves the body), heel, angle of the foot (degrees from +x), length, far?
       feet = {
-        { -0.17, 0.045, -0.2, 0.1, 104 + rng.sym(10), 0.105, true },
-        { -0.13, 0.05, -0.155, 0.105, 88 + rng.sym(10), 0.11, false },
+        { -0.17, 0.045, -0.2, 0.1, 104 + rng.sym(14), 0.105 * rng.range(0.9, 1.1), true, rng.range(0.78, 1.15) },
+        { -0.13, 0.05, -0.155, 0.105, 88 + rng.sym(14), 0.11 * rng.range(0.9, 1.1), false, rng.range(0.78, 1.15) },
       },
     }
     local t, b = r.top, r.bot
@@ -359,46 +359,72 @@ local OT = (function()
     return r
   end
 
-  local function lift(r, dy) for _, a in ipairs(r.arms or {}) do a[2], a[4] = a[2] + dy, a[4] + dy end end
+  local function lift(r, dy, rng)                       -- arms ride with the chest; paws a little this way or that
+    for _, a in ipairs(r.arms or {}) do
+      a[2], a[4] = a[2] + dy, a[4] + dy
+      if rng then a[3], a[4] = a[3] + rng.sym(0.012), a[4] + rng.sym(0.008) end
+    end
+  end
   POSES.clam = function(rng)
     local r = floatrig(rng)
     r.arms = { { 0.21, 0.12, 0.105, 0.172, true }, { 0.2, 0.115, 0.2, 0.19, false } }
     r.prop = "clam"
     r.clam = { 0.15, 0.192 + r.ch }
-    lift(r, r.ch)
+    lift(r, r.ch, rng)
     return r
   end
-  POSES.asleep = function(rng)
+  -- a head-frame point in rig units, for paws that reach the face
+  local function onhead(r, u, w) local h = r.head return frame(h[1], h[2], h[3], h[4])(u, w) end
+  POSES.asleep = function(rng, o)
     local r = floatrig(rng)
     r.head[3] = rng.range(0, 6)                        -- the head back on the water
     r.face = "asleep"
-    r.arms = { { 0.21, 0.12, 0.14, 0.168, true }, { 0.2, 0.115, 0.205, 0.178, false } }   -- paws folded on the chest
     r.prop = "kelp"
-    lift(r, r.ch)
+    local cover = o.cover
+    if cover == nil then cover = rng.chance(0.4) end
+    if cover then                                      -- paws over its eyes, as sea otters sleep in the light
+      local nx, ny = onhead(r, 0.5, 0.3)
+      local fx, fy = onhead(r, 0.22, 0.5)
+      r.arms = { { 0.26, 0.15 + r.ch, fx, fy, true, 0.035 }, { 0.25, 0.145 + r.ch, nx, ny, false, 0.035 } }
+      r.late = true
+    else                                               -- paws folded on the chest
+      r.arms = { { 0.21, 0.12, 0.14, 0.168, true }, { 0.2, 0.115, 0.205, 0.178, false } }
+      lift(r, r.ch, rng)
+    end
+    return r
+  end
+  POSES.groom = function(rng)
+    local r = floatrig(rng)
+    r.head[3] = rng.range(24, 36)                      -- the chin up, rubbing its face with both paws
+    if rng.chance(0.5) then r.face = "asleep" end      -- eyes screwed shut
+    local nx, ny = onhead(r, rng.range(0.6, 0.85), rng.range(-0.55, -0.35))
+    local fx, fy = onhead(r, rng.range(0.15, 0.4), rng.range(-0.75, -0.5))
+    r.arms = { { 0.26, 0.15 + r.ch, fx, fy, true, 0.035 }, { 0.25, 0.145 + r.ch, nx, ny, false, 0.035 } }
+    r.late = true
     return r
   end
   POSES.pup = function(rng)
     local r = floatrig(rng)
     r.arms = { { 0.21, 0.12, 0.04, 0.2, true }, { 0.2, 0.115, 0.1, 0.215, false } }    -- holding the pup
     r.prop = "pup"
-    lift(r, r.ch)
+    lift(r, r.ch, rng)
     return r
   end
   POSES.dive = function(rng)
     local b = rng.range(0.9, 1.15)                     -- how steeply it goes down
     return {
-      up = false, water = nil,
-      tail = { { -0.47, 0.17 * b }, { -0.36, 0.11 * b }, { -0.25, 0.065 * b } },
-      tailw = 0.04,
-      spine = { { -0.27, 0.07 * b }, { -0.15, 0.04 * b }, { -0.01, -0.0 }, { 0.13, -0.05 * b }, { 0.22, -0.1 * b }, { 0.3, -0.17 * b } },
+      up = false, water = nil, taper = 0.5,
+      tail = { { -0.47, 0.16 * b + rng.sym(0.02) }, { -0.36, 0.1 * b }, { -0.23, 0.058 * b } },
+      tailw = 0.038,
+      spine = { { -0.25, 0.064 * b }, { -0.14, 0.036 * b }, { -0.02, 0.0 }, { 0.1, -0.048 * b }, { 0.19, -0.1 * b }, { 0.27, -0.17 * b } },
       top = profile({ { 0, 0.0 }, { 0.06, 0.034 }, { 0.15, 0.05 }, { 0.45, 0.065 }, { 0.75, 0.062 }, { 1, 0.04 } }),   -- the back
       bot = profile({ { 0, 0.0 }, { 0.06, 0.035 }, { 0.2, 0.055 }, { 0.5, 0.07 }, { 0.8, 0.062 }, { 1, 0.04 } }),         -- the belly
-      head = { 0.345, -0.205 * b, -38 * b, 0.08 },
+      head = { 0.315, -0.205 * b, -38 * b, 0.082 },
       feet = {
-        { -0.2, 0.03 * b, -0.27, 0.0 * b, 190 + rng.sym(10), 0.12, true },
-        { -0.16, 0.02 * b, -0.24, -0.03 * b, 200 + rng.sym(10), 0.125, false },
+        { -0.18, 0.03 * b, -0.25, 0.0 * b, 190 + rng.sym(14), 0.12, true, rng.range(0.85, 1.2) },
+        { -0.14, 0.02 * b, -0.22, -0.03 * b, 202 + rng.sym(14), 0.125, false, rng.range(0.85, 1.2) },
       },
-      arms = { { 0.17, -0.1 * b, 0.22, -0.17 * b, true }, { 0.16, -0.11 * b, 0.21, -0.18 * b, false } },   -- tucked to the chest
+      arms = { { 0.15, -0.1 * b, 0.2, -0.17 * b, true }, { 0.14, -0.11 * b, 0.19, -0.18 * b, false } },   -- tucked to the chest
     }
   end
 
@@ -406,7 +432,7 @@ local OT = (function()
   function M.otter(rng, L, o)
     o = o or {}
     local pose = POSES[o.pose] and o.pose or "clam"
-    local R = POSES[pose](rng)
+    local R = POSES[pose](rng, o)
     local age = o.age or rng.range(0, 1)
     local t0 = (o.tone or 0.24) + rng.sym(0.03)
     ink.push()
@@ -424,8 +450,10 @@ local OT = (function()
     local body = ccw((ink.blade(sp, 40, R.top, R.bot, tuft)))
     local tl = curve(R.tail)
     local tw = R.tailw
-    local tail = ccw((ink.blade(tl, 20, function(v) return tw * (0.6 + 0.4 * sin(pi * min(1, v * 1.08)) ^ 0.35) * (1.05 - 0.25 * abs(v - 0.55)) end,
-      function(v) return tw * 0.8 * (0.6 + 0.4 * sin(pi * min(1, v * 1.08)) ^ 0.35) end)))
+    local tp = R.taper or 0                             -- the tail narrowing toward its tip (0: parallel-sided)
+    local tws = function(v) return tw * (0.6 + 0.4 * sin(pi * min(1, v * 1.08)) ^ 0.35) * (1 - tp * (1 - v)) end
+    local tail = ccw((ink.blade(tl, 20, function(v) return tws(v) * (1.05 - 0.25 * abs(v - 0.55)) end,
+      function(v) return tws(v) * 0.8 end)))
 
     -- the head, in its own frame: nose toward +u, r its radius
     local h = R.head
@@ -444,7 +472,8 @@ local OT = (function()
 
     -- hind flipper from its heel (hx, hy), pointing at a (degrees), length f: a broad webbed fan,
     -- five toes, the outer one longest
-    local function flipper(hip_x, hip_y, hx, hy, a, f, far)
+    local function flipper(hip_x, hip_y, hx, hy, a, f, far, spread)
+      spread = spread or 1
       local c = tone(t0 - (far and 0.08 or 0.0))
       -- the leg, short and thick
       ink.smooth(ink.ribbon({ { hip_x, hip_y }, { lerp(hip_x, hx, 0.5), lerp(hip_y, hy, 0.5) + 0.005 }, { hx, hy } }, function(u) return lerp(0.06, 0.04, u) end), true)
@@ -453,20 +482,20 @@ local OT = (function()
       local pts = { { 0.16, 0.02 }, { 0.3, 0.45 } }
       local toes = { 0.86, 0.93, 0.97, 1.0, 1.05 }        -- inner to outer
       for k = 1, 5 do
-        local u = lerp(0.34, -0.4, (k - 1) / 4)
+        local u = lerp(0.34, -0.4, (k - 1) / 4) * spread
         local tip = toes[k]
         pts[#pts + 1] = { u + 0.06, tip - 0.035 }
         pts[#pts + 1] = { u, tip }
         pts[#pts + 1] = { u - 0.06, tip - 0.035 }
         if k < 5 then pts[#pts + 1] = { u - 0.092, tip - 0.06 } end   -- the web between toes, shallow
       end
-      pts[#pts + 1] = { -0.42, 0.45 }
+      pts[#pts + 1] = { -0.42 * spread, 0.45 }
       pts[#pts + 1] = { -0.14, 0.02 }
       local P = mapped(F, pts)
       ink.smooth(P, true, 0.8) ink.fill(c)
       if fine then
         for k = 1, 5 do
-          local u = lerp(0.34, -0.4, (k - 1) / 4)
+          local u = lerp(0.34, -0.4, (k - 1) / 4) * spread
           local a1, b1 = F(u * 0.4, 0.35)
           local a2, b2 = F(u, toes[k] - 0.12)
           ink.moveto(a1, b1) ink.lineto(a2, b2)
@@ -480,10 +509,11 @@ local OT = (function()
     end
 
     -- forearm from the shoulder (sx, sy) to the paw (px, py): short, ending in a round mitten
-    local function arm(sx, sy, px, py, far)
+    local function arm(sx, sy, px, py, far, elbow)
       local c = tone(t0 - (far and 0.09 or 0.02))
-      local mx, my = lerp(sx, px, 0.5), lerp(sy, py, 0.5) + 0.012
-      ink.smooth(ink.ribbon({ { sx, sy }, { mx, my }, { px, py } }, function(u) return lerp(0.05, 0.034, u) end), true)
+      local mx, my = lerp(sx, px, 0.5), lerp(sy, py, 0.5) + (elbow or 0.012)
+      local w0 = elbow and 0.042 or 0.05
+      ink.smooth(ink.ribbon({ { sx, sy }, { mx, my }, { px, py } }, function(u) return lerp(w0, 0.032, u) end), true)
       ink.fill(c)
       ink.smooth(ellipse(px, py, 0.026, 0.021, 12, 0.3), true) ink.fill(tone(t0 - (far and 0.13 or 0.08)))
       if fine and not far then
@@ -493,7 +523,7 @@ local OT = (function()
     end
 
     -- ---------------------------------------------------------------- painting, back to front
-    for _, f in ipairs(R.feet) do if f[7] then flipper(f[1], f[2], f[3], f[4], f[5], f[6], true) end end
+    for _, f in ipairs(R.feet) do if f[7] then flipper(f[1], f[2], f[3], f[4], f[5], f[6], true, f[8]) end end
     if R.arms then for _, a in ipairs(R.arms) do if a[5] and pose == "dive" then arm(a[1], a[2], a[3], a[4], true) end end end
 
     silhouette() ink.stroke(tone(t0 - 0.14), bp(0.007))
@@ -545,18 +575,21 @@ local OT = (function()
         local cx, cy = H(0.05, -0.8)
         ink.smooth(ellipse(cx, cy, 0.07, 0.04, 12, h[3] * rad), true) ink.fill(tone(0.75), (age - 0.4) * 0.45)
       end
-      if fine then
-        for _ = 1, floor(10 + 30 * age) do
-          local u, w = rng.range(-0.6, 1.2), rng.range(-0.8, 0.8)
-          local x, y = H(u, w)
-          ink.circle(x, y, 0.0022)
+      if fine and age > 0.1 then
+        local spots = { { 0.35, 0.45, 0.28 }, { 0.75, -0.15, 0.22 }, { 0.2, -0.35, 0.3 }, { -0.15, 0.2, 0.3 } }
+        for _, c in ipairs(spots) do
+          for _ = 1, floor(4 + 16 * age * c[3] / 0.3) do
+            local a, d = rng.range(0, 2 * pi), c[3] * rng.range(0, 1) ^ 1.6
+            local x, y = H(c[1] + d * cos(a), c[2] + d * sin(a) * 0.8)
+            ink.circle(x, y, hr * rng.range(0.012, 0.022) * (0.7 + 0.5 * age))
+          end
         end
-        ink.fill(white, 0.7)
+        ink.fill(white, 0.35 + 0.4 * age)
       end
     ink.unclip()
 
     -- the near flipper, then the water over what is below it
-    for _, f in ipairs(R.feet) do if not f[7] then flipper(f[1], f[2], f[3], f[4], f[5], f[6], false) end end
+    for _, f in ipairs(R.feet) do if not f[7] then flipper(f[1], f[2], f[3], f[4], f[5], f[6], false, f[8]) end end
 
     -- props behind the paws
     if R.prop == "kelp" then
@@ -604,7 +637,8 @@ local OT = (function()
     end
 
     -- the forepaws
-    if R.arms then for _, a in ipairs(R.arms) do if not (a[5] and pose == "dive") then arm(a[1], a[2], a[3], a[4], a[5]) end end end
+    local function forepaws() if R.arms then for _, a in ipairs(R.arms) do if not (a[5] and pose == "dive") then arm(a[1], a[2], a[3], a[4], a[5], a[6]) end end end end
+    if not R.late then forepaws() end
     if R.prop == "clam" then
       local cx, cy = R.clam[1], R.clam[2]
       ink.in_accent(function()
@@ -652,18 +686,26 @@ local OT = (function()
         -- whisker rows on the pads, and the whiskers, long and pale
         for q = 1, 9 do local x, y = H(0.62 + 0.09 * (q % 3), -0.12 - 0.11 * (q // 3)) ink.circle(x, y, hr * 0.02) end
         ink.fill(tone(t0 - 0.05), 0.8)
-        for q = 0, 3 do                             -- forward and down, past the chin
-          local x0, y0 = H(1.0 - q * 0.05, -0.3 - q * 0.05)
-          local x1, y1 = H(1.45, -0.45 - q * 0.12)
-          local x2, y2 = H(1.75 - q * 0.08, -0.75 - q * 0.22)
+        for q = 0, 3 do                             -- from the pads, forward and down past the chin
+          local x0, y0 = H(0.84 - q * 0.04, -0.34 - q * 0.08)
+          local x1, y1 = H(1.2 - q * 0.04, -0.52 - q * 0.14)
+          local x2, y2 = H(1.5 - q * 0.1, -0.78 - q * 0.24)
           ink.moveto(x0, y0) ink.curveto(x1, y1, x1, y1, x2, y2)
         end
-        ink.stroke(white, bp(0.0024), 0.85)
+        ink.stroke(white, bp(0.002), 0.8)
+        for q = 0, 1 do                             -- two back along the cheek
+          local x0, y0 = H(0.66, -0.4 - q * 0.08)
+          local x1, y1 = H(0.35, -0.62 - q * 0.12)
+          local x2, y2 = H(0.08, -0.72 - q * 0.2)
+          ink.moveto(x0, y0) ink.curveto(x1, y1, x1, y1, x2, y2)
+        end
+        ink.stroke(white, bp(0.0017), 0.55)
         -- eyebrow whiskers
         local b0x, b0y = H(0.5, 0.42) local b1x, b1y = H(0.7, 0.8)
         ink.moveto(b0x, b0y) ink.lineto(b1x, b1y) ink.stroke(white, bp(0.002), 0.7)
       end
     end
+    if R.late then forepaws() end                      -- paws over the face
 
     -- the water across a float: what lies under it paled, and a broken line of ripples
     if water then
@@ -681,7 +723,7 @@ local OT = (function()
     ink.pop()
   end
 
-  M.POSES = { "clam", "asleep", "pup", "dive" }
+  M.POSES = { "clam", "asleep", "pup", "groom", "dive" }
   return M
 end)()
 function M.otter(rng, L, o) return OT.otter(rng, L, o) end
@@ -1299,7 +1341,7 @@ function M.forest(rng, o)
       if ok then
         reg(a, b, c, d, "otter")
         ink.push() ink.translate(x, y) ink.scale(rng.chance(0.5) and 1 or -1, 1)
-        M.otter(rng.fork(), L, { pose = rng.pick({ "clam", "clam", "asleep", "pup" }), age = rng.range(0, 0.8) })
+        M.otter(rng.fork(), L, { pose = rng.pick({ "clam", "clam", "asleep", "pup", "groom" }), age = rng.range(0, 0.8) })
         ink.pop()
         bubbles(rng, x + rng.sym(L * 0.3), y - L * 0.15, 0.05, 3)
         break
