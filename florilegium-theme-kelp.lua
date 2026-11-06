@@ -871,6 +871,27 @@ function M.jelly(rng, s, cur)
   end
 end
 
+-- a by-the-wind sailor (Velella) at the surface: a blue oval float with its rings, a clear sail standing
+-- diagonally across it, a fringe of short tentacles hanging below; s = float length; the waterline at y = 0
+function M.sailor(rng, s)
+  for k = 1, 9 do                                      -- the tentacles, below the water
+    local x = lerp(-s * 0.4, s * 0.4, (k - 0.5) / 9)
+    ink.moveto(x, -s * 0.05) ink.lineto(x + rng.sym(s * 0.04), -s * rng.range(0.15, 0.3))
+  end
+  ink.stroke(tone(0.4), max(0.3, s * 1.5), 0.8)
+  fill(ellipse(0, 0, s * 0.5, s * 0.14, 18), tone(0.3))           -- the float, seen a little from the side
+  if fine() then
+    for k = 1, 3 do ink.smooth(ellipse(0, s * 0.01, s * 0.5 * (1 - 0.25 * k), s * 0.14 * (1 - 0.25 * k), 16), true) ink.stroke(tone(0.55), 0.35, 0.8) end
+  end
+  -- the sail: a thin triangle rising off the float, set diagonally
+  fill({ { -s * 0.35, s * 0.06 }, { s * 0.1, s * 0.62 }, { s * 0.35, s * 0.06 } }, tone(0.72), 0.75)
+  if fine() then
+    ink.moveto(-s * 0.35, s * 0.06) ink.lineto(s * 0.1, s * 0.62) ink.lineto(s * 0.35, s * 0.06) ink.stroke(tone(0.4), 0.4, 0.9)
+    for k = 1, 3 do local t = k / 4 ink.moveto(lerp(-s * 0.35, s * 0.35, t), s * 0.06) ink.lineto(s * 0.1, s * 0.62) end
+    ink.stroke(tone(0.55), 0.25, 0.7)
+  end
+end
+
 -- a shrimp side on, facing +x: a smooth body curving down from the head to the tail fan, segment lines,
 -- a rostrum, legs and swimmerets below, two long antennae; s = length
 function M.shrimp(rng, s)
@@ -1276,6 +1297,22 @@ function M.forest(rng, o)
         M.otter(rng.fork(), L, { pose = rng.pick({ "clam", "clam", "asleep", "pup" }), age = rng.range(0, 0.8) })
         ink.pop()
         bubbles(rng, x + rng.sym(L * 0.3), y - L * 0.15, 0.05, 3)
+        break
+      end
+    end
+  end
+  -- by-the-wind sailors drifting at the surface
+  for _ = 1, rng.int(1, 3) do
+    local sz = rng.range(0.7, 1.0)
+    for _ = 1, 30 do
+      local x, y = rng.range(0.6, W - 0.6), H - sz * rng.range(0.7, 0.8)
+      local a, b, c, d = x - sz * 0.55, y - sz * 0.35, x + sz * 0.55, y + sz * 0.65
+      local ok = true
+      for _, q in ipairs(keeps) do if a < q[3] and c > q[1] and b < q[4] and d > q[2] then ok = false end end
+      for _, q in ipairs(boxes) do if (q[5] == "otter" or q[5] == "sailor") and a < q[3] and c > q[1] and b < q[4] and d > q[2] then ok = false end end
+      if ok then
+        reg(a, b, c, d, "sailor")
+        ink.push() ink.translate(x, y) ink.scale(rng.chance(0.5) and 1 or -1, 1) M.sailor(rng.fork(), sz) ink.pop()
         break
       end
     end
