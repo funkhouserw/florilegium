@@ -1463,7 +1463,7 @@ end)()
 M.fish, M.jelly, M.sailor, M.shrimp = SW.fish, SW.jelly, SW.sailor, SW.shrimp
 
 -- the seafloor's animals, redrawn (by marginalia-partner): a red rock crab head on, ochre and bat stars, giant green
--- and strawberry anemones, a Kellet's whelk, a skate's egg case; the urchin stays the one above
+-- and strawberry anemones, a Kellet's whelk, a skate's egg case, a round spiny urchin
 local SF = (function()
   local ink = require("florilegium-ink")
   -- scratch/kelp/sealife-floor.lua -- the kelp forest's floor animals, a prototype (procedural, nothing traced).
@@ -1748,72 +1748,55 @@ local SF = (function()
   -- on top, splayed where it rests; the face's spines foreshortened toward us; tube feet reaching past them
   function M.urchin(rng, r)
     local D, mid, fine, bp = sizing(r)
-    local rx, ry = r * 0.44, r * 0.34
-    local len = function(th) return r * (0.42 + 0.5 * cos(th) ^ 2) * rng.range(0.85, 1.08) end
-    local function spines(m, from, tones, wb)
+    local rt = r * 0.58                                   -- the test; spines 0.6-0.8 of its radius reach about r
+    local lit = function(dx, dy) return (dx * -0.55 + dy * 0.83 + 1) / 2 end
+    local function ring(m, d0, tones, wb, k)            -- spines from a ring at d0 of the radius, radiating
       local bins = {}
       for i = 1, #tones do bins[i] = {} end
-      for k = 1, m do
-        local th = 2 * pi * (k + from) / m + rng.sym(0.05)
-        local bx, by = rx * 0.92 * cos(th), ry * 0.92 * sin(th)
-        local L = len(th)
-        local dx, dy = cos(th), sin(th) * 0.9
-        if sin(th) < -0.6 then dx, dy = cos(th) * 1.6 + (cos(th) > 0 and 0.6 or -0.6), sin(th) * 0.4 L = L * 0.75 end   -- splayed on the rock
-        local l = sqrt(dx * dx + dy * dy) dx, dy = dx / l, dy / l
-        local lit = (dx * -0.6 + dy * 0.8 + 1) / 2         -- the upper left lit
-        local b = min(#tones, 1 + floor(lit * #tones))
-        local list = bins[b]
-        list[#list + 1] = { bx, by, bx + dx * (L + rx * 0.1), by + dy * (L + ry * 0.1), -dy * wb, dx * wb }
+      for q = 1, m do
+        local a = 2 * pi * (q + k) / m + rng.sym(0.06)
+        local dx, dy = cos(a), sin(a)
+        local L = rt * rng.range(0.6, 0.8)
+        local bx, by = rt * d0 * dx, rt * d0 * dy
+        local reach = rt * (1 - d0) + L * (d0 > 0.9 and 1 or (0.35 + 0.65 * d0))
+        local b = min(#tones, 1 + floor(lit(dx, dy) * #tones))
+        local l = bins[b]
+        l[#l + 1] = { bx + -dy * wb, by + dx * wb, bx + dx * reach, by + dy * reach, bx + dy * wb, by - dx * wb }
       end
-      for i, list in ipairs(bins) do
-        for _, sp in ipairs(list) do ink.poly({ { sp[1] + sp[5], sp[2] + sp[6] }, { sp[3], sp[4] }, { sp[1] - sp[5], sp[2] - sp[6] } }, true) end
-        if #list > 0 then ink.fill(tone(tones[i])) end
+      for i, l in ipairs(bins) do
+        for _, t in ipairs(l) do ink.poly({ { t[1], t[2] }, { t[3], t[4] }, { t[5], t[6] } }, true) end
+        if #l > 0 then ink.fill(tone(tones[i])) end
       end
     end
-    local m = mid and (fine and 90 or 60) or 36
-    spines(m, 0.5, { 0.08, 0.12, 0.17 }, r * 0.035)      -- the far ring, behind the test
-    ink.smooth(ellipse(0, 0, rx, ry, 18), true) ink.stroke(tone(0.04), bp(0.03))
-    ink.smooth(ellipse(0, 0, rx, ry, 18), true) ink.fill(tone(0.12))
-    ink.smooth(ellipse(0, 0, rx, ry, 18), true) ink.clip()
-      ink.smooth(ellipse(-rx * 0.3, ry * 0.35, rx * 0.6, ry * 0.5, 14), true) ink.fill(tone(0.3), 0.55)
+    local m = mid and (fine and 80 or 54) or 34
+    ring(m, 0.95, { 0.06, 0.1, 0.16 }, r * 0.03, 0.5)    -- the outer ring, all round
+    ink.circle(0, 0, rt) ink.fill(tone(0.1))
+    ink.circle(0, 0, rt) ink.clip()
+      for b = 1, 3 do ink.circle(-rt * 0.25, rt * 0.3, rt * (0.85 - 0.2 * b)) ink.fill(tone(0.32), 0.3) end
     ink.unclip()
-    spines(floor(m * 0.8), 0, { 0.12, 0.2, 0.3 }, r * 0.032)  -- the near ring, over the test's rim
-    -- the face: short spines toward us, foreshortened, longer toward the rim
-    local face = {}
-    local nf = mid and (fine and 70 or 40) or 18
-    for _ = 1, nf do
-      local a, d = rng.range(0, 2 * pi), sqrt(rng.range(0.02, 0.85))
-      local bx, by = rx * d * cos(a), ry * d * sin(a)
-      local L = r * 0.28 * d + r * 0.04
-      local dx, dy = cos(a), sin(a) * 0.8
-      face[#face + 1] = { bx, by, bx + dx * L, by + dy * L, -dy * r * 0.028, dx * r * 0.028, (dx * -0.6 + dy * 0.8 + 1) / 2 }
-    end
-    for pass = 1, 2 do
-      for _, sp in ipairs(face) do
-        if (pass == 1) == (sp[7] < 0.55) then ink.poly({ { sp[1] + sp[5], sp[2] + sp[6] }, { sp[3], sp[4] }, { sp[1] - sp[5], sp[2] - sp[6] } }, true) end
+    ring(floor(m * 0.75), 0.7, { 0.12, 0.2, 0.32 }, r * 0.028, 0)   -- inner rings, foreshortened toward us
+    ring(floor(m * 0.5), 0.4, { 0.16, 0.26, 0.4 }, r * 0.026, 0.3)
+    if mid then                                           -- the lit side's spine tips
+      for _ = 1, fine and 24 or 12 do
+        local a = rng.range(0.35 * pi, 0.95 * pi)
+        local d = rng.range(0.75, 1.25)
+        ink.moveto(rt * d * cos(a), rt * d * sin(a)) ink.lineto(rt * (d + 0.25) * cos(a), rt * (d + 0.25) * sin(a))
       end
-      ink.fill(tone(pass == 1 and 0.16 or 0.34))
+      ink.stroke(tone(0.55), bp(fine and 0.01 or 0.018), 0.7)
     end
-    if fine then                                          -- glints, then the tube feet past the spines
-      for _ = 1, 14 do
-        local a = rng.range(pi * 0.45, pi * 1.0)
-        local d = rng.range(0.5, 1.2)
-        ink.moveto(rx * d * cos(a), ry * d * sin(a)) ink.lineto(rx * (d + 0.4) * cos(a), ry * (d + 0.5) * sin(a))
-      end
-      ink.stroke(white, bp(0.008), 0.5)
+    if fine then                                          -- tube feet reaching past the spines
       for _ = 1, rng.int(5, 9) do
-        local a = rng.range(-0.3, pi + 0.3)
-        local L = r * rng.range(0.9, 1.15)
-        local x0, y0 = rx * 0.8 * cos(a), ry * 0.8 * sin(a)
-        local x1, y1 = L * cos(a + 0.08), L * sin(a + 0.08) * 0.9
-        ink.moveto(x0, y0) ink.curveto(lerp(x0, x1, 0.4) + r * 0.04, lerp(y0, y1, 0.4), lerp(x0, x1, 0.7) - r * 0.04, lerp(y0, y1, 0.7), x1, y1)
-        ink.stroke(tone(0.6), bp(0.01), 0.75)
-        ink.circle(x1, y1, r * 0.018) ink.fill(tone(0.7), 0.9)
+        local a = rng.range(-0.2, pi + 0.2)
+        local L = r * rng.range(1.0, 1.15)
+        local x1, y1 = L * cos(a), L * sin(a)
+        ink.moveto(rt * 0.9 * cos(a), rt * 0.9 * sin(a)) ink.curveto(L * 0.75 * cos(a + 0.1), L * 0.75 * sin(a + 0.1), L * 0.9 * cos(a - 0.06), L * 0.9 * sin(a - 0.06), x1, y1)
+        ink.stroke(tone(0.62), bp(0.01), 0.75)
+        ink.circle(x1, y1, r * 0.018) ink.fill(tone(0.72), 0.9)
       end
     end
     if rng.chance(0.3) then                               -- a scrap of kelp held on top, as they do
-      local x = rng.sym(rx * 0.4)
-      local bl = ink.blade(function(u) return x + lerp(-r * 0.3, r * 0.3, u), ry + r * 0.12 + r * 0.06 * sin(u * 5) end, 14,
+      local x = rng.sym(rt * 0.3)
+      local bl = ink.blade(function(u) return x + lerp(-r * 0.3, r * 0.3, u), rt + r * 0.08 + r * 0.05 * sin(u * 5) end, 14,
         function(u) return r * 0.06 * sin(pi * u) end, function(u) return r * 0.04 * sin(pi * u) end)
       ink.smooth(bl, true) ink.fill(tone(0.48))
     end
@@ -1832,7 +1815,7 @@ local SF = (function()
     local back, front = {}, {}
     for ring = 1, #o.rings do
       local R = o.rings[ring]
-      local nn = mid and R.n or floor(R.n * 0.6)
+      local nn = fine and R.n or max(4, floor(R.n * 0.5))
       for k = 1, nn do
         local phi = 2 * pi * (k + ring * 0.37) / nn + rng.sym(0.08)
         local e = (R.e + rng.sym(10)) * pi / 180
@@ -2066,22 +2049,22 @@ local SF = (function()
       keels[#keels + 1] = limb(k, s * 0.05, s * 0.05)
     end
     local horns = {}
-    local tips = {}
     for _, cx in ipairs({ -1, 1 }) do
       for _, cy in ipairs({ -1, 1 }) do
-        local L = s * (cx < 0 and rng.range(0.22, 0.3) or rng.range(0.1, 0.15))
-        local x0, y0 = cx * a * 0.98, cy * b * 0.9
-        local curl = cx < 0 and rng.range(0.5, 1.2) or rng.range(0.1, 0.4)
-        local pts = {}
-        for j = 0, 8 do
-          local u = j / 8
-          local ang = (cx > 0 and 0 or pi) + cy * cx * (0.15 + curl * u * u) * (cx < 0 and -1 or 1)
-          local px = (pts[j] and pts[j][1] or x0) + cos(ang) * L / 8
-          local py = (pts[j] and pts[j][2] or y0) + sin(ang) * L / 8 + cy * L * 0.04
-          pts[j + 1] = { px, py }
+        local back = cx < 0
+        local L = s * (back and rng.range(0.34, 0.42) or rng.range(0.16, 0.22))
+        local turn = (back and rng.range(3.2, 4.2) or rng.range(1.0, 1.5)) * -cy * cx   -- curling in, toward the case
+        local x, y = cx * a * 0.98, cy * b * 0.9
+        local ang = atan(cy * 0.45, cx)
+        local pts = { { x, y } }
+        local n = 14
+        for j = 1, n do
+          local u = j / n
+          ang = ang + turn / n * (0.3 + 1.4 * u)          -- tighter toward the tip
+          x, y = x + cos(ang) * L / n, y + sin(ang) * L / n
+          pts[#pts + 1] = { x, y }
         end
-        horns[#horns + 1] = ccw(ink.ribbon(pts, function(u) return s * lerp(0.07, 0.015, u) end))
-        tips[#tips + 1] = pts[#pts]
+        horns[#horns + 1] = ccw(ink.ribbon(pts, function(u) return s * lerp(0.07, 0.014, u ^ 0.8) end))
       end
     end
     local all = { pouch }
@@ -2111,7 +2094,7 @@ local SF = (function()
 
   return M
 end)()
-M.crab, M.star, M.anemone, M.whelk, M.eggcase = SF.crab, SF.star, SF.anemone, SF.whelk, SF.eggcase
+M.crab, M.star, M.anemone, M.whelk, M.eggcase, M.urchin = SF.crab, SF.star, SF.anemone, SF.whelk, SF.eggcase, SF.urchin
 
 -- ---------------------------------------------------------------- the forest
 function M.forest(rng, o)
