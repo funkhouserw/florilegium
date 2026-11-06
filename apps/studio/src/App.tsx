@@ -693,7 +693,6 @@ export function App() {
               <option value="gym">Cat gym</option>
               <option value="oak">One huge oak</option>
               <option value="flowers">Kevin's flowers</option>
-              <option value="cats">Old cats</option>
             </select>
           </label>
           <label>Ink

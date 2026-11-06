@@ -1,6 +1,6 @@
 // gym.ts -- asks the worker for a page's drawing (a cat gym, an oak, flowers); one page at a time, the same request only once.
 export type GymRequest = {
-  grows: 'gym' | 'oak' | 'cats' | 'flowers'; ink: 'green' | 'blue'; crown: 'lush' | 'open'; season: string; spanishmoss: boolean
+  grows: 'gym' | 'oak' | 'flowers'; ink: 'green' | 'blue'; crown: 'lush' | 'open'; season: string; spanishmoss: boolean
   w: number; h: number; seed: number; cats: number; size: number; density: number; index: number
   keepouts: number[][]; ops?: boolean                 // ops: PDF operators instead of an SVG
 }

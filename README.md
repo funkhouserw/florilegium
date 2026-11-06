@@ -25,7 +25,7 @@ Felilegium is for posts, carousels and printed pages. Draw a box on a page, type
 what grows around your words:
 
 - **A cat gym**, **one huge oak** (lush or open crown, any season, Spanish moss if you like),
-  **Kevin's flowers** (spring, summer or autumn), or the first, chunkier cats.
+  or **Kevin's flowers** (spring, summer or autumn).
 - Text flows from box to box and onto new pages as you type. A new box carries on the text
   you're in; "Unlink" on its label gives it text of its own.
 - Headings, bold, italic, lists and alignment, with Markdown shortcuts as you type
