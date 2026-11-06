@@ -422,8 +422,8 @@ local function head(rng, g, H, ge, flip)
     if g.torn == sd then pts = { pts[1], { tipx - sd * r * 0.06, r * (0.8 + 0.62 * sc) }, { lerp(tipx, pts[3][1], 0.4), r * (0.74 + 0.5 * sc) }, { lerp(tipx, pts[3][1], 0.5) + sd * r * 0.03, r * (0.86 + 0.42 * sc) }, pts[3] } end
     return ccw(pts), bx, tipx, sc
   end
-  local eL, lbx, ltip, ls = ear(-1)
-  local eR, rbx, rtip, rs = ear(1)
+  local eL = ear(-1)
+  local eR = ear(1)
   local ho = ccw({ { -r * 1.02, -r * 0.1 }, { -r * 0.86, r * 0.46 }, { -r * 0.42, r * 0.84 }, { 0, r * 0.9 }, { r * 0.42, r * 0.84 }, { r * 0.86, r * 0.46 }, { r * 1.02, -r * 0.1 }, { r * 0.76, -r * 0.6 }, { r * 0.3, -r * 0.84 }, { -r * 0.3, -r * 0.84 }, { -r * 0.76, -r * 0.6 } })
   local function sil()
     ink.poly(eL, true) ink.poly(eR, true)
@@ -658,7 +658,6 @@ function M.cat(rng, name, g, s, o)
   local function paint_tail()
     if not Tm.tail then return end
     local c2 = {}
-    local n = #Tm.tail
     local r0 = Tm.tail[1]
     for i, p in ipairs(Tm.tail) do
       local x, y = r0[1] + (p[1] - r0[1]) * g.tail, r0[2] + (p[2] - r0[2]) * g.tail
@@ -964,7 +963,6 @@ local function fur_head(rng, g, H, flip, hairs)
   local eR = { { r * 0.12, r * 0.86 }, { r * 0.72 + tx * 0.4, r * (0.86 + 0.8 * g.ear) }, { r * 0.92, r * 0.42 } }
   ink.smooth(ell(0, 0, r * 1.02, r * 0.92, 12), true, 1) ink.fill(ink.paper)
   ink.poly(eL, true) ink.poly(eR, true) ink.fill(ink.paper)
-  local nz = hairs.nz
   local N = floor(pi * r * r * dens * 1.8)
   local L = hairs.len
   for _ = 1, N do
@@ -1053,7 +1051,6 @@ local function draw_fur(rng, Tm, g, s, flip)
       local bx_, by_ = pts[i + 1][1] - nrm[i + 1][1] * ws[i + 1] / 2 - pts[i][1] + nrm[i][1] * ws[i] / 2, pts[i + 1][2] - nrm[i + 1][2] * ws[i + 1] / 2 - pts[i][2] + nrm[i][2] * ws[i] / 2
       local seglen_ = (sqrt(ax_ * ax_ + ay_ * ay_) + sqrt(bx_ * bx_ + by_ * by_)) / 2
       local N = floor(seglen_ * w * hairs.dens * 1.7 + rng.u())
-      local tx_, ty_ = -nrm[i][2], nrm[i][1]         -- along the part, toward its end
       local dirf = part.kind == "torso" and -1 or 1    -- fur runs shoulders to rump, shoulders to paws
       for _ = 1, N do
         local f = rng.u()
@@ -1662,7 +1659,7 @@ function M.fill(o)
   for _, mk in ipairs(o.marks or {}) do
     local name = mk.kind == "heading" and "yawn" or "sit"
     local s = mk.arg == 1 and 1.5 or 1.2
-    local hw, hh = M.extent(name, s)
+    local hw = M.extent(name, s)
     local x, y = o.markx - hw, mk.y + 0.1
     if free_at(x, y) > 0 and fits(name, x, y, s, 0.2) then put(name, x, y, s, false) end
   end
