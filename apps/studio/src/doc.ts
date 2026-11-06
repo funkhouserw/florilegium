@@ -110,6 +110,12 @@ export const newDoc = (): Doc => {
   }
 }
 
+// a new, empty work: one empty box on the first page; the paper, type and drawing stay as they are
+export const blankDoc = (d: Doc): Doc => {
+  const id = newStoryId()
+  return { ...d, stories: [{ id, doc: newStoryDoc(), auto: true }], drawn: [[startBox(d.sizeKey, id)]] }
+}
+
 const num = (v: unknown, lo: number, hi: number, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : fallback)
 const oneOf = <T,>(v: unknown, options: readonly T[], fallback: T): T => (options.includes(v as T) ? (v as T) : fallback)
 const LAYERS: readonly Layer[] = ['clear', 'over', 'behind']

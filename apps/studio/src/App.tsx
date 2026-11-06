@@ -7,7 +7,7 @@ import { blockAt, deleteBack, deleteForward, enter, marksHere, newState, redo, r
 import { flow, fontOf, lineOfPos, posOfX, remeasure, xOfPos, type Box, type FlowPage, type Layer, type Line, type TextStyle } from './flow'
 import { growGym } from './gym'
 import { download, pagePng, pagesToHtml, pagesToPdf } from './exporter'
-import { CM, docFile, fitMargins, followMargins, loadDoc, marginLimit, newBoxId, newDoc, newStoryDoc, newStoryId, readDocFile, resizeBoxes, saveDoc, SEASONS, SIZES, type Doc, type Grows, type Heart, type Margins, type PerPage, type Season, type SizeKey } from './doc'
+import { blankDoc, CM, docFile, fitMargins, followMargins, loadDoc, marginLimit, newBoxId, newDoc, newStoryDoc, newStoryId, readDocFile, resizeBoxes, saveDoc, SEASONS, SIZES, type Doc, type Grows, type Heart, type Margins, type PerPage, type Season, type SizeKey } from './doc'
 import { familyOf, FAMILIES } from './fonts'
 import { fromMarkdown, sliceFromHtml, sliceFromMarkdown, sliceToHtml, sliceToText, toMarkdown, type Align } from './schema'
 
@@ -153,6 +153,8 @@ export function App() {
   const [selected, setSelected] = useState<{ page: number; id: number } | null>(null)
   const [linking, setLinking] = useState<number | null>(null)
   const [plain, setPlain] = useState<string | null>(null)
+  // the All text drawer: every story's text as Markdown, one field for each set of linked boxes
+  const [allText, setAllText] = useState<Record<number, string> | null>(null)
 
   const face = familyOf(family)
   const style: TextStyle = useMemo(() => ({ family, size: fontSize, leading: 1.35, color: textColor, headingBold: face.headingBold }), [family, fontSize, face, textColor])
@@ -173,6 +175,33 @@ export function App() {
   const titleBlock = texts.flatMap((t) => { const out: string[] = []; t.doc.forEach((b) => { if (b.textContent.trim()) out.push(b.textContent) }); return out })[0] ?? ''
   const title = titleBlock.slice(0, 120)
   const fileBase = title.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'felilegium'
+  function storyOrder() {
+    const at = new Map<number, { pages: number[], boxes: number }>()
+    pages.forEach((p, i) => [...p.boxes].sort((a, b) => a.y - b.y || a.x - b.x).forEach((b) => {
+      const e = at.get(b.story) ?? { pages: [], boxes: 0 }
+      e.pages.push(i + 1)
+      if (b.id >= 0) e.boxes++                                    // a run-on page's copy is not a box of its own
+      at.set(b.story, e)
+    }))
+    return [...at.entries()].map(([id, e]) => ({ id, ...e }))
+  }
+  function openAllText() {
+    const m: Record<number, string> = {}
+    for (const st of stories) m[st.id] = toMarkdown(st.state.doc)
+    setTab(null); setActiveId(null); setSelected(null); setPlain(null); typing.current?.blur()
+    setAllText(m)
+  }
+  function newWork() {
+    if (!window.confirm('Start a new, empty work? This clears all the text and boxes. The paper, type and drawing settings stay. Save a file first if you want to keep this one.')) return
+    setAllText(null)
+    applyDoc(blankDoc(doc))
+  }
+  useEffect(() => {
+    if (!allText) return
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setAllText(null) }
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [allText])
   const boxCount = (story: number) => drawn.reduce((n, p) => n + p.filter((b) => b.story === story).length, 0)
 
   // kept in this browser as you work; a full disk must not stop the work
@@ -861,6 +890,8 @@ export function App() {
     <header className="top">
       <h1>Felilegium</h1>
       <button className={'regen' + (stale ? ' stale' : '')} onClick={() => setGrown(requests)} disabled={growing}>{growing ? 'Generating…' : 'Regenerate'}</button>
+      <button className="regen" onClick={openAllText}>All text</button>
+      <button className="regen" onClick={newWork}>New</button>
       <a className="repo" href="https://github.com/funkhouserw/florilegium" target="_blank" rel="noreferrer"><span className="long">funkhouserw/florilegium on </span>GitHub</a>
     </header>
     <div className="app">
@@ -904,6 +935,7 @@ export function App() {
             <label className="check"><input type="checkbox" checked={active.auto} onChange={(e) => { const v = e.target.checked; setStories((all) => all.map((s) => (s.id === active.id ? { ...s, auto: v } : s))) }} /> Add pages when the text runs over</label>
           </div>
         )}
+        <button onClick={openAllText}>Edit all the text…</button>
         <button onMouseDown={keep} disabled={!active} onClick={() => setPlain(plain === null && active ? toMarkdown(active.state.doc) : null)}>{plain === null ? 'Plain text and spellcheck' : 'Close plain text'}</button>
         {plain !== null && active && (
           <label>This story as plain text
@@ -1032,10 +1064,11 @@ export function App() {
         </div>
         <p className="hint">{busy || note || `${pages.length} page${pages.length === 1 ? '' : 's'}. ${face.files ? 'PDF and HTML keep real text you can select.' : `For a PDF, choose IM Fell or Florilegium Roman: a browser can only embed fonts that come with the app. An HTML file shows ${face.label} only to readers who have it.`}`}</p>
         {overflow && <p className="error" role="alert">Some text runs past the bottom of its box (marked in red): make the box bigger, or flow it into another.</p>}
-        <div className="row three">
+        <div className="row four">
           <button onClick={() => download(docFile(doc), `${fileBase}.studio.json`)}>Save file</button>
           <button onClick={() => opener.current?.click()}>Open file</button>
-          <button onClick={() => { if (window.confirm('Start over? This clears the stories and boxes kept in this browser.')) applyDoc(newDoc()) }}>Start over</button>
+          <button onClick={newWork}>New, empty</button>
+          <button onClick={() => { if (window.confirm('Start over with the sample text? This clears the stories and boxes kept in this browser.')) applyDoc(newDoc()) }}>Sample</button>
         </div>
         <input ref={opener} type="file" accept=".json,application/json" hidden aria-label="Open a studio file"
           onChange={(e) => { void openFile(e.target.files?.[0]); e.target.value = '' }} />
@@ -1127,6 +1160,34 @@ export function App() {
         onCompositionEnd={() => { setComposition(null); syncTyping() }}
         onCopy={(e) => onCopy(e, false)} onCut={(e) => onCopy(e, true)} onPaste={onPaste} />
     </div>
+    {allText && (
+      <div className="alltext" role="dialog" aria-modal="true" aria-label="All the text" onPointerDown={(e) => { if (e.target === e.currentTarget) setAllText(null) }}>
+        <div className="drawer">
+          <div className="drawerhead">
+            <h2>All the text</h2>
+            <button className="primary" onClick={() => setAllText(null)}>Done</button>
+          </div>
+          <p className="hint">One field for each set of linked boxes, in page order. Paste, select and spellcheck as in any text field; # starts a heading, - a list. The boxes change as you type.</p>
+          {storyOrder().map(({ id, pages: on, boxes: n }, k) => {
+            const st = stories.find((x) => x.id === id)
+            if (!st) return null
+            const u = [...new Set(on)]
+            const where = u.length === 1 ? `page ${u[0]}` : `pages ${u[0]}–${u[u.length - 1]}`
+            const text = allText[id] ?? toMarkdown(st.state.doc)
+            const rows = Math.max(6, Math.min(28, text.split('\n').reduce((r, l) => r + 1 + Math.floor(l.length / 42), 0)))
+            return (
+              <label key={id}>{`Text ${k + 1}: ${n <= 1 ? 'one box' : `${n} linked boxes`}, ${where}`}
+                <textarea spellCheck rows={rows} value={text} onChange={(e) => {
+                  const v = e.target.value
+                  setAllText((m) => (m ? { ...m, [id]: v } : m))
+                  update(id, (s) => replaceDoc(s, fromMarkdown(v)))
+                }} />
+              </label>
+            )
+          })}
+        </div>
+      </div>
+    )}
     {!narrow && <footer className="bottom">{credits}</footer>}
     </div>
   )
