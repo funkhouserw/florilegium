@@ -1,0 +1,11 @@
+// Felilegium on Cloudflare: the Vite build served as static assets, no server code.
+//   npm run build && npx wrangler deploy        (from apps/studio)
+{
+  "name": "felilegium",
+  "compatibility_date": "2026-11-06",
+  "routes": [{ "pattern": "felilegium.corporateshill.com", "custom_domain": true }],
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
