@@ -1044,7 +1044,12 @@ function M.forest(rng, o)
       local w = rng.range(1.4, 3.6)
       local kind = rng.pick({ "boulder", "boulder", "slab", "cobbles", "ledge" })
       local cx = x + w / 2
-      if not blocked(cx, sandtop + 0.5) then rocks[#rocks + 1] = { x = cx, w = w, kind = kind } end
+      local q = blocked(cx, sandtop + 0.5) or blocked(cx, sandtop + 1.6) or blocked(cx, sandtop + 2.8)
+      if not q then rocks[#rocks + 1] = { x = cx, w = w, kind = kind }
+      elseif q[2] < sandtop + 3 and q[4] < H * 0.6 and cx - w / 2 > q[1] and cx + w / 2 < q[3] then
+        -- a caption along the floor: a reef ledge rests on top of it, and the kelp grows from there
+        rocks[#rocks + 1] = { x = cx, w = w, kind = rng.chance(0.5) and "ledge" or "slab", base = q[4] + 0.05 }
+      end
       x = x + w + rng.range(0.3, 2.4)
     end
   end
@@ -1166,8 +1171,8 @@ function M.forest(rng, o)
   ink.layer(L_FLOOR)
   sand(rng.fork(), W, sandtop)
   for _, r in ipairs(rocks) do
-    r.top = rock(rng.fork(), r.x, sandtop - 0.12, r.w, r.kind, rng.range(0.16, 0.24))
-    reg(r.x - r.w / 2, 0, r.x + r.w / 2, r.top, "rock")
+    r.top = rock(rng.fork(), r.x, r.base or (sandtop - 0.12), r.w, r.kind, rng.range(0.16, 0.24))
+    reg(r.x - r.w / 2, r.base or 0, r.x + r.w / 2, r.top, "rock")
   end
   -- 3. the near bunches: most big rocks carry one, from a couple of stipes to nine; now and then a bull kelp
   for _, r in ipairs(rocks) do
