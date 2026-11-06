@@ -721,6 +721,7 @@ function M.skeleton(rng, o)
     return true
   end
   local e = o.envelope                                 -- { cx, cy, rx, ry, rz }
+  local free_area = nil                                -- around text: the crown's room the tree can reach, cm^2
   if e and not o.fill then e = { e[1], e[2] * 0.88, e[3] * 1.08, e[4] * 0.72, e[5] } end   -- v2: wider than tall
   if o.fill then
     -- around text: the crown is whatever free space the tree can reach, not an ellipse. A flood over a
@@ -745,8 +746,12 @@ function M.skeleton(rng, o)
         end
       end
     end
+    free_area = ncells * c * c
     local acc_ = ink.rng(floor(o.base[1] * 211) + 41)
-    local want = floor(min(o.N or 1100, floor(ncells * c * c * 3)) * 0.7)   -- v2: the scaffolds feed their own
+    -- v2: the scaffolds feed their own; where the free room is large (text in corners, a wide gap), the crown
+    -- needs the points to fill it
+    local roomy = ncells * c * c > 0.37 * F.w * (F.h - o.base[2])
+    local want = floor(min(o.N or 1100, floor(ncells * c * c * 3)) * (roomy and 1.0 or 0.7))
     local tries = 0
     while #pts < want and tries < want * 60 do
       tries = tries + 1
@@ -769,10 +774,12 @@ function M.skeleton(rng, o)
   do                                                   -- v2: an open middle, the weight out on the limbs
     local kept, cut = {}, ink.rng(floor(o.base[1] * 131) + 17)
     local span = (o.fill and o.fill.w or e[1] * 2) * 0.17
-    for _, p in ipairs(pts) do
+    local among = 1e9                                  -- up among the text boxes (a gutter, beside a column) the
+    for _, q in ipairs(keep) do if q[2] > o.base[2] then among = min(among, q[2]) end end   -- crown is never thinned:
+    for _, p in ipairs(pts) do                         -- the tree routes up through those gaps
       local dx = abs(p[1] - o.base[1])
       local keep_ = o.fill and 0.3 or 0.6                -- a free-standing crown stays closed at the top
-      if dx > span or p[2] < o.base[2] + 6 or cut.chance(keep_ + (1 - keep_) * dx / span) then kept[#kept + 1] = p end
+      if dx > span or p[2] < o.base[2] + 6 or p[2] > among or cut.chance(keep_ + (1 - keep_) * dx / span) then kept[#kept + 1] = p end
     end
     pts = kept
   end
@@ -804,11 +811,14 @@ function M.skeleton(rng, o)
     local th_ = min(1.0 + tw * tm.range(1.0, 1.3), over - o.base[2] - tw * 0.6)
     steps = max(4, floor(th_ / D))
   end
-  -- A short space under the text (a text over the top of the page, the tree squeezed under it): the tree
+  -- A cramped space under the text, with little room anywhere the crown could reach (rare): the tree
   -- is mostly bole, an ancient pollard. The trunk rises straight through about nine tenths of the height
   -- under the text and is cut there at its full width; two or three scaffolds leave the top of the bole,
   -- rising before they spread into the space beside the text. A tall page is as it was (`short` is nil).
-  local short = over and over - o.base[2] < 15 and over - o.base[2] > tw * 1.2
+  -- Only where the crown truly has little room anywhere it can reach, beside and above the text as well
+  -- as over the trunk's foot (a text over the top of a small page): a tree with room rises and routes.
+  local short = over and over - o.base[2] < max(7, tw * 1.8) and over - o.base[2] > tw * 1.2
+    and free_area and o.fill and free_area < 0.15 * o.fill.w * (o.fill.h - o.base[2])
   if short then
     mode = "cut"
     steps = max(4, floor(((over - o.base[2]) * 0.9 - 0.35) / D))
@@ -2173,7 +2183,8 @@ function M.tree(rng, o)
               q.x, q.y = n.x + rx * c_ - ry * s_, n.y + rx * s_ + ry * c_
             end
           else
-            for _, q in ipairs(moved) do q.gone = true end
+            if #moved <= 12 then for _, q in ipairs(moved) do q.gone = true end   -- a twig that can't turn goes
+            else ok = true end                         -- a limb with a crown on it stays as it grew (it routes round the text)
           end
         end
         if ok then keep_[#keep_ + 1] = k end
@@ -2196,12 +2207,22 @@ function M.tree(rng, o)
     end)
     local trunk_done = false
     -- the stem's own pinch, at one fork (see below)
+    local size_ = {}                                   -- nodes carried by each node
+    for i = #nodes, 1, -1 do
+      local n = nodes[i]
+      local c = 1
+      for _, k in ipairs(n.kids) do c = c + (size_[k] or 0) end
+      size_[n] = c
+    end
     local function stem_pinch(n)
       local cont, nbig = nil, 0
       for _, k in ipairs(n.kids) do
         if WW[k] >= 0.55 * WW[n] then nbig = nbig + 1 end
         if (k.trunk or k.leader) and (not cont or WW[k] > WW[cont]) then cont = k end
       end
+      -- a stem going on up into the crown (it carries a fifth of the tree or more, routing round the text)
+      -- is the tree, not a pinch
+      if cont and (size_[cont] or 0) > 0.2 * #nodes then return false end
       return (cont and WW[cont] < 0.7 * WW[n] or not cont) and nbig < 2
     end
     -- A stem with no such fork can still thin away gradually, fork by small fork, into a cone (the trunk
