@@ -1252,12 +1252,12 @@ function M.forest(rng, o)
   end
   -- 4. the understory: in the gaps between the rocks, on the sand
   ink.layer(L_UNDER)
-  for _ = 1, floor(W * 0.9) do
+  for _ = 1, floor(W * 1.6) do
     local x = rng.range(0.3, W - 0.3)
-    local h = rng.range(0.6, 1.4)
+    local h = rng.range(0.9, 2.2)
     if free(x - h * 0.35, sandtop - 0.2, x + h * 0.35, sandtop + h) then
       ink.push() ink.translate(x, sandtop - 0.1)
-      local kind = rng.pick({ "palm", "red", "eel", "red", "eel" })
+      local kind = rng.pick({ "palm", "red", "eel", "red", "eel", "red" })
       if kind == "palm" then M.seapalm(rng.fork(), h, cur) elseif kind == "red" then M.redweed(rng.fork(), h, rng.range(0.25, 0.4)) else M.eelgrass(rng.fork(), h, cur) end
       ink.pop()
       reg(x - h * 0.3, sandtop - 0.2, x + h * 0.3, sandtop + h * 0.6, "weed")
