@@ -19,11 +19,13 @@ export type Margins = { top: number; right: number; bottom: number; left: number
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter', 'dead'] as const
 export type Season = typeof SEASONS[number]
 export type Grows = 'gym' | 'oak' | 'flowers'
+// each page grows its own drawing, or pages laid out alike (where their text ends included) get the same one
+export type PerPage = 'new' | 'match'
 export const TEXT_COLOR = '#1b2a6b'
 export type SavedStory = { id: number; doc: Node; auto: boolean }
 export type Doc = {
   stories: SavedStory[]; sizeKey: SizeKey; family: string; fontSize: number; seed: number; cats: number; pieces: number
-  grows: Grows; inkName: 'green' | 'blue'; crown: 'lush' | 'open'; season: Season; spanishmoss: boolean; textColor: string; margins: Margins; drawn: Box[][]
+  grows: Grows; inkName: 'green' | 'blue'; crown: 'lush' | 'open'; season: Season; spanishmoss: boolean; perPage: PerPage; textColor: string; margins: Margins; drawn: Box[][]
 }
 
 const SAMPLE = `# Why my cat needs a gym
@@ -103,7 +105,7 @@ export const newDoc = (): Doc => {
   const id = newStoryId()
   return {
     stories: [{ id, doc: fromMarkdown(SAMPLE), auto: true }], sizeKey: 'insta', family: FAMILIES[0].css, fontSize: 26, seed: 3, cats: 2, pieces: 1.4,
-    grows: 'gym', inkName: 'blue', crown: 'lush', season: 'summer', spanishmoss: false, textColor: TEXT_COLOR, margins: { ...MARGINS }, drawn: [[startBox('insta', id)]],
+    grows: 'gym', inkName: 'blue', crown: 'lush', season: 'summer', spanishmoss: false, perPage: 'new', textColor: TEXT_COLOR, margins: { ...MARGINS }, drawn: [[startBox('insta', id)]],
   }
 }
 
@@ -164,6 +166,7 @@ export function checkDoc(raw: unknown): Doc {
     crown: oneOf(o.crown, ['lush', 'open'] as const, d.crown),
     season: oneOf(o.season, SEASONS, d.season),
     spanishmoss: o.spanishmoss === true,
+    perPage: oneOf(o.perPage, ['new', 'match'] as const, d.perPage),
     textColor: typeof o.textColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.textColor) ? o.textColor : d.textColor,
     margins,
     drawn: anyBox ? drawn : d.drawn,

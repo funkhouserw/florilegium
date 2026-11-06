@@ -16,7 +16,7 @@ M.version = "2.0.0"
 -- standing in for the text block. The box round them is the text block, so the garden takes the
 -- wider side of the page and, as on a document's last page, the space under the text; with no
 -- keep-outs it takes nearly the whole page. Planned in a frame 1/k as large, then scaled by k.
--- o.seed is the work's seed (its plants), o.index the page (the garden). The SVG's paths are
+-- o.seed is the work's seed (its plants), o.page the page's garden (0 based; o.index without it). The SVG's paths are
 -- in the small frame; the streams are scaled by a `cm` of their own.
 local function flowers(o, w, h, k)
   local fw, fh = w / k, h / k
@@ -36,7 +36,7 @@ local function flowers(o, w, h, k)
   local svg = require("florilegium-svg")
   local _, _, extra = svg.page{ paper = { cm(fw), cm(fh) }, left = cm(L), right = cm(R), top = cm(T), bottom = cm(B),
     headheight = "0pt", headsep = "0pt", footskip = "0pt", head = false,
-    seed = math.max(1, math.floor(o.seed or 1)), page = math.floor(o.index or 0) + 1,
+    seed = math.max(1, math.floor(o.seed or 1)), page = math.floor(o.page or o.index or 0) + 1,
     textend = cm(math.max(0, (fh - T) - math.max(B, y0))), season = SEASON[o.season] or "summer",
     density = o.density or 1, ink = INK[o.ink] or INK.blue }
   local streams = {}

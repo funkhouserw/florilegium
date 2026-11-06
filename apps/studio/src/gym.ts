@@ -2,7 +2,8 @@
 export type GymRequest = {
   grows: 'gym' | 'oak' | 'flowers'; ink: 'green' | 'blue'; crown: 'lush' | 'open'; season: string; spanishmoss: boolean
   w: number; h: number; seed: number; cats: number; size: number; density: number; index: number
-  keepouts: number[][]; ops?: boolean                 // ops: PDF operators instead of an SVG
+  keepouts: number[][]; ops?: boolean
+  page: number                                        // which page's drawing: the index, or 0 for every page alike                 // ops: PDF operators instead of an SVG
 }
 const worker = new Worker(new URL('gym-worker.js', document.baseURI))
 const cache = new Map<string, Promise<string>>()
