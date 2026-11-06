@@ -1418,7 +1418,7 @@ local SW = (function()
     local tx, ty = ex - qx, ey - qy                     -- the end tangent (at(1) has none: its step is clamped)
     local tl = sqrt(tx * tx + ty * ty) + 1e-9
     tx, ty = tx / tl, ty / tl
-    ex, ey = ex + tx * 0.03, ey + ty * 0.03             -- the fan starts just past the last segment
+    ex, ey = ex + tx * 0.008, ey + ty * 0.008           -- the fan starts at the last segment, out along its tangent
     for _, sd in ipairs({ -1, 0, 1 }) do
       local ax, ay = tx * 0.2 + sd * -ty * 0.075, ty * 0.2 + sd * tx * 0.075
       fillp({ { ex, ey }, { ex + ax - ty * 0.035, ey + ay + tx * 0.035 }, { ex + ax * 1.08, ey + ay * 1.08 }, { ex + ax + ty * 0.035, ey + ay - tx * 0.035 } }, tone(t0 - 0.04), 0.9)
