@@ -922,7 +922,7 @@ export function App() {
         <button onClick={() => { setSeed((s) => s + 1); setGrowTick((t) => t + 1) }}>Grow a different one</button>
         <div className="row">
           <label>What grows
-            <select value={grows} onChange={(e) => { const g = e.target.value as Grows; setGrows(g); setInkName(g === 'oak' ? 'green' : 'blue'); if (g === 'oak') setPieces(1); else if (grows === 'oak') setPieces(1.4) }}>
+            <select value={grows} onChange={(e) => { const g = e.target.value as Grows; setGrows(g); setInkName(g === 'oak' ? 'green' : 'blue'); if (g === 'oak' || g === 'kelp') setPieces(1); else if (grows === 'oak' || grows === 'kelp') setPieces(1.4) }}>
               <option value="gym">Cat gym</option>
               <option value="oak">One huge oak</option>
               <option value="flowers">Kevin's flowers</option>
