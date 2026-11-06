@@ -2171,7 +2171,13 @@ function M.forest(rng, o)
     local x, y = x0, y0
     local lean = FL.lean + srng.sym(0.015) + (spread or 0)
     local w0 = wave(x0, y0)
-    local stop = surface - srng.range(0.4, 2.5)
+    -- its own height: kelp of every age grows side by side, so a stipe ends anywhere from a quarter of the way
+    -- up to the surface, more of them high than low; only one that reaches the surface (or text it can't get
+    -- round) lies over into the canopy
+    local reach = 0.22 + 0.78 * srng.range(0, 1) ^ 0.55
+    local top_ = surface - srng.range(0.3, 1.2)
+    local stop = y0 + (top_ - y0) * reach
+    local capped = reach > 0.94
     local dy = 0.22
     while y < stop do
       local ny = y + dy
@@ -2183,8 +2189,12 @@ function M.forest(rng, o)
           local side = (x < (q[1] + q[3]) / 2) and q[1] - 0.3 or q[3] + 0.3
           -- round it, if there is room beside it and the stipe is near that side; else it stops short under
           -- the text and lies over there, a little below it
-          if side > 2.5 and side < W - 2.5 and abs(side - x) < 1.6 then tx = side
-          else stop = min(stop, q[2] - srng.range(0.6, 3.0)) end
+          -- (it can only get as far sideways as it climbs: a little under three quarters of its rise)
+          if side > 2.5 and side < W - 2.5 and abs(side - x) < la / dy * 0.15 then tx = side
+          else
+            local under = q[2] - 0.4 - (q[2] - y0) * 0.8 * srng.range(0, 1) ^ 0.9   -- anywhere below it, not a ceiling   -- anywhere from just under it to well below
+            if under < stop then stop, capped = under, true end
+          end
           break
         end
       end
@@ -2195,7 +2205,7 @@ function M.forest(rng, o)
     end
     -- the canopy: lying over with the current, drifting down a little (under the surface, or under a text
     -- box it couldn't get round, which it treats the same)
-    if #pts > 8 then
+    if #pts > 8 and capped then
       local L = srng.range(1.0, 3.0)
       local droop = srng.range(0.02, 0.07)
       for k = 1, floor(L / 0.2) do
@@ -2263,7 +2273,9 @@ function M.forest(rng, o)
           last = i
         end
         side = -side
-        i = i + brng.int(4, 7)
+        -- sparse low on the stipe, crowded toward its top, where the canopy is
+        local v = (p[2] - pts[1][2]) / max(0.5, pts[#pts][2] - pts[1][2])
+        i = i + max(2, floor(lerp(8, 2, v) + brng.sym(1.2) + 0.5))
       end
       stipes[si] = { table.unpack(pts, 1, min(#pts, last + 3)) }
       -- the growing tip: a curved, scimitar-shaped blade at the end of the stipe, curling with the current
@@ -2329,7 +2341,8 @@ function M.forest(rng, o)
     local plan = {}
     for _, pts in ipairs(stipes) do
       local side = brng.chance(0.5) and 1 or -1
-      for i = 3, #pts, 2 do
+      local i = 3
+      while i <= #pts do
         local p = pts[i]
         local q = pts[min(#pts, i + 1)]
         local axis = math.atan(q[1] - p[1], q[2] - p[2]) / rad
@@ -2341,6 +2354,8 @@ function M.forest(rng, o)
           plan[#plan + 1] = { brng.fork(), p[1], p[2], ang, L, brng.range(0.1, 0.16), t0 + brng.range(-0.06, 0.1) }
         end
         side = -side
+        local v = (p[2] - pts[1][2]) / max(0.5, pts[#pts][2] - pts[1][2])
+        i = i + max(1, floor(lerp(5, 1, v) + brng.sym(0.8) + 0.5))   -- thin near the foot, thick near the top
       end
     end
     for _, pts in ipairs(stipes) do
