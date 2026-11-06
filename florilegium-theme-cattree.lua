@@ -1395,7 +1395,7 @@ function M.compose(C, ink, seed, col, o)
 
   -- a reference cat: pose sizes (page cm) for the overlap test
   local CAT = { loaf = { 2.2, 1.0 }, sit = { 1.2, 1.9 }, curl = { 1.9, 0.85 }, walk = { 2.4, 1.45 },
-    meow = { 1.4, 2.0 }, stretch = { 2.6, 1.3 }, bat = { 1.4, 2.0 }, drape = { 2.2, 1.0 } }
+    meow = { 1.4, 2.0 }, stretch = { 2.6, 1.3 }, bat = { 1.4, 2.0 }, drape = { 2.2, 1.0 }, sprawl = { 2.6, 1.0 } }
   local function cat(x, y, pose, facing, angle, inside)
     local w, h = CAT[pose][1], CAT[pose][2]
     if not inside and not free(x - w / 2, y + 0.03, x + w / 2, y + h, 0.02) then return false end
@@ -1628,7 +1628,7 @@ function M.compose(C, ink, seed, col, o)
     end
     if not placed and best >= 1.4 and rail_ok(0.25) then p.rail = true end
     if not placed and best >= 1.4 then
-      spot((ba + bb) / 2, py, { "loaf", "sit", "stretch", "meow" })
+      spot((ba + bb) / 2, py, { "loaf", "sit", "stretch", "meow", "sprawl" })   -- a long open stretch of platform
     end
     -- a cat draped over a platform's end, if nothing is right under it
     local dx_ = rng.chance(0.5) and p.xb or p.xa
@@ -3065,298 +3065,796 @@ end
 
 
 -- ---------------------------------------------------------------- cats
--- A cat in the ink, real size (a body of about 45 cm), standing on the origin and
--- facing +x. Every pose is a hand-drawn outline (cm), smoothed: the body and legs,
--- the head with pointed ears, the tail as a tapered stroke. Painted like the rest:
--- a wash, granulated, darker pooling at the edge, a paler belly, lifted light
--- along the back; copper eyes with a slit, a small nose, white whiskers when large
--- enough to see. pose: loaf | sit | curl | walk | drape | peek. o.coat: solid |
--- blue | tabby | tux | pale (or chosen from rng). facing -1 turns it, angle tilts it.
-local CATS = {
-  loaf = {
-    body = { { -22, 0.5 }, { -24, 3.8 }, { -23, 9 }, { -18.5, 13.2 }, { -10, 15.6 }, { 0, 16.2 }, { 7.5, 15.3 }, { 11.5, 12.8 }, { 13.8, 8.5 }, { 15, 3.5 }, { 13.8, 0.6 }, { 4, 0 }, { -12, 0 } },
-    paws = { { 14.8, 1.3, 3.8, 1.3 } },
-    head = { 15.5, 14.8, 5.4, 4.9, 0 }, face = "front",
-    tail = { -21.5, 3.2, -27, 0.2, -14, -0.6, -2, 0.8, 3.0, 1.6 },
-    belly = { -6, 1.6, 15, 3.0 }, back = { -20, 11.5, -10, 15.2, 1, 15.8, 9, 14 },
-    lines = { { 2, 1, 7, 3.5, 9, 7, 10, 11 } },
-  },
-  sit = {
-    body = { { -10.5, 0.5 }, { -12.8, 4 }, { -12.6, 10 }, { -10, 15 }, { -5.5, 19.5 }, { -1, 23.5 }, { 2.8, 27 }, { 7, 27.3 }, { 9, 24 }, { 9.2, 18 }, { 8.4, 10 }, { 8.6, 3.5 }, { 10, 1.3 }, { 9.6, 0 }, { 6, 0 }, { 5.4, 6.5 }, { 3.5, 4 }, { 0, 1.4 }, { -5, 0 } },
-    paws = { { 9.6, 0.9, 2.7, 1.1 } },
-    head = { 6.6, 31.2, 5.3, 4.8, 0 }, face = "front",
-    tail = { -10.5, 2.4, -17.5, 1.2, -7, -1, 5, 0.6, 2.8, 1.4 },
-    belly = { 3, 17.5, 5.5, 5.5 }, back = { -12, 8, -10.5, 14, -5, 19.5, 0, 24 },
-    lines = { { -0.5, 1.2, -7.5, 3.5, -9, 10.5, -4.5, 15.5 }, { 5.6, 6.5, 5.3, 11, 6, 15, 7.5, 18 } },
-  },
-  curl = {
-    body = { { -18, 5.5 }, { -16.5, 11 }, { -9.5, 14.5 }, { 0, 15.3 }, { 9.5, 14 }, { 16, 10.8 }, { 18.5, 5.8 }, { 16.5, 1.1 }, { 8, 0 }, { -9, 0 }, { -16, 1.4 } },
-    paws = {},
-    head = { 10.5, 7, 5.6, 4.9, -10 }, face = "asleep",
-    tail = { -17, 3.5, -18, -0.5, 0, -0.8, 14, 1.4, 3.2, 2.0 },
-    back = { -15, 9.5, -8, 13.8, 2, 14.6, 10, 13.4 },
-    lines = { { -6, 1, -12, 4, -12, 10, -6, 12.5 } },
-  },
-  walk = {
-    body = { { -18, 14 }, { -18.5, 18 }, { -14, 21 }, { -5, 21.6 }, { 5, 21.2 }, { 12, 20.6 }, { 16, 22.8 }, { 18, 19.8 }, { 16, 14.5 }, { 11, 11.8 }, { 0, 12.2 }, { -10, 12.2 }, { -15.5, 12.6 } },
-    thighs = { { -13.5, 15, 5.2, 5.8 }, { 11.5, 15.5, 3.8, 4.6 } },
-    legs = { { -15, 13.5, -16, 0.6, 4.6, 2.2 }, { -10, 13, -8, 0.6, 3.9, 2.1 }, { 10.2, 13, 9, 0.6, 3.4, 2.0 }, { 13.8, 13.5, 15.6, 0.6, 3.2, 2.0 } },
-    paws = { { -16, 0.8, 2.0, 0.9 }, { -8, 0.8, 1.9, 0.9 }, { 9, 0.8, 1.8, 0.9 }, { 15.6, 0.8, 1.8, 0.9 } },
-    head = { 21, 24.2, 5.3, 4.7, 5 }, face = "side",
-    tail = { -18, 18.5, -23.5, 19.5, -26.5, 25, -24.5, 31.5, 2.8, 1.4 },
-    belly = { -11, 11.8, 13, 2.2 }, back = { -16.5, 19.5, -7, 21.8, 4, 21.8, 12, 21 },
-  },
-  stretch = {
-    body = { { -17, 9 }, { -18.5, 14 }, { -17, 19.5 }, { -12.5, 22 }, { -6.5, 20.5 }, { 0, 15.5 }, { 6, 10 }, { 12, 6.8 }, { 18, 5 }, { 21, 3.2 }, { 20, 1.6 }, { 13, 2.4 }, { 5, 3.4 }, { -3, 5.6 }, { -9, 6.8 }, { -13.5, 7 } },
-    thighs = { { -13.5, 13, 5.2, 6.2 } },
-    legs = { { -15.5, 11, -16.5, 0.6, 4.4, 2.1 }, { -10.5, 10, -9, 0.6, 3.8, 2.0 }, { 12, 5, 24, 1.0, 3.2, 1.9 }, { 9, 4.6, 21.5, 0.8, 3.0, 1.8 } },
-    paws = { { -16.5, 0.8, 2.0, 0.9 }, { -9, 0.8, 1.9, 0.9 }, { 24.5, 1.0, 2.2, 1.0 }, { 22, 0.8, 2.0, 0.9 } },
-    head = { 18.5, 8.8, 5.1, 4.6, -6 }, face = "side",
-    tail = { -17.5, 17, -23, 18, -26, 23, -24, 27, 2.8, 1.4 },
-    back = { -16, 18, -11, 21.5, -3, 18, 6, 11 },
-  },
-  claw = {                                             -- up on its hind legs, front paws on a post at x = 12
-    body = { { -6, 4 }, { -8.5, 9 }, { -8.5, 16 }, { -6.5, 23 }, { -3.5, 29.5 }, { 0, 34 }, { 4, 35.5 }, { 6.5, 33 }, { 6, 27 }, { 4.5, 20 }, { 3.5, 12 }, { 4, 6 }, { 2, 3.5 }, { -2, 3 } },
-    thighs = { { -4, 7.5, 5.4, 6.5 } },
-    legs = { { -5, 6, -6.5, 0.6, 4.5, 2.2 }, { 0, 6, 2, 0.6, 4, 2.1 }, { 3.5, 31, 11.5, 40, 3.4, 2.0 }, { 4.5, 27.5, 12, 34, 3.2, 1.9 } },
-    paws = { { -6.5, 0.8, 2.1, 0.9 }, { 2.2, 0.8, 2.0, 0.9 }, { 12, 40.5, 1.4, 1.8 }, { 12.5, 34.5, 1.4, 1.8 } },
-    head = { 3.5, 39.5, 5.1, 4.6, 14 }, face = "side",
-    tail = { -7, 7, -13, 5, -17, 9, -18, 15, 2.8, 1.4 },
-    back = { -8, 10, -7.5, 18, -5, 26, -1, 32 },
-  },
-}
-CATS.bat = {                                           -- sitting, one front paw raised at something above
-  body = CATS.sit.body, paws = { { 9.6, 0.9, 2.7, 1.1 }, { 14.6, 34.6, 1.6, 1.8 } },
-  legs = { { 6.5, 21, 14.3, 33.6, 3.0, 1.9 } },
-  head = { 6.4, 31.2, 5.3, 4.8, 14 }, face = "side",
-  tail = CATS.sit.tail, belly = CATS.sit.belly, back = CATS.sit.back, lines = CATS.sit.lines,
-}
-CATS.meow = {                                          -- sitting, head up, mouth open
-  body = CATS.sit.body, paws = CATS.sit.paws,
-  head = { 6.8, 31.6, 5.3, 4.8, 16 }, face = "meow",
-  tail = CATS.sit.tail, belly = CATS.sit.belly, back = CATS.sit.back, lines = CATS.sit.lines,
-}
-CATS.drape = {                                         -- lying on an edge, a paw and the tail hanging over it
-  body = CATS.loaf.body, paws = { { 14.6, -9.4, 1.6, 1.4 } }, head = CATS.loaf.head, face = "front",
-  legs = { { 12.5, 5, 14.5, -9, 3.6, 2.2 } },
-  tail = { -21, 4, -25, -2, -24, -12, -22, -20, 3.0, 1.6 },
-  belly = CATS.loaf.belly, back = CATS.loaf.back, lines = CATS.loaf.lines,
-}
-local COATS = { "solid", "solid", "blue", "tabby", "tabby", "tux", "pale" }
--- every part of a cat is wound counterclockwise, so overlapping parts add up
--- instead of cancelling (nonzero fill)
-local function ccw(p)
-  local a = 0
-  for i = 1, #p do local q, r = p[i], p[i % #p + 1] a = a + q[1] * r[2] - r[1] * q[2] end
-  return a >= 0 and p or reversed(p)
-end
--- a leg: a blade from (x0,y0) to (x1,y1), w0 wide at the top, w1 at the paw
-local function leg_pts(l)
-  local x0, y0, x1, y1, w0, w1 = l[1], l[2], l[3], l[4], l[5], l[6]
-  local pts = ink.blade(function(v) return x0 + (x1 - x0) * v + 0.8 * sin(pi * v), y0 + (y1 - y0) * v end, 10,
-    function(v) return lerp(w0, w1, v ^ 0.7) / 2 end, function(v) return lerp(w0, w1, v ^ 0.7) / 2 end)
-  return ccw(pts)
-end
-local COAT_TONE = { solid = 0.12, blue = 0.3, tabby = 0.36, tux = 0.1, pale = 0.62 }
+-- A cat in the ink, real size (a body of about 45 cm, the units cm), drawn at M.SCALE, standing on the origin and
+-- facing +x; facing -1 turns it, angle tilts it (degrees). pose: loaf sit curl walk stretch claw bat meow drape
+-- sprawl. o.coat: solid blue tabby tux pale calico tortie (or chosen from rng); o.tone overrides the coat's tone;
+-- o.flat draws a solid silhouette. Each pose keeps compose's box (CAT) and anchors: a claw's paws on a post at
+-- x = 12 and under 44 cm, a drape's paw over an edge at x = 14, a bat's paw up at about (14.4, 34).
+-- M.peek(rng, o): the head and two paws on a hole's lower edge at the origin.
+--
+-- Each pose is drawn, not assembled: ONE contour through anatomical landmarks (the withers and the dip behind
+-- them, the back, the rise over the hips, the tail root, the back of the thigh, hock and heel, stifle, belly,
+-- elbow, forearm, wrist, chest, throat), legs tapering out of the body to small paws, smoothed; the far legs
+-- a second contour behind, darker; the tail a tapered ribbon rooted inside the rump; the head and ears one
+-- contour (the skull's line runs up into each ear's point), its lower edge inside the body so the neck flows
+-- into it; arms that cross the body (a raised paw, a scratching arm) ribbons from inside the shoulder. The
+-- outline is a double-width stroke under the fill, so only the outer edge shows. Inside a clip: a light mottle,
+-- the belly, the coat (tabby stripes of uneven spacing tapering down the flank, rings toward the tail's tip, an
+-- M on the brow; a tuxedo's bib and mittens; calico patches that follow the back; tortie brindle), a lit streak
+-- along the back, and a few deliberate lines (the haunch's swell, the foreleg's back edge, a tail lying over the
+-- body, an arm's edges where it crosses). Detail by the cat's length on the page (D, cm): below 1.8 the masses,
+-- eyes and ears; stripes, inner ears and slits from 1.8; whiskers and lids from 4. Inside a function of its own,
+-- so its locals stay out of the main chunk's.
+;(function()
 
-local function head_outline(h)
-  local cx, cy, rx, ry = h[1], h[2], h[3], h[4]
-  local p = {}
-  for k = 0, 15 do
-    local a = 2 * pi * k / 16
-    local s_ = 1 + 0.1 * cos(2 * a) - (sin(a) < -0.5 and 0.06 or 0)   -- wider at the cheeks
-    p[#p + 1] = { cx + rx * s_ * cos(a), cy + ry * sin(a) }
+  local atan2 = function(y, x) return math.atan(y, x) end
+  local CM = 72 / 2.54
+  local function clamp(v, a, b) return max(a, min(b, v)) end
+
+  -- ---------------------------------------------------------------- helpers
+  local function area(p)
+    local s = 0
+    for i = 1, #p do local a, b = p[i], p[i % #p + 1] s = s + a[1] * b[2] - b[1] * a[2] end
+    return s
   end
-  return p
-end
-local function ear_pts(h, side, front)
-  local cx, cy, rx, ry = h[1], h[2], h[3], h[4]
-  local bx = cx + side * rx * 0.62
-  local tipx = cx + side * rx * (front and 0.95 or 0.72)
-  return ccw({ { bx - side * rx * 0.42, cy + ry * 0.6 }, { tipx, cy + ry * 1.75 }, { bx + side * rx * 0.38, cy + ry * 0.42 } })
-end
-
-function M.cat(rng, pose, facing, angle, o)
-  o = o or {}
-  local P = CATS[pose] or CATS.loaf
-  local coat = o.coat or COATS[rng.int(1, #COATS)]
-  local t0 = o.tone or COAT_TONE[coat] + rng.sym(0.03)
-  local fine = ink.unit() * 45 * M.SCALE > 3          -- whiskers and specks only when the cat is large
-  ink.push()
-  if angle then ink.rotate(angle) end
-  ink.scale((facing or 1) * M.SCALE, M.SCALE)
-  local edge = tone(max(0, t0 - 0.12))
-  -- the tail, behind
-  local tl = P.tail
-  ink.taper(tl[1], tl[2], tl[3], tl[4], tl[5], tl[6], tl[7], tl[8], tl[9], tl[10])
-  ink.fill(tone(t0 - 0.03))
-  if coat == "tabby" then
-    local bz = ink.bezier3(tl[1], tl[2], tl[3], tl[4], tl[5], tl[6], tl[7], tl[8])
-    ink.taper(tl[1], tl[2], tl[3], tl[4], tl[5], tl[6], tl[7], tl[8], tl[9], tl[10]) ink.clip()
-      for k = 1, 5 do
-        local u = 0.17 * k
-        local x, y = bz(u)
-        local x2, y2 = bz(u + 0.01)
-        local dx, dy = x2 - x, y2 - y
-        local L = sqrt(dx * dx + dy * dy) + 1e-9
-        local nx, ny = -dy / L * 3, dx / L * 3
-        ink.moveto(x - nx, y - ny) ink.lineto(x + nx, y + ny)
+  local function ccw(p)
+    if area(p) >= 0 then return p end
+    local r = {}
+    for i = #p, 1, -1 do r[#r + 1] = p[i] end
+    return r
+  end
+  local function oval(cx, cy, rx, ry, n, a0)
+    local out = {}
+    n = n or 16
+    local ca, sa = cos(a0 or 0), sin(a0 or 0)
+    for k = 0, n - 1 do
+      local a = 2 * pi * k / n
+      local x, y = rx * cos(a), ry * sin(a)
+      out[#out + 1] = { cx + x * ca - y * sa, cy + x * sa + y * ca }
+    end
+    return ccw(out)
+  end
+  -- a smooth curve through pts as f(v) -> x, y by arclength
+  local function curve(pts)
+    local c = ink.catmull(pts, 10)
+    local s = { 0 }
+    for i = 2, #c do s[i] = s[i - 1] + sqrt((c[i][1] - c[i - 1][1]) ^ 2 + (c[i][2] - c[i - 1][2]) ^ 2) end
+    local T = s[#c]
+    return function(v)
+      local t = clamp(v, 0, 1) * T
+      local lo, hi = 1, #c
+      while hi - lo > 1 do local m = (lo + hi) // 2 if s[m] <= t then lo = m else hi = m end end
+      local f = (t - s[lo]) / max(1e-9, s[hi] - s[lo])
+      return lerp(c[lo][1], c[hi][1], f), lerp(c[lo][2], c[hi][2], f)
+    end, T
+  end
+  local function tangent(f, v)
+    local x0, y0 = f(max(0, v - 0.01))
+    local x1, y1 = f(min(1, v + 0.01))
+    local dx, dy = x1 - x0, y1 - y0
+    local l = sqrt(dx * dx + dy * dy) + 1e-9
+    return dx / l, dy / l
+  end
+  -- a profile from { {v, value}, ... }, eased between its stops
+  local function profile(t, k)
+    k = k or 1
+    return function(v)
+      for i = 2, #t do
+        if v <= t[i][1] then
+          local f = (v - t[i - 1][1]) / (t[i][1] - t[i - 1][1])
+          f = f * f * (3 - 2 * f)
+          return lerp(t[i - 1][2], t[i][2], f) * k
+        end
       end
-      ink.stroke(tone(t0 - 0.24), 2.0 * ink.unit() * ink.CM, 0.7, true)
+      return t[#t][2] * k
+    end
+  end
+  -- a round end: the radius r(v) brought to 0 over the first e0 of the length and the last e1
+  local function capped(r, e0, e1)
+    return function(v)
+      local k = 1
+      if e0 and v < e0 then local q = v / e0 k = sqrt(max(0, q * (2 - q))) end
+      if e1 and v > 1 - e1 then local q = (1 - v) / e1 k = k * sqrt(max(0, q * (2 - q))) end
+      return r(v) * k
+    end
+  end
+  -- a frame: (u, w) -> (x, y) at (x, y), turned a degrees, scaled s
+  local function frame(x, y, a, s)
+    local c, sn = cos(a * rad), sin(a * rad)
+    return function(u, w) return x + s * (u * c - w * sn), y + s * (u * sn + w * c) end
+  end
+  local function mapped(F, pts) local out = {} for i, p in ipairs(pts) do out[i] = { F(p[1], p[2]) } end return out end
+  -- a tapered ribbon through pts with a width at each (full widths), round at its far end: a raised arm
+  local function ribbon(pts, ws, n)
+    local c = ink.catmull(pts, n or 6)
+    local m = #c
+    local W = {}
+    for i = 1, m do
+      local f = (i - 1) / (m - 1) * (#ws - 1) + 1
+      local a = floor(f)
+      local b = min(#ws, a + 1)
+      W[i] = lerp(ws[a], ws[b], f - a) / 2
+    end
+    local L, Rr = {}, {}
+    for i = 1, m do
+      local p, q = c[max(1, i - 1)], c[min(m, i + 1)]
+      local dx, dy = q[1] - p[1], q[2] - p[2]
+      local l = sqrt(dx * dx + dy * dy) + 1e-9
+      L[i] = { c[i][1] - dy / l * W[i], c[i][2] + dx / l * W[i] }
+      Rr[i] = { c[i][1] + dy / l * W[i], c[i][2] - dx / l * W[i] }
+    end
+    local out = {}
+    for i = 1, m do out[#out + 1] = L[i] end
+    local p, q = c[m - 1], c[m]
+    local a = atan2(q[2] - p[2], q[1] - p[1])
+    for k = 1, 4 do local t = a + pi / 2 - pi * k / 5 out[#out + 1] = { q[1] + W[m] * cos(t), q[2] + W[m] * sin(t) } end
+    for i = m, 1, -1 do out[#out + 1] = Rr[i] end
+    return ccw(out), L, Rr
+  end
+
+  local COATS = { "solid", "solid", "blue", "tabby", "tabby", "tux", "pale", "calico", "tortie" }
+  local COAT_TONE = { solid = 0.12, blue = 0.3, tabby = 0.36, tux = 0.1, pale = 0.62, calico = 1, tortie = 0.1 }
+
+  -- ---------------------------------------------------------------- poses
+  -- Each pose is ONE contour through anatomical landmarks (real cm; {x, y, g}: g moves the point up by
+  -- (girth - 1) * g * 10, so a stout cat has a higher back and a lower belly), round where it should be, legs
+  -- tapering out of the body to small paws. far: contours of the far legs, drawn behind, darker. tail: from a
+  -- point inside the rump outward (tailfront: lying over the body, a contour where it does). head: x, y, tilt,
+  -- radius, view; its lower edge lies inside the body, so the neck flows into it. over: legs that cross the body
+  -- (a raised paw, a scratching arm) as ribbons from inside the shoulder, with a contour where they lie on it.
+  -- lines: a few deliberate interior lines (the haunch's swell, the foreleg's back edge). spine/top/bot: a rough
+  -- axis for the coat's marks (inside a clip of the contour, so they need not fit it). mitts: where white socks go.
+  local P = {}
+  local function prof(a, b, c) return profile({ { 0, a }, { 0.5, b }, { 1, c } }) end
+
+  P.loaf = function(rng, b)
+    return {
+      contour = { { -18.4, 0.6 }, { -20.8, 3.6 }, { -20.6, 8.0, 0.5 }, { -18.4, 12.4, 1 }, { -13.4, 15.2, 1 }, { -5, 16.9, 1 }, { 3, 16.7, 1 }, { 9, 15.2, 1 }, { 12.6, 13 },
+        { 15.6, 9.6 }, { 16.4, 6.2 }, { 16.0, 3.6 }, { 15.6, 2.6 }, { 17.2, 1.9 }, { 17.6, 0.9 }, { 16.6, 0.15 }, { 9, 0 }, { -8, 0 }, { -15.6, 0.1 } },
+      far = { { { 12.4, 2.6 }, { 14.6, 2.2 }, { 15.0, 1.2 }, { 14.2, 0.5 }, { 12.2, 0.8 } } },
+      lines = { { { -11, 1.4 }, { -14.4, 4.2 }, { -15.2, 8 }, { -13.6, 11.4 } } },
+      spine = { { -17, 8.4 }, { -8, 9.6 }, { 2, 9.8 }, { 10, 9.4 } }, top = prof(7, 7.6, 6.4), bot = prof(8.4, 9.6, 9.4),
+      tail = { { -16.4, 3.4 }, { -19.6, 1.6 }, { -16, 0.95 }, { -8, 0.9 }, { 0, 0.95 }, { 4.6, 1.3 }, { 6.6, 2.2 } }, tailr = { 1.6, 1.05 }, tailfront = true,
+      head = { 13.6, 14.6, rng.sym(5), 5.2, "three" },
+      mitts = { { 16.6, 1.0, 1.8, 1.6 } }, bib = { 15.6, 5.6, 2.4, 3.6 },
+    }
+  end
+  P.drape = function(rng, b)
+    local r = P.loaf(rng, b)
+    r.contour = { { -18.4, 0.6 }, { -20.8, 3.6 }, { -20.6, 8.0, 0.5 }, { -18.4, 12.4, 1 }, { -13.4, 15.6, 1 }, { -5, 17.0, 1 }, { 3, 16.9, 1 }, { 9, 15.8, 1 }, { 12.2, 13 },
+      { 15.4, 9.4 }, { 16.2, 6.0 }, { 16.0, 3.0 }, { 15.6, 0.4 }, { 15.4, -3.0 }, { 15.3, -6.4 }, { 15.6, -8.0 }, { 15.2, -9.6 }, { 14.0, -9.9 }, { 13.3, -8.8 },
+      { 13.5, -6.2 }, { 13.5, -2.6 }, { 13.2, -0.1 }, { 9, 0 }, { -8, 0 }, { -15.6, 0.1 } }
+    r.far = {}
+    r.head = { 12.6, 13.6, -7 + rng.sym(4), 5.2, "front" }
+    r.mitts = { { 14.5, -8.8, 2.0, 2.6 } }
+    r.lines = { { { 13.6, -0.2 }, { 13.4, 2.4 }, { 12.8, 4.6 } }, r.lines[1] }
+    if rng.chance(0.4) then r.face = "asleep" end
+    return r
+  end
+  P.sit = function(rng, b)
+    return {
+      contour = { { -10.8, 0.4 }, { -12.6, 3.8, 0.3 }, { -12.6, 8.4, 0.8 }, { -11.2, 12.8, 1 }, { -8.4, 17.4, 1 }, { -4.8, 21.8, 1 }, { -1.0, 25.6, 0.7 }, { 2.4, 28.6 },
+        { 8.8, 26.2 }, { 9.6, 22.2 }, { 9.4, 16 }, { 9.1, 9 }, { 9.2, 4.2 }, { 9.6, 2.6 }, { 11.2, 1.7 }, { 11.4, 0.6 }, { 10.4, 0.05 }, { 7.2, 0.0 }, { 2, 0 }, { -6, 0 } },
+      lines = { { { 6.9, 15 }, { 6.8, 8 }, { 7.0, 3.0 }, { 7.3, 0.6 } }, { { 5.4, 2.6 }, { 3.4, 8.2 }, { -1.6, 11.8 }, { -6.8, 11.8 } } },
+      spine = { { -4, 8 }, { -2.6, 13.5 }, { 0, 19.5 }, { 3, 24.5 }, { 4.8, 28 } }, top = prof(8, 6, 4.4), bot = prof(4.6, 5.6, 4.6),
+      tail = { { -9.4, 3.2 }, { -12.8, 1.6 }, { -9, 0.92 }, { -1, 0.92 }, { 6, 1.0 }, { 9.6, 1.4 }, { 11.6, 2.6 } }, tailr = { 1.55, 1.0 }, tailfront = true,
+      head = { 6.0, 30.6, rng.sym(5), 5.2, "three" },
+      mitts = { { 9.8, 1.4, 2.4, 3.2 } }, sitting = true,
+    }
+  end
+  P.bat = function(rng, b)
+    local r = P.sit(rng, b)
+    r.over = { { pts = { { 3.2, 21.6 }, { 8, 26.4 }, { 12.4, 31.6 }, { 13.8, 33.2 } }, ws = { 5.2, 3.4, 2.6, 2.4 }, paw = { 14.3, 34.0, 1.5, 1.8, 0.7 } } }
+    r.head = { 5.6, 31, 14 + rng.sym(5), 5.2, "side" }
+    return r
+  end
+  P.meow = function(rng, b)
+    local r = P.sit(rng, b)
+    r.head = { 6.2, 31.2, 16 + rng.sym(4), 5.2, "three" }
+    r.face = "meow"
+    return r
+  end
+  P.curl = function(rng, b)
+    return {
+      contour = { { -15.6, 0.2 }, { -18.6, 2.8 }, { -19, 6.6, 0.5 }, { -16.8, 10.8, 1 }, { -11, 14.2, 1 }, { -2, 15.8, 1 }, { 7, 15, 1 }, { 12.6, 12 }, { 15.6, 8.4 }, { 17, 4.8 }, { 17, 1.8 }, { 15.6, 0.2 } },
+      lines = { { { -6, 1 }, { -10, 4.6 }, { -10.4, 9 }, { -7.6, 12 } } },
+      spine = { { -15.5, 6 }, { -9, 10.6 }, { 0, 12.2 }, { 8.5, 10.4 }, { 12.5, 7.2 } }, top = prof(4.8, 6.2, 4.6), bot = prof(5.2, 8.4, 6),
+      tail = { { -15, 3.2 }, { -18.4, 1.4 }, { -12, 0.9 }, { -2, 0.9 }, { 8, 1.3 }, { 14.6, 3.4 }, { 17.4, 5.6 } }, tailr = { 2.0, 1.4 }, tailfront = true,
+      head = { 10.8, 6.4, -14 + rng.sym(5), 5.0, "three" },
+      paws = { { 15.4, 2.2, 2.0, 1.1, 0.2 } }, mitts = { { 15.4, 2.2, 2.0, 1.1 } },
+      face = "asleep",
+    }
+  end
+  P.sprawl = function(rng, b)                            -- new: lying on its side, legs out
+    return {
+      contour = { { -18, 10.2, 1 }, { -8, 12.6, 1 }, { 2, 12.2, 1 }, { 10, 12.8, 1 }, { 13.8, 14.2 },
+        { 17.4, 6.2 }, { 15.4, 5.0 }, { 19.4, 4.2 }, { 22.6, 3.4 }, { 23.4, 2.2 }, { 22.4, 1.1 }, { 18, 1.4 }, { 13.4, 1.8 },
+        { 6, 2.4, -0.4 }, { 0, 2.6, -0.4 }, { 2.2, 1.8 }, { 3.6, 1.2 }, { 3.2, 0.2 }, { -2, 0.2 }, { -8, 0.3 }, { -14, 0.6 }, { -18.6, 2.8 }, { -20, 6.4 } },
+      far = { { { 13, 7.2 }, { 17, 6.2 }, { 21, 6.0 }, { 22.6, 5.2 }, { 22, 4.2 }, { 17.6, 4.4 }, { 13, 5.0 } },
+              { { -8, 4.6 }, { -3, 3.8 }, { 1, 4.0 }, { 1.8, 3.0 }, { 0.8, 2.4 }, { -4, 2.6 }, { -9, 3.4 } } },
+      lines = { { { -4, 2.8 }, { -8.6, 5.4 }, { -11, 9.4 } } },
+      spine = { { -17, 6.5 }, { -8, 6.8 }, { 2, 6.6 }, { 10, 7.2 }, { 14, 9 } }, top = prof(5.4, 6, 4.6), bot = prof(5.6, 5.6, 4.6),
+      tail = { { -16.8, 7.8 }, { -21, 6.4 }, { -24, 3.6 }, { -27, 1.6 } }, tailr = { 1.7, 1.15 },
+      head = { 17.6, 10.6, 18 + rng.sym(8), 5.0, "three" },
+      mitts = { { 22.4, 2.2, 2.4, 1.6 }, { 1.8, 0.9, 2.2, 1.3 } },
+      face = rng.chance(0.5) and "asleep" or nil,
+    }
+  end
+  P.walk = function(rng, b)
+    local f, h = rng.sym(1.2), rng.sym(1.2)              -- where in the stride the near fore and hind paws are
+    return {
+      contour = { { -16.2, 22.6 }, { -12.4, 23.7, 1 }, { -6, 22.9, 1 }, { 0, 22.5, 1 }, { 5.4, 22.4, 1 }, { 9.6, 23.5, 1 }, { 13.4, 24.4, 0.6 }, { 17.2, 26 },
+        { 18.6, 21.6 }, { 16.0, 18.6 }, { 13.8, 16.4 }, { 13.2, 13.2 }, { 12.9, 8.4 }, { 12.8, 4.0 },
+        { 13.2, 2.2 }, { 14.6 + f, 1.3 }, { 14.6 + f, 0.2 }, { 11.6 + f * 0.5, 0.1 }, { 11.0, 2.8 }, { 10.6, 7.8 }, { 9.8, 13.0 },
+        { 7.0, 15.4, -0.5 }, { 0, 15.6, -0.5 }, { -6, 16.0, -0.5 }, { -8.6, 14.6 }, { -9.2, 12.6 },
+        { -10.4, 9.6 }, { -12.0, 6.0 }, { -11.2, 3.2 }, { -9.6 + h, 1.2 }, { -9.8 + h, 0.15 }, { -12.4 + h * 0.5, 0.1 }, { -13.0, 2.8 }, { -14.4, 6.2 },
+        { -14.6, 10.4 }, { -16, 14.6 }, { -17.4, 18.8 } },
+      far = { { { 9.0, 18.0 }, { 12.0, 14.6 }, { 13.4, 9.0 }, { 14.8, 4.2 }, { 15.6, 2.2 }, { 17.2 - f, 1.2 }, { 17.2 - f, 0.15 }, { 14.4 - f * 0.5, 0.1 }, { 13.8, 2.6 }, { 12.0, 8.0 }, { 10.4, 13.0 }, { 7.6, 16.2 } },
+              { { -10.6, 17.0 }, { -7.4, 13.4 }, { -8.4, 9.6 }, { -9.6, 6.0 }, { -8.8, 3.0 }, { -7.4 - h, 1.2 }, { -7.6 - h, 0.15 }, { -10.0 - h * 0.5, 0.1 }, { -10.6, 2.8 }, { -12.0, 6.2 }, { -12.2, 10.4 }, { -13.4, 14.6 } } },
+      farmitts = { { 15.8 - f, 1.0, 1.8, 2.0 }, { -8.6 - h, 1.0, 1.8, 2.0 } },
+      lines = { { { -9.4, 13 }, { -10.6, 16.6 }, { -12.8, 19.6 } } },
+      spine = { { -16.6, 19.2 }, { -8, 19.4 }, { 2, 19.2 }, { 10, 19.8 }, { 15, 21.6 } }, top = prof(3.6, 3.4, 3.4), bot = prof(4, 3.8, 4),
+      tail = b.tailup, tailr = { 1.5, 1.0 }, belly = true,
+      head = { 20.8, 25.6, rng.sym(5), 4.6, "side" },
+      mitts = { { 13.2 + f * 0.7, 1.0, 1.8, 2.0 }, { -11 + h * 0.7, 1.0, 1.8, 2.0 } },
+    }
+  end
+  P.stretch = function(rng, b)
+    return {
+      contour = { { -15.0, 22.0 }, { -12.6, 22.9, 1 }, { -8, 21.0, 1 }, { -1, 16.6, 1 }, { 5, 12.6, 1 }, { 9.4, 10.6, 0.6 }, { 13.2, 10.0 },
+        { 16.0, 3.4 }, { 14.4, 2.6 }, { 19.6, 2.2 }, { 23.2, 1.9 }, { 24.4, 1.2 }, { 23.8, 0.15 }, { 16, 0.1 }, { 11, 0.2 },
+        { 8.6, 1.4 }, { 6.4, 4.6 }, { 1, 8.2, -0.5 }, { -5, 12.0, -0.5 }, { -8.4, 13.0 }, { -9.4, 11.6 },
+        { -10.6, 8.6 }, { -11.8, 5.8 }, { -11.0, 3.0 }, { -9.6, 1.2 }, { -9.8, 0.15 }, { -12.2, 0.1 }, { -12.8, 2.8 }, { -14.2, 6.2 }, { -14.6, 10.4 }, { -16.0, 15.0 }, { -16.8, 19.4 } },
+      far = { { { 7.4, 5 }, { 11, 3.4 }, { 17.6, 3.2 }, { 21.4, 2.8 }, { 22.4, 1.8 }, { 21.6, 0.8 }, { 16, 1.1 }, { 10, 1.6 }, { 7, 2.8 } },
+              { { -9.4, 15.6 }, { -6.6, 12.0 }, { -7.8, 8.6 }, { -9.2, 5.8 }, { -8.4, 3.0 }, { -7.0, 1.2 }, { -7.2, 0.15 }, { -9.6, 0.1 }, { -10.2, 2.8 }, { -11.6, 6.2 }, { -12.0, 10.4 }, { -12.8, 14.6 } } },
+      farmitts = { { 21.4, 1.8, 2.0, 1.4 }, { -8.2, 1.0, 1.8, 2.0 } },
+      lines = { { { -9.4, 12 }, { -10.8, 15.8 }, { -13.2, 19.4 } } },
+      spine = { { -15.2, 19.4 }, { -8, 16.8 }, { 0, 12.2 }, { 7, 8.2 }, { 12.5, 7.6 } }, top = prof(3.6, 3.6, 3.2), bot = prof(4, 3.6, 3.4),
+      tail = b.tailup2, tailr = { 1.5, 1.0 }, belly = true,
+      head = { 17.6, 7.4, -2 + rng.sym(4), 4.5, "side" },
+      mitts = { { 23.0, 1.0, 2.0, 1.4 }, { -10.8, 1.0, 1.8, 2.0 } },
+    }
+  end
+  P.claw = function(rng, b)
+    return {
+      -- standing tall on its hind legs, feet flat, the body stretched up to the post, forelegs overhead
+      contour = { { -5.0, 13.6 }, { -6.4, 10.4 }, { -6.0, 6.6 }, { -4.6, 3.0 }, { -4.6, 1.2 }, { -4.0, 0.1 }, { 2.6, 0.1 }, { 3.0, 1.0 }, { 1.8, 1.7 }, { -1.4, 2.6 },
+        { 0.6, 4.8 }, { 3.6, 7.8 }, { 3.2, 11.6 }, { 4.4, 17 }, { 6.0, 22.2 }, { 7.6, 26.6 }, { 8.0, 30.4 }, { 6.6, 33.4 },
+        { 1.0, 36.4 }, { -1.8, 32.0, 1 }, { -3.2, 27.0, 1 }, { -4.2, 21.6, 1 }, { -5.0, 17.4, 1 } },
+      far = { { { -3.2, 12 }, { 5.0, 7.6 }, { 3.0, 4.6 }, { 2.4, 2.4 }, { 5.2, 1.2 }, { 5.2, 0.1 }, { 1.0, 0.1 }, { -1.2, 1.6 }, { -2.4, 5.4 } } },
+      farover = { { pts = { { 4.4, 25.6 }, { 8.2, 32.4 }, { 10.6, 37.6 }, { 11.4, 39.8 } }, ws = { 4.2, 2.8, 2.1, 2.0 }, paw = { 11.5, 40.4, 1.0, 1.55, 0 } } },
+      over = { { pts = { { 5.4, 26.6 }, { 8.6, 34.0 }, { 10.8, 39.6 }, { 11.4, 42.4 } }, ws = { 4.8, 3.0, 2.3, 2.1 }, paw = { 11.5, 43.0, 1.05, 1.6, 0 } } },
+      lines = { { { 3.4, 8.4 }, { 0.4, 11.6 }, { -3.6, 13.0 } } },
+      spine = { { -1.2, 12 }, { 0.4, 18.5 }, { 2.4, 25 }, { 4.4, 30.5 }, { 5.6, 33.6 } }, top = prof(5.4, 4.6, 4), bot = prof(5, 4.4, 4),
+      tail = { { -4.0, 12.4 }, { -6.4, 9.8 }, { -8.6, 5.6 }, { -9.6, 2.2 }, { -11, 1.0 }, { -12.4, 1.4 } }, tailr = { 1.55, 1.0 },
+      head = { 3.6, 36.4, 26 + rng.sym(6), 4.7, "side" }, nowhisk = true,
+      mitts = { { -0.6, 0.8, 3.6, 1.6 } },
+    }
+  end
+
+  -- ---------------------------------------------------------------- the head
+  -- ONE contour, head and ears, in the head's frame (u toward the face's side, w up; r = 1): the skull's line runs
+  -- up into each ear and its point (the point doubled, so it stays a point when smoothed) and down again, the
+  -- cheeks a soft ruff to the chin. view: front, three (turned a third toward +u), side. ear/farear: the ears'
+  -- triangles, for their inner tone.
+  local function near_(p, q, f) return { lerp(p[1], q[1], f), lerp(p[2], q[2], f) } end
+  local function tip(a, t, c)                            -- an ear's point from its base a, tip t, base c
+    return near_(t, a, 0.1), t, near_(t, c, 0.1)
+  end
+  local function headparts(view, b)
+    local eh, et = b.earh, b.eart                        -- ear height, outward tilt
+    if view == "side" then
+      local nt = { -0.32 - 0.1 * et, 0.98 + 0.56 * eh }   -- the near ear's point
+      local ft = { 0.34 + 0.05 * et, 0.96 + 0.48 * eh }  -- the far ear's, a little in front of it
+      return {
+        outline = { { 1.3, -0.12 }, { 1.2, 0.08 }, { 0.9, 0.36 }, { 0.62, 0.66 }, { 0.5, 0.8 }, tip({ 0.5, 0.8 }, ft, { 0.16, 0.9 }), { 0.16, 0.9 }, { 0.12, 0.88 },
+          tip({ 0.12, 0.88 }, nt, { -0.6, 0.64 }), { -0.6, 0.64 }, { -0.92, 0.32 }, { -1.0, -0.1 }, { -0.7, -0.6 }, { 0.0, -0.9 }, { 0.62, -0.82 }, { 1.02, -0.56 }, { 1.26, -0.34 } },
+        ear = { { 0.12, 0.86 }, nt, { -0.58, 0.62 } },
+        farear = { { 0.5, 0.78 }, ft, { 0.18, 0.88 } },
+      }
+    end
+    local t = view == "three" and 0.33 or 0
+    local function X(x) return x * (1 - 0.25 * t) + 0.42 * t * (1 - x * x * 0.3) end
+    local function pt(x, y) return { X(x), y } end
+    local rt = pt(0.74 + 0.12 * et, 0.96 + 0.54 * eh)
+    local lt = pt(-0.74 - 0.12 * et, 0.96 + 0.54 * eh * (1 - 0.1 * t))
+    return {
+      outline = { pt(0, -0.94), pt(0.5, -0.86), pt(0.92, -0.62), pt(1.16, -0.28), pt(1.08, 0.12), pt(0.96, 0.44), tip(pt(0.96, 0.44), rt, pt(0.34, 0.86)), pt(0.34, 0.86), pt(0, 0.92),
+        pt(-0.34, 0.86), tip(pt(-0.34, 0.86), lt, pt(-0.96, 0.44)), pt(-0.96, 0.44), pt(-1.08, 0.12), pt(-1.16, -0.28), pt(-0.92, -0.62), pt(-0.5, -0.86) },
+      ear = { pt(0.36, 0.84), rt, pt(0.94, 0.42) },
+      farear = { pt(-0.94, 0.42), lt, pt(-0.36, 0.84) },
+      X = X, t = t,
+    }
+  end
+
+  -- ---------------------------------------------------------------- per seed
+  local function build(rng)
+    local b = {
+      girth = rng.range(0.94, 1.07),
+      earh = rng.range(0.85, 1.15), eart = rng.range(-0.6, 0.8),
+      head = rng.range(0.95, 1.05),
+    }
+    -- a walking cat's tail, from inside the rump: up in a curve with the tip hooked over, up and back, or low
+    local kind = rng.int(1, 3)
+    local hy = rng.range(-1.5, 1.5)
+    if kind == 1 then b.tailup = { { -15.2, 21.2 }, { -18.4, 23.6 }, { -20.8, 26.4 }, { -21.4, 29 + hy * 0.4 }, { -19.8, 30.8 }, { -17.8, 30.6 } }
+    elseif kind == 2 then b.tailup = { { -15.2, 21.2 }, { -18.6, 23.2 }, { -21.6, 25.6 + hy * 0.5 }, { -23.6, 28 + hy }, { -25.6, 29 + hy } }
+    else b.tailup = { { -15.2, 21.0 }, { -18.4, 21.4 }, { -21.6, 20 + hy * 0.4 }, { -24.4, 17.8 + hy }, { -26.4, 16.6 + hy }, { -27.6, 17.6 + hy } } end
+    b.tailup2 = { { -13.8, 20.6 }, { -16.4, 23.0 }, { -18.4, 25.2 + hy * 0.3 }, { -19.4, 27.6 }, { -18.2, 29.0 }, { -16.6, 28.6 } }
+    return b
+  end
+
+  M.CAT_POSES = { "loaf", "sit", "curl", "walk", "stretch", "claw", "bat", "meow", "drape", "sprawl" }
+
+  function M.cat(rng, pose, facing, angle, o)
+    o = o or {}
+    local coat = o.coat or COATS[rng.int(1, #COATS)]
+    local t0 = o.tone or (COAT_TONE[coat] or 0.2) + (coat == "calico" and 0 or rng.sym(0.03))
+    local b = build(rng)
+    local R = (P[pose] or P.loaf)(rng, b)
+    ink.push()
+    if angle then ink.rotate(angle) end
+    ink.scale((facing or 1) * M.SCALE, M.SCALE)
+    local D = ink.unit() * 45                            -- the cat's length on the page, cm
+    local lift = ink.get_lift()
+    local flat = o.flat                                  -- a solid silhouette (for checking the shapes)
+    local mid = D > 1.8 and lift < 0.3 and not flat
+    local fine = D > 4 and lift < 0.3 and not flat
+    local big = D > 4
+    local bp = function(cm) return cm * ink.unit() * CM end   -- real cm to bp
+    local light = t0 > 0.5
+    local dark = t0 < 0.2
+    local fur = flat and tone(0) or (coat == "calico" and white or tone(t0))
+    local edge = tone(light and max(0, min(t0, 0.75) - 0.42) or max(0, t0 - 0.1))
+    local TN = big and 1 or 0.9                          -- the contour's tension
+
+    -- the contour, the far legs, the arms
+    local function girth(pts)
+      local out = {}
+      for i, p in ipairs(pts) do out[i] = { p[1], p[2] + (b.girth - 1) * (p[3] or 0) * 10 } end
+      return ccw(out)
+    end
+    local body = girth(R.contour)
+    local far = {}
+    for i, c in ipairs(R.far or {}) do far[i] = girth(c) end
+    local function arms(list)
+      local out = {}
+      for _, a in ipairs(list or {}) do
+        local outline, L_, R_ = ribbon(a.pts, a.ws)
+        local pw = a.paw
+        out[#out + 1] = { outline = outline, paw = oval(pw[1], pw[2], pw[3], pw[4], 12, pw[5]), L = L_, R = R_, a = a }
+      end
+      return out
+    end
+    local over, farover = arms(R.over), arms(R.farover)
+    -- the coat's axis
+    local sp = curve(R.spine)
+    R.top, R.bot = R.top or prof(5, 5, 5), R.bot or prof(5, 5, 5)
+    -- the tail, from inside the rump
+    local tl = curve(R.tail)
+    local tr0, tr1 = R.tailr[1], R.tailr[2]
+    local tailr = capped(function(v) return lerp(tr0 * 1.15, tr1, v ^ 0.8) end, nil, 0.05)
+    local tail = ccw((ink.blade(tl, big and 34 or 16, tailr, tailr)))
+    -- the head
+    local hk = R.head
+    local hr = hk[4] * b.head
+    local H = frame(hk[1], hk[2], hk[3], hr)
+    local HP = headparts(hk[5], b)
+    local headc, ear, farear = ccw(mapped(H, HP.outline)), mapped(H, HP.ear), mapped(H, HP.farear)
+    local paws = {}
+    for _, p in ipairs(R.paws or {}) do paws[#paws + 1] = oval(p[1], p[2], p[3], p[4], 12, p[5]) end
+    local face = R.face
+    local front = hk[5] ~= "side"
+
+    local function headshape() ink.smooth(headc, true, 0.9) end
+    local function silhouette()
+      ink.smooth(tail, true)
+      ink.smooth(body, true, TN)
+      for _, a in ipairs(over) do ink.smooth(a.outline, true) ink.smooth(a.paw, true) end
+      for _, p in ipairs(paws) do ink.smooth(p, true) end
+      headshape()
+    end
+    local ow = bp(light and 0.5 or 0.6)
+    local socks = (coat == "tux" or coat == "calico") and not flat
+    local function mitts(list, shape)                    -- white socks: ellipses, inside the given shape
+      if not list or #list == 0 then return end
+      shape() ink.clip()
+        for _, m in ipairs(list) do ink.smooth(oval(m[1], m[2], m[3], m[4], 14), true) end
+        ink.fill(white)
+      ink.unclip()
+    end
+
+    -- ---------------------------------------------------------------- behind: far legs and arm, far ear
+    local farfur = flat and tone(0.25) or (coat == "calico" and tone(0.92) or tone(t0 - (light and 0.1 or 0.06)))
+    local function farshape()
+      for _, c in ipairs(far) do ink.smooth(c, true, TN) end
+      for _, a in ipairs(farover) do ink.smooth(a.outline, true) ink.smooth(a.paw, true) end
+    end
+    if #far > 0 or #farover > 0 then
+      farshape() ink.stroke(edge, ow)
+      farshape() ink.fill(farfur)
+      if socks then mitts(R.farmitts, farshape) end
+    end
+
+    -- ---------------------------------------------------------------- the silhouette
+    silhouette() ink.stroke(edge, ow)
+    silhouette() ink.fill(fur)
+    if flat then ink.pop() return end
+    silhouette() ink.clip()
+      if mid and not light then mottle(rng, -30, -5, 30, 46, big and 10 or 5, 4, t0 - 0.07, t0 + 0.12, 0) end
+      -- the underside in shade, the belly fur a little paler above it
+      if coat ~= "calico" then
+        ink.smooth(ink.blade(sp, big and 30 or 14, function(v) return -R.bot(v) * 0.4 end, function(v) return R.bot(v) * 1.3 end), true)
+        ink.fill(tone(min(0.95, t0 + 0.14)), dark and 0.26 or 0.28)
+        ink.smooth(ink.blade(sp, big and 30 or 14, function(v) return -R.bot(v) * 0.86 end, function(v) return R.bot(v) * 2 end), true)
+        ink.fill(tone(max(0, t0 - 0.12)), 0.28)
+      end
+      -- the coat
+      if coat == "tabby" and mid then
+        local sc = tone(max(0, t0 - 0.24))
+        local v = 0.05
+        while v < 0.9 do
+          local x, y = sp(v)
+          local dx, dy = tangent(sp, v)
+          local nx, ny = -dy, dx                         -- toward the back
+          local tp_, dp = R.top(v), R.bot(v)
+          local len = rng.range(0.45, 0.85)              -- how far down the flank
+          local wv = rng.sym(1.4)
+          local w0 = rng.range(1.2, 2.1)
+          local x0, y0 = x + nx * (tp_ + 1), y + ny * (tp_ + 1)
+          local x3, y3 = x + nx * (tp_ - (tp_ + dp) * len) + dx * wv, y + ny * (tp_ - (tp_ + dp) * len) + dy * wv
+          ink.taper(x0, y0, lerp(x0, x3, 0.35) + dx * 1.0, lerp(y0, y3, 0.35) + dy * 1.0, lerp(x0, x3, 0.7) - dx * 0.6, lerp(y0, y3, 0.7) - dy * 0.6, x3, y3, w0, 0.15)
+          if rng.chance(0.25) then                       -- a short one between
+            local xa, ya = sp(v + 0.035)
+            local tb = R.top(v + 0.035)
+            ink.taper(xa + nx * (tb + 1), ya + ny * (tb + 1), xa + nx * tb * 0.6, ya + ny * tb * 0.6, xa + nx * tb * 0.3, ya + ny * tb * 0.3, xa + nx * tb * 0.1 + dx, ya + ny * tb * 0.1 + dy, w0 * 0.7, 0.15)
+          end
+          v = v + rng.range(0.075, 0.11)
+        end
+        ink.fill(sc, 0.7)
+        -- the haunch's swell: a stripe or two along its line, not a target
+        local ln = R.lines and R.lines[#R.lines]
+        if ln then                                       -- one stripe inside the haunch's line
+          local q = {}
+          for _, p in ipairs(ln) do q[#q + 1] = { p[1] - 1.4, p[2] + 0.7 } end
+          ink.smooth(q, false) ink.stroke(sc, bp(0.9), 0.4)
+        end
+      elseif coat == "tux" then
+        -- a white bib from the throat down the chest, a white line along a lying cat's belly
+        local function band(v0, v1, w)
+          local outer, inner = {}, {}
+          for k = 0, 16 do
+            local v = lerp(v0, v1, k / 16)
+            local x, y = sp(v)
+            local dx, dy = tangent(sp, v)
+            local nx, ny = dy, -dx                       -- toward the belly
+            local d = R.bot(v)
+            outer[#outer + 1] = { x + nx * d * 1.4, y + ny * d * 1.4 }
+            inner[#inner + 1] = { x + nx * d * (1 - w(k / 16)), y + ny * d * (1 - w(k / 16)) }
+          end
+          for k = #inner, 1, -1 do outer[#outer + 1] = inner[k] end
+          ink.smooth(outer, true) ink.fill(white)
+        end
+        if R.belly or R.sitting then                     -- standing or sitting: the bib down the chest
+          band(0.5, 1, function(q) return 0.95 * sin(pi * min(1, q * 1.15)) ^ 0.6 * (0.4 + 0.6 * q) end)
+        elseif R.bib then                                  -- lying: the chest under the chin
+          ink.smooth(oval(R.bib[1], R.bib[2], R.bib[3], R.bib[4], 16), true) ink.fill(white)
+        end
+        if R.belly then band(0.2, 0.6, function(q) return 0.18 * sin(pi * q) end) end
+      elseif coat == "calico" or coat == "tortie" then
+        -- patches that follow the body: a saddle over the back from the top edge down an uneven depth
+        local function saddle(v0, v1, depth, c, op)
+          local outer, inner = {}, {}
+          local ph = rng.range(0, 2 * pi)
+          for k = 0, 14 do
+            local q = k / 14
+            local v = lerp(v0, v1, q)
+            local x, y = sp(v)
+            local dx, dy = tangent(sp, v)
+            local nx, ny = -dy, dx
+            local tp_, dp = R.top(v), R.bot(v)
+            local d = (tp_ + dp) * depth * sin(pi * q) ^ 0.5 * (1 + 0.2 * sin(q * 5 + ph) + 0.08 * sin(q * 11 + ph * 2))
+            outer[#outer + 1] = { x + nx * (tp_ + 2), y + ny * (tp_ + 2) }
+            inner[#inner + 1] = { x + nx * (tp_ - d), y + ny * (tp_ - d) }
+          end
+          for k = #inner, 1, -1 do outer[#outer + 1] = inner[k] end
+          ink.smooth(outer, true) ink.fill(c, op)
+        end
+        if coat == "calico" then
+          local a = rng.range(0.02, 0.12)
+          saddle(a, a + rng.range(0.3, 0.42), rng.range(0.45, 0.7), ink.accent(0.1))
+          local b2 = rng.range(0.45, 0.55)
+          saddle(b2, b2 + rng.range(0.22, 0.32), rng.range(0.35, 0.55), tone(0.16))
+          -- a dark tail with a copper band
+          ink.smooth(ink.blade(tl, 20, function(v) return v > 0.6 and tailr(v) * 1.2 or 0 end, function(v) return v > 0.6 and tailr(v) * 1.2 or 0 end), true)
+          ink.fill(tone(0.16))
+          ink.smooth(ink.blade(tl, 20, function(v) return (v > 0.3 and v < 0.6) and tailr(v) * 1.2 or 0 end, function(v) return (v > 0.3 and v < 0.6) and tailr(v) * 1.2 or 0 end), true)
+          ink.fill(ink.accent(0.1))
+        else
+          for _ = 1, big and 16 or 8 do                  -- tortie: copper brindled through the dark, along the body
+            local v = rng.range(0.04, 0.9)
+            local x, y = sp(v)
+            local dx, dy = tangent(sp, v)
+            local off = rng.range(-0.5, 0.85) * R.top(v)
+            local cx, cy = x - dy * off, y + dx * off
+            local rr = rng.range(1.4, 3.0)
+            local ph = rng.range(0, 2 * pi)
+            local pts = {}
+            for q = 0, 9 do                              -- an irregular streak lying along the spine
+              local a = 2 * pi * q / 10
+              local k = 1 + 0.3 * sin(3 * a + ph) + 0.15 * sin(5 * a + ph * 1.7)
+              local u, w = rr * 1.9 * k * cos(a), rr * 0.7 * k * sin(a)
+              pts[#pts + 1] = { cx + u * dx - w * dy, cy + u * dy + w * dx }
+            end
+            ink.smooth(pts, true) ink.fill(ink.accent(rng.range(-0.35, 0.0)), rng.range(0.75, 0.95))
+          end
+        end
+      end
+      -- the lit streak along the back (clear of the neck and head)
+      if not light then
+        local st = {}
+        for k = 0, 8 do
+          local v = 0.12 + 0.56 * k / 8
+          local x, y = sp(v)
+          local dx, dy = tangent(sp, v)
+          st[#st + 1] = { x - dy * R.top(v) * 0.68, y + dx * R.top(v) * 0.68 }
+        end
+        ink.smooth(st, false) ink.stroke(white, bp(1.3), dark and 0.2 or 0.15)
+      end
+
+      -- legs that cross the body (the near foreleg of a sitting cat, a raised paw, a scratching arm): their fur
+      -- over the body's marks, and a contour only where they lie over the body or head
+      if #over > 0 then
+        for _, a in ipairs(over) do ink.smooth(a.outline, true) ink.smooth(a.paw, true) end ink.fill(fur)
+        if coat == "tabby" and mid then
+          for _, a in ipairs(over) do ink.smooth(a.outline, true) end ink.clip()
+            for _, a in ipairs(over) do
+              local j = a.a.pts
+              for i = 2, #j - 1 do
+                for f = 0.3, 0.75, 0.42 do
+                  local x0, y0 = lerp(j[i][1], j[i + 1][1], f), lerp(j[i][2], j[i + 1][2], f)
+                  local dx, dy = j[i + 1][1] - j[i][1], j[i + 1][2] - j[i][2]
+                  local l = sqrt(dx * dx + dy * dy) + 1e-9
+                  ink.moveto(x0 - dy / l * 3, y0 + dx / l * 3) ink.lineto(x0 + dy / l * 3 + dx / l * 0.8, y0 - dx / l * 3 + dy / l * 0.8)
+                end
+              end
+            end
+            ink.stroke(tone(max(0, t0 - 0.24)), bp(0.8), 0.6)
+          ink.unclip()
+        end
+      end
+      -- the head's coat
+      if coat == "tux" then
+        local mz = front and mapped(H, { { HP.X(-0.42), -0.25 }, { HP.X(0), 0.05 }, { HP.X(0.42), -0.25 }, { HP.X(0.5), -0.6 }, { HP.X(0), -0.95 }, { HP.X(-0.5), -0.6 } })
+          or mapped(H, { { 0.55, 0.0 }, { 1.25, -0.25 }, { 1.2, -0.7 }, { 0.5, -0.85 }, { 0.15, -0.6 } })
+        ink.smooth(mz, true) ink.fill(white)
+      elseif coat == "calico" then
+        local pt = front and mapped(H, { { HP.X(-1.2), 1.3 }, { HP.X(0.0), 1.4 }, { HP.X(-0.12), 0.3 }, { HP.X(-0.45), -0.15 }, { HP.X(-1.25), 0.05 } })
+          or mapped(H, { { -1.2, 1.2 }, { 0.3, 1.3 }, { 0.1, 0.35 }, { -0.4, -0.1 }, { -1.2, 0.0 } })
+        ink.smooth(pt, true) ink.fill(ink.accent(0.1))
+        if front then
+          ink.smooth(mapped(H, { { HP.X(0.2), 1.4 }, { HP.X(1.3), 1.2 }, { HP.X(1.25), 0.15 }, { HP.X(0.5), 0.3 } }), true) ink.fill(tone(0.16))
+        end
+      elseif coat == "tortie" and mid then
+        local pt = mapped(H, { { front and HP.X(-0.15) or -0.6, 1.3 }, { front and HP.X(-1.2) or -1.2, 0.8 }, { front and HP.X(-1.0) or -1.1, -0.2 }, { front and HP.X(-0.2) or -0.2, 0.3 } })
+        ink.smooth(pt, true) ink.fill(ink.accent(0.0), 0.8)
+      end
+      if mid then
+        local mz = front and mapped(H, oval(HP.X(0), -0.45, 0.44, 0.3, 12)) or mapped(H, oval(0.85, -0.42, 0.42, 0.3, 12, -0.2))
+        if coat ~= "tux" and coat ~= "calico" then ink.smooth(mz, true) ink.fill(tone(min(0.95, t0 + 0.2)), 0.45) end
+        if coat == "tabby" then
+          local sc = tone(max(0, t0 - 0.26))
+          if front then
+            for k = -1, 1 do
+              local x0, y0 = H(HP.X(k * 0.2), 0.86) local x1, y1 = H(HP.X(k * 0.24), 0.5)
+              ink.moveto(x0, y0) ink.lineto(x1, y1)
+            end
+            for _, sd in ipairs({ -1, 1 }) do
+              local x0, y0 = H(HP.X(sd * 0.6), -0.1) local x1, y1 = H(HP.X(sd * 1.0), -0.16)
+              ink.moveto(x0, y0) ink.lineto(x1, y1)
+            end
+          else
+            for k = 0, 2 do local x0, y0 = H(-0.1 + k * 0.22, 0.88) local x1, y1 = H(0.05 + k * 0.2, 0.5) ink.moveto(x0, y0) ink.lineto(x1, y1) end
+            local x0, y0 = H(0.3, -0.1) local x1, y1 = H(-0.4, -0.25) ink.moveto(x0, y0) ink.lineto(x1, y1)
+          end
+          ink.stroke(sc, bp(0.55), 0.8)
+          for k = 1, 4 do                               -- rings toward the tail's tip
+            local v = 0.42 + 0.13 * k
+            local x, y = tl(v)
+            local dx, dy = tangent(tl, v)
+            local r_ = tailr(v) * 1.3
+            ink.moveto(x - dy * r_, y + dx * r_) ink.lineto(x + dy * r_, y - dx * r_)
+          end
+          ink.stroke(sc, bp(0.8), 0.6)
+        end
+      end
+      -- a few deliberate interior lines: the haunch's swell, the foreleg's back edge
+      if mid then
+        for _, ln in ipairs(R.lines or {}) do ink.smooth(ln, false) end
+        ink.stroke(light and edge or tone(max(0, t0 - 0.14)), ow * 0.6, light and 0.6 or 0.7)
+      end
     ink.unclip()
-  end
-  -- body and legs: one silhouette
-  P.body = ccw(P.body)
-  local function silhouette()
-    ink.smooth(P.body, true, 0.9)
-    for _, t in ipairs(P.thighs or {}) do ink.smooth(ellipse(t[1], t[2], t[3], t[4], 16), true) end
-    for _, l in ipairs(P.legs or {}) do ink.smooth(leg_pts(l), true, 0.8) end
-    for _, pw in ipairs(P.paws) do ink.smooth(ellipse(pw[1], pw[2], pw[3], pw[4], 12), true) end
-  end
-  silhouette() ink.fill(tone(t0))
-  silhouette() ink.clip()
-    mottle(rng, -30, -12, 30, 32, 9, 5, t0 - 0.1, t0 + 0.18, fine and 12 or 0)
-    if P.belly then                                    -- a paler belly
-      local b = P.belly
-      ink.smooth(ellipse(b[1] + b[3] / 2, b[2], b[3] / 2 + 2, b[4], 16), true)
-      ink.fill(tone(min(0.95, t0 + 0.25)), coat == "tux" and 0.12 or 0.3)
-    end
-    if coat == "tux" then                              -- a white bib under the chin
-      local h = P.head
-      local bx, by = h[1] - (P.face == "side" and 1.5 or 0.5), h[2] - h[4] - 2.5
-      ink.smooth({ { bx - 2.6, by + 2.5 }, { bx + 2.6, by + 2.5 }, { bx + 2, by - 2 }, { bx, by - 5 }, { bx - 2, by - 2 } }, true)
-      ink.fill(white, 0.92)
-    end
-    local bk = P.back
-    if coat == "tabby" then                            -- stripes from the back line inward
-      local bz = ink.bezier3(bk[1], bk[2], bk[3], bk[4], bk[5], bk[6], bk[7], bk[8])
-      for k = 0, 6 do
-        local u = 0.08 + 0.13 * k
-        local x, y = bz(u)
-        local x2, y2 = bz(u + 0.02)
-        local dx, dy = x2 - x, y2 - y
-        local L = sqrt(dx * dx + dy * dy) + 1e-9
-        local nx, ny = dy / L, -dx / L               -- toward the inside of the body
-        streak3(x - nx, y - ny, x + nx * 3, y + ny * 3 + 0.4, x + nx * 6, y + ny * 6, x + nx * 8.5 + dx / L, y + ny * 8.5 + dy / L,
-          2.0, 0.3, tone(t0 - 0.24), 0.6, true)
-      end
-    end
-    for _, ln in ipairs(P.lines or {}) do                -- a few darker lines: the haunch, the leg
-      streak3(ln[1], ln[2], ln[3], ln[4], ln[5], ln[6], ln[7], ln[8], 0.9, 0.3, tone(max(0, t0 - 0.12)), 0.45, true)
-    end
-    if coat == "tux" then                              -- white paws
-      for _, l in ipairs(P.legs or {}) do ink.smooth(ellipse(l[3], l[4] + 1.3, l[6] * 0.75, 1.8, 10), true) ink.fill(white, 0.9) end
-      for _, pw in ipairs(P.paws) do ink.smooth(ellipse(pw[1] + 0.5, pw[2], pw[3] * 0.85, pw[4] * 1.05, 10), true) ink.fill(white, 0.9) end
-    end
-    streak3(bk[1], bk[2], bk[3], bk[4], bk[5], bk[6], bk[7], bk[8], 1.6, 0.4, white, coat == "pale" and 0.4 or 0.26)
-    ink.smooth(P.body, true, 0.9) ink.stroke(edge, 1.4, 0.35, true)
-  ink.unclip()
-  -- the head, turned by h[5] degrees about its center
-  local h = P.head
-  local ho = head_outline(h)
-  ink.push() ink.translate(h[1], h[2]) ink.rotate(h[5] or 0) ink.translate(-h[1], -h[2])
-  local function headshape()
-    ink.smooth(ho, true)
-    ink.smooth(ear_pts(h, -1, P.face == "side"), true, 0.3)
-    ink.smooth(ear_pts(h, 1, P.face == "side"), true, 0.3)
-  end
-  headshape() ink.fill(tone(t0))
-  headshape() ink.clip()
-    mottle(rng, h[1] - 9, h[2] - 8, h[1] + 9, h[2] + 12, 4, 3, t0 - 0.1, t0 + 0.16, 0)
-    if coat == "tabby" then
-      for k = -1, 1 do streak3(h[1] + k * 1.8, h[2] + h[4] * 0.95, h[1] + k * 1.6, h[2] + h[4] * 0.7, h[1] + k * 1.2, h[2] + h[4] * 0.5, h[1] + k * 1.0, h[2] + h[4] * 0.35, 1.1, 0.3, tone(t0 - 0.25), 0.6, true) end
-    end
-    if coat == "tux" and P.face ~= "asleep" then
-      ink.smooth(ellipse(h[1] + (P.face == "side" and h[3] * 0.45 or 0), h[2] - h[4] * 0.5, h[3] * 0.55, h[4] * 0.42, 12), true)
-      ink.fill(white, 0.92)
-    end
-    ink.smooth(ho, true) ink.stroke(edge, 1.2, 0.3, true)
-  ink.unclip()
-  -- inner ears, pale
-  for _, sd in ipairs({ -1, 1 }) do
-    local e = ear_pts(h, sd, P.face == "side")
-    local cx_, cy_ = (e[1][1] + e[2][1] + e[3][1]) / 3, (e[1][2] + e[2][2] + e[3][2]) / 3
-    local inner = {}
-    for _, q in ipairs(e) do inner[#inner + 1] = { cx_ + (q[1] - cx_) * 0.5, cy_ + (q[2] - cy_) * 0.5 - 0.3 } end
-    ink.smooth(inner, true, 0.3) ink.fill(tone(min(0.9, t0 + 0.32)), 0.75)
-  end
-  -- the face
-  local function eye(x, y, r)
-    ink.smooth({ { x - r, y }, { x, y + r * 0.62 }, { x + r, y }, { x, y - r * 0.62 } }, true, 0.9)
-    ink.fill(ink.accent(0.15))
-    ink.smooth({ { x, y + r * 0.55 }, { x + r * 0.2, y }, { x, y - r * 0.55 }, { x - r * 0.2, y } }, true, 0.6)
-    ink.fill(tone(0.03))
-    ink.circle(x - r * 0.3, y + r * 0.2, r * 0.13) ink.fill(white, 0.9)
-  end
-  local nose_c = ink.accent(0.45)
-  if P.face == "asleep" then
-    for _, dx in ipairs({ -2.2, 2.2 }) do
-      ink.moveto(h[1] + dx - 1.4, h[2] + 0.4) ink.curveto(h[1] + dx - 0.6, h[2] - 0.5, h[1] + dx + 0.6, h[2] - 0.5, h[1] + dx + 1.4, h[2] + 0.4)
-      ink.stroke(coat == "pale" and tone(0.1) or ink.accent(0.3), 0.4)
-    end
-  elseif P.face == "meow" then
-    -- eyes half shut, the mouth open, three copper marks for the sound
-    for _, sx in ipairs({ -1, 1 }) do
-      local x, y = h[1] + sx * h[3] * 0.38, h[2] + h[4] * 0.12
-      ink.moveto(x - 1.3, y - 0.1) ink.curveto(x - 0.5, y + 0.7, x + 0.5, y + 0.7, x + 1.3, y - 0.1)
-      ink.stroke(ink.accent(0.15), 0.6)
-    end
-    ink.poly({ { h[1] - 0.7, h[2] - h[4] * 0.18 }, { h[1] + 0.7, h[2] - h[4] * 0.18 }, { h[1], h[2] - h[4] * 0.3 } }, true)
-    ink.fill(nose_c, 0.95)
-    ink.smooth(ellipse(h[1], h[2] - h[4] * 0.55, 1.1, 1.3, 12), true) ink.fill(tone(0.04))
-    ink.smooth(ellipse(h[1], h[2] - h[4] * 0.66, 0.6, 0.45, 10), true) ink.fill(ink.accent(0.4))
-    for k = 1, 3 do
-      local r = h[3] + 1.5 + k * 1.6
-      local arc = {}
-      for a = -25, 25, 10 do arc[#arc + 1] = { h[1] + r * cos(a * rad), h[2] + r * sin(a * rad) } end
-      ink.smooth(arc, false) ink.stroke(ink.accent(0), 0.45, 0.85)
-    end
-  elseif P.face == "side" then
-    eye(h[1] + h[3] * 0.42, h[2] + h[4] * 0.12, 1.25)
-    ink.poly({ { h[1] + h[3] * 1.02, h[2] - h[4] * 0.12 }, { h[1] + h[3] * 0.86, h[2] - h[4] * 0.02 }, { h[1] + h[3] * 0.88, h[2] - h[4] * 0.28 } }, true)
-    ink.fill(nose_c, 0.9)
-  else
-    eye(h[1] - h[3] * 0.38, h[2] + h[4] * 0.1, 1.3)
-    eye(h[1] + h[3] * 0.38, h[2] + h[4] * 0.1, 1.3)
-    ink.poly({ { h[1] - 0.8, h[2] - h[4] * 0.22 }, { h[1] + 0.8, h[2] - h[4] * 0.22 }, { h[1], h[2] - h[4] * 0.36 } }, true)
-    ink.fill(nose_c, 0.95)
-  end
-  if fine and P.face ~= "asleep" and P.face ~= "meow" then   -- whiskers
-    local wx = P.face == "side" and h[1] + h[3] * 0.8 or h[1]
-    local wy = h[2] - h[4] * 0.32
-    for _, sd in ipairs(P.face == "side" and { 1 } or { -1, 1 }) do
-      for k = -1, 1 do
-        ink.moveto(wx + sd * 1.2, wy + k * 0.5) ink.curveto(wx + sd * 4, wy + k * 0.9 + 0.3, wx + sd * 6.5, wy + k * 1.4, wx + sd * 8.5, wy + k * 1.9 - 0.4)
-      end
-    end
-    ink.stroke(coat == "pale" and tone(0.2) or white, 0.25, 0.7)
-  end
-  ink.pop()                                            -- the head's turn
-  ink.pop()
-end
+    if socks then mitts(R.mitts, function() ink.smooth(body, true, TN) for _, p in ipairs(paws) do ink.smooth(p, true) end end) end
 
--- A cat peeking out of a hole: the head and two paws on the hole's lower edge at the origin.
-function M.peek(rng, o)
-  o = o or {}
-  local coat = o.coat or COATS[rng.int(1, #COATS)]
-  local t0 = COAT_TONE[coat]
-  ink.push() ink.scale(M.SCALE)
-  local h = { 0, 5.5, 6.2, 5.6 }
-  local ho = head_outline(h)
-  local function shape() ink.smooth(ho, true) ink.smooth(ear_pts(h, -1), true, 0.3) ink.smooth(ear_pts(h, 1), true, 0.3) end
-  shape() ink.fill(tone(t0))
-  shape() ink.clip() mottle(rng, -8, -2, 8, 14, 3, 3, t0 - 0.1, t0 + 0.16, 0) ink.unclip()
-  for _, dx in ipairs({ -3.4, 3.4 }) do
-    ink.smooth(ellipse(dx, 0.2, 2.6, 1.6, 10), true) ink.fill(coat == "tux" and white or tone(t0 + 0.05))
+    -- a tail lying over the body: its upper edge, only where it does
+    if R.tailfront and mid then
+      ink.smooth(body, true, TN) ink.clip()
+        local up = {}
+        for k = 0, 16 do
+          local v = lerp(0.2, 0.98, k / 16)
+          local x, y = tl(v)
+          local dx, dy = tangent(tl, v)
+          local sd = (dx >= 0) and 1 or -1
+          up[#up + 1] = { x - dy * tailr(v) * sd, y + dx * tailr(v) * sd }
+        end
+        ink.smooth(up, false) ink.stroke(edge, bp(0.32), 0.7)
+      ink.unclip()
+    end
+    -- arms that cross the body: their two edges, kept to where they lie on the body or head
+    if #over > 0 then
+      ink.smooth(body, true, TN) headshape() ink.clip()
+        for _, a in ipairs(over) do
+          local n = #a.L
+          local i0 = max(1, floor(n * 0.3))
+          for _, side in ipairs({ a.L, a.R }) do
+            local pts = {}
+            for i = i0, n do pts[#pts + 1] = side[i] end
+            ink.smooth(pts, false)
+          end
+        end
+        ink.stroke(edge, ow * 0.6)
+      ink.unclip()
+      if socks then mitts({ { over[1].a.paw[1], over[1].a.paw[2], 2.6, 2.6 } }, function() for _, a in ipairs(over) do ink.smooth(a.outline, true) ink.smooth(a.paw, true) end end) end
+    end
+
+    -- ---------------------------------------------------------------- the face
+    local function inner(e, k)
+      local cx, cy = (e[1][1] + e[2][1] + e[3][1]) / 3, (e[1][2] + e[2][2] + e[3][2]) / 3
+      local q = {}
+      for _, p in ipairs(e) do q[#q + 1] = { cx + (p[1] - cx) * k, cy + (p[2] - cy) * k } end
+      return q
+    end
+    if mid then
+      local ic = coat == "calico" and ink.accent(0.45) or tone(min(0.92, t0 + 0.34))
+      ink.smooth(inner(ear, 0.55), true, 0.35) ink.fill(ic, 0.8)
+      ink.smooth(inner(farear, 0.5), true, 0.35) ink.fill(ic, front and 0.6 or 0.4)
+    end
+    local function eye(u, w, s, shut)
+      local x, y = H(u, w)
+      local r = s * hr
+      local a = hk[3] * rad
+      local function P_(du, dw) return x + du * cos(a) - dw * sin(a), y + du * sin(a) + dw * cos(a) end
+      if shut then
+        local x0, y0 = P_(-r, 0.15 * r) local x1, y1 = P_(0, -0.45 * r) local x2, y2 = P_(r, 0.1 * r)
+        ink.moveto(x0, y0) ink.curveto(x1, y1, x1, y1, x2, y2)
+        ink.stroke(dark and tone(0.6) or tone(0.05), bp(max(0.35, r * 0.18)))
+        return
+      end
+      local al = { { P_(-r, 0) }, { P_(-0.1 * r, 0.62 * r) }, { P_(r, 0.1 * r) }, { P_(0.1 * r, -0.55 * r) } }
+      ink.smooth(al, true, 0.9) ink.fill(ink.accent(0.15))
+      if mid then
+        local sl = { { P_(0, 0.52 * r) }, { P_(0.2 * r, 0) }, { P_(0, -0.48 * r) }, { P_(-0.2 * r, 0) } }
+        ink.smooth(sl, true, 0.6) ink.fill(tone(0.03))
+        local hx, hy = P_(-0.3 * r, 0.2 * r)
+        ink.circle(hx, hy, r * 0.14) ink.fill(white, 0.9)
+      else
+        local px, py = P_(0, 0) ink.circle(px, py, r * 0.35) ink.fill(tone(0.03))
+      end
+      if fine then ink.smooth({ al[1], al[2], al[3] }, false) ink.stroke(tone(0.03), bp(0.3), 0.9) end
+    end
+    local nose = coat == "tux" and ink.accent(0.4) or ink.accent(0.45)
+    local mouthc = (dark and coat ~= "tux") and tone(0.5) or tone(0.12)
+    local wc = light and tone(0.3) or white
+    if front then
+      local X = HP.X
+      local t = HP.t
+      local shut = face == "asleep" or face == "meow"
+      eye(X(-0.4), 0.12, 0.3 * (1 - 0.2 * t), shut)
+      eye(X(0.4), 0.12, 0.3, shut)
+      local nx, ny = X(0), -0.24
+      ink.poly(mapped(H, { { nx - 0.14, ny + 0.06 }, { nx + 0.14, ny + 0.06 }, { nx, ny - 0.1 } }), true) ink.fill(nose)
+      if mid then
+        local m = mapped(H, { { nx - 0.22, ny - 0.3 }, { nx - 0.1, ny - 0.34 }, { nx, ny - 0.2 }, { nx + 0.1, ny - 0.34 }, { nx + 0.22, ny - 0.3 } })
+        ink.smooth(m, false) ink.stroke(mouthc, bp(0.28), 0.9)
+      end
+      if face == "meow" then
+        ink.smooth(mapped(H, oval(nx, ny - 0.42, 0.2, 0.22, 12)), true) ink.fill(tone(0.04))
+        ink.smooth(mapped(H, oval(nx, ny - 0.52, 0.11, 0.08, 10)), true) ink.fill(ink.accent(0.4))
+        for k = 1, 3 do
+          local arc = {}
+          for a = -25, 25, 10 do arc[#arc + 1] = { H(X(0) + (1.3 + 0.32 * k) * cos(a * rad), -0.1 + (1.3 + 0.32 * k) * sin(a * rad)) } end
+          ink.smooth(arc, false) ink.stroke(ink.accent(0), bp(0.4), 0.85)
+        end
+      end
+      if fine and face ~= "meow" then                    -- short whiskers, just past the cheeks
+        for _, sd in ipairs({ -1, 1 }) do
+          local len = sd < 0 and 1.15 - 0.3 * t or 1.25
+          for k = -1, 1, 2 do
+            local x0, y0 = H(X(sd * 0.3), -0.38 + k * 0.05)
+            local x1, y1 = H(X(sd * 0.8), -0.34 + k * 0.1)
+            local x2, y2 = H(X(sd * len), -0.4 + k * 0.2)
+            ink.moveto(x0, y0) ink.curveto(x1, y1, x1, y1, x2, y2)
+          end
+        end
+        ink.stroke(wc, bp(0.16), 0.75)
+      end
+    else
+      eye(0.5, 0.14, 0.28, face == "asleep")
+      ink.poly(mapped(H, { { 1.24, -0.12 }, { 1.06, -0.02 }, { 1.1, -0.26 } }), true) ink.fill(nose)
+      if mid then
+        ink.smooth(mapped(H, { { 1.18, -0.36 }, { 1.0, -0.55 }, { 0.72, -0.52 } }), false) ink.stroke(mouthc, bp(0.28), 0.9)
+      end
+      if fine and not R.nowhisk then
+        for k = -1, 1, 2 do
+          local x0, y0 = H(1.02, -0.38 + k * 0.05)
+          local x1, y1 = H(1.35, -0.32 + k * 0.1)
+          local x2, y2 = H(1.62, -0.42 + k * 0.2)
+          ink.moveto(x0, y0) ink.curveto(x1, y1, x1, y1, x2, y2)
+        end
+        ink.stroke(wc, bp(0.16), 0.75)
+      end
+    end
+    ink.pop()
   end
-  for _, dx in ipairs({ -2.3, 2.3 }) do
-    local x, y, r = dx, 6, 1.25
-    ink.smooth({ { x - r, y }, { x, y + r * 0.62 }, { x + r, y }, { x, y - r * 0.62 } }, true, 0.9) ink.fill(ink.accent(0.15))
-    ink.smooth({ { x, y + r * 0.55 }, { x + r * 0.2, y }, { x, y - r * 0.55 }, { x - r * 0.2, y } }, true, 0.6) ink.fill(tone(0.03))
+
+  -- A cat peeking out of a hole: the head and two paws on the hole's lower edge at the origin.
+  function M.peek(rng, o)
+    o = o or {}
+    local coat = o.coat or COATS[rng.int(1, #COATS)]
+    local t0 = (COAT_TONE[coat] or 0.2)
+    local b = build(rng)
+    ink.push() ink.scale(M.SCALE)
+    local D = ink.unit() * 45
+    local mid = D > 1.8 and ink.get_lift() < 0.3
+    local bp = function(cm) return cm * ink.unit() * CM end
+    local light = t0 > 0.5
+    local fur = coat == "calico" and white or tone(t0)
+    local edge = tone(light and max(0, min(t0, 0.75) - 0.42) or max(0, t0 - 0.1))
+    local hr = 5.6 * b.head
+    local H = frame(0, 5.4, rng.sym(8), hr)
+    local HP = headparts("front", b)
+    local headc, ear, farear = ccw(mapped(H, HP.outline)), mapped(H, HP.ear), mapped(H, HP.farear)
+    local paws = { oval(-3.3, 0.3, 2.6, 1.5, 12), oval(3.3, 0.3, 2.6, 1.5, 12) }
+    local function shape()
+      ink.smooth(headc, true, 0.9)
+    end
+    shape() ink.stroke(t0 < 0.25 and tone(t0 + 0.3) or edge, bp(0.6))
+    shape() ink.fill(fur)
+    shape() ink.clip()
+      if mid and not light then mottle(rng, -8, -1, 8, 14, 4, 3, t0 - 0.07, t0 + 0.12, 0) end
+      if coat == "tux" then ink.smooth(mapped(H, { { -0.42, -0.25 }, { 0, 0.05 }, { 0.42, -0.25 }, { 0.5, -0.6 }, { 0, -0.95 }, { -0.5, -0.6 } }), true) ink.fill(white)
+      elseif coat == "calico" then
+        ink.smooth(mapped(H, { { -1.2, 1.3 }, { 0.0, 1.4 }, { -0.12, 0.3 }, { -0.45, -0.15 }, { -1.25, 0.05 } }), true) ink.fill(ink.accent(0.1))
+        ink.smooth(mapped(H, { { 0.2, 1.4 }, { 1.3, 1.2 }, { 1.25, 0.15 }, { 0.5, 0.3 } }), true) ink.fill(tone(0.16))
+      end
+      if mid and coat ~= "tux" and coat ~= "calico" then ink.smooth(mapped(H, oval(0, -0.45, 0.44, 0.3, 12)), true) ink.fill(tone(min(0.95, t0 + 0.2)), 0.45) end
+    ink.unclip()
+    local ic = coat == "calico" and ink.accent(0.45) or tone(min(0.92, t0 + 0.34))
+    for _, e in ipairs({ ear, farear }) do
+      local cx, cy = (e[1][1] + e[2][1] + e[3][1]) / 3, (e[1][2] + e[2][2] + e[3][2]) / 3
+      local q = {}
+      for _, p in ipairs(e) do q[#q + 1] = { cx + (p[1] - cx) * 0.55, cy + (p[2] - cy) * 0.55 } end
+      ink.smooth(q, true, 0.35) ink.fill(ic, 0.8)
+    end
+    for _, sd in ipairs({ -1, 1 }) do
+      local x, y = H(sd * 0.4, 0.12)
+      local r = 0.3 * hr
+      ink.smooth({ { x - r, y }, { x - 0.1 * r, y + r * 0.62 }, { x + r, y + 0.1 * r }, { x + 0.1 * r, y - r * 0.55 } }, true, 0.9) ink.fill(ink.accent(0.15))
+      ink.smooth({ { x, y + r * 0.52 }, { x + r * 0.2, y }, { x, y - r * 0.48 }, { x - r * 0.2, y } }, true, 0.6) ink.fill(tone(0.03))
+      ink.circle(x - 0.3 * r, y + 0.2 * r, r * 0.14) ink.fill(white, 0.9)
+    end
+    ink.poly(mapped(H, { { -0.14, -0.18 }, { 0.14, -0.18 }, { 0, -0.34 } }), true) ink.fill(ink.accent(0.45))
+    for _, p in ipairs(paws) do ink.smooth(p, true) end ink.stroke(t0 < 0.25 and tone(t0 + 0.3) or edge, bp(0.6))
+    for _, p in ipairs(paws) do ink.smooth(p, true) end ink.fill((coat == "tux" or coat == "calico") and white or fur)
+    if mid then
+      for _, sd in ipairs({ -1, 1 }) do
+        for k = -1, 1, 2 do ink.moveto(sd * 3.3 + k * 0.8, 1.6) ink.lineto(sd * 3.3 + k * 0.8, 0.9) end
+      end
+      ink.stroke(edge, bp(0.3), 0.8)
+    end
+    ink.pop()
   end
-  ink.poly({ { -0.8, 4.1 }, { 0.8, 4.1 }, { 0, 3.3 } }, true) ink.fill(ink.accent(0.45))
-  ink.pop()
-end
+end)()
 
 -- ---------------------------------------------------------------- the page
 -- grow.page hands the page over (a theme with its own composition, like theme-math).
