@@ -1180,6 +1180,16 @@ function M.forest(rng, o)
         i = i + brng.int(4, 7)
       end
       stipes[si] = { table.unpack(pts, 1, min(#pts, last + 3)) }
+      -- the growing tip: a curved, scimitar-shaped blade at the end of the stipe, curling with the current
+      local tp = stipes[si]
+      if #tp >= 4 then
+        local e, f = tp[#tp], tp[#tp - 2]
+        local dir = math.atan(e[1] - f[1], e[2] - f[2]) / rad
+        local ex, ey = e[1] + 1.4 * sin(dir * rad), e[2] + 1.4 * cos(dir * rad)
+        if not blocked(ex, ey, 0.05) then
+          plan[#plan + 1] = { brng.fork(), e[1], e[2], dir + cur * 15, brng.range(1.0, 1.6), brng.range(0.2, 0.3) * (far and 0.8 or 1), t0 + 0.04, 2.4 }
+        end
+      end
     end
     for _, pts in ipairs(stipes) do
       if #pts >= 3 then
@@ -1187,7 +1197,7 @@ function M.forest(rng, o)
       end
     end
     holdfast(brng, x, y, hw, t0 - 0.08)
-    for _, b in ipairs(plan) do M.blade(b[1], b[2], b[3], b[4], b[5], b[6], cur, b[7]) end
+    for _, b in ipairs(plan) do M.blade(b[1], b[2], b[3], b[4], b[5], b[6], cur * (b[8] or 1), b[7]) end
     if far then ink.set_lift(old) end
   end
 
