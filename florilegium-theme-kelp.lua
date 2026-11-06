@@ -1029,6 +1029,439 @@ local function bubbles(rng, x, y, r, n)
   end
 end
 
+-- the open water's animals, redrawn as rigs (by marginalia-partner): each fish kind a build of its own on a
+-- swimming spine with fins as ray fans; moon jellies and sea nettles; the by-the-wind sailor; a jointed shrimp.
+-- They replace the first sketches above, with the same signatures.
+local SW = (function()
+  local ink = require("florilegium-ink")
+  local M = {}
+  -- scratch/kelp/sealife-water.lua -- the kelp forest's open-water animals, a prototype (procedural, nothing traced):
+  -- M.fish(rng, kind, L), M.jelly(rng, s, cur), M.sailor(rng, s), M.shrimp(rng, s), with the theme's frames.
+  -- Each is a rig (a spine with a radius profile above and below it, fins as rays off its edges) painted as the
+  -- otter is: a union silhouette with its outline stroked twice as wide under the fill, tonal layers in its clip
+  -- (the back darker, the belly paler, a lit streak), detail by the size on the page (D, cm).
+
+  local sin, cos, pi, abs, max, min, sqrt, floor = math.sin, math.cos, math.pi, math.abs, math.max, math.min, math.sqrt, math.floor
+  local tone, white = ink.tone, ink.white
+  local CM = 72 / 2.54
+  local function lerp(a, b, t) return a + (b - a) * t end
+  local function clamp(v, a, b) return max(a, min(b, v)) end
+  local function lifted() return ink.get_lift() < 0.3 end
+  local function area(p) local s = 0 for i = 1, #p do local a, b = p[i], p[i % #p + 1] s = s + a[1] * b[2] - b[1] * a[2] end return s end
+  local function ccw(p) if area(p) >= 0 then return p end local r = {} for i = #p, 1, -1 do r[#r + 1] = p[i] end return r end
+  local function ellipse(cx, cy, rx, ry, n, a0)
+    local out, ca, sa = {}, cos(a0 or 0), sin(a0 or 0)
+    for k = 0, (n or 16) - 1 do local a = 2 * pi * k / (n or 16) local x, y = rx * cos(a), ry * sin(a) out[#out + 1] = { cx + x * ca - y * sa, cy + x * sa + y * ca } end
+    return out
+  end
+  local function profile(t)
+    return function(v)
+      for i = 2, #t do
+        if v <= t[i][1] then local f = (v - t[i - 1][1]) / (t[i][1] - t[i - 1][1]) f = f * f * (3 - 2 * f) return lerp(t[i - 1][2], t[i][2], f) end
+      end
+      return t[#t][2]
+    end
+  end
+  function M._curve(pts)
+    local c = ink.catmull(pts, 10)
+    local s = { 0 }
+    for i = 2, #c do s[i] = s[i - 1] + sqrt((c[i][1] - c[i - 1][1]) ^ 2 + (c[i][2] - c[i - 1][2]) ^ 2) end
+    local T = s[#c]
+    return function(v)
+      local t = clamp(v, 0, 1) * T
+      local lo, hi = 1, #c
+      while hi - lo > 1 do local m = (lo + hi) // 2 if s[m] <= t then lo = m else hi = m end end
+      local f = (t - s[lo]) / max(1e-9, s[hi] - s[lo])
+      return lerp(c[lo][1], c[hi][1], f), lerp(c[lo][2], c[hi][2], f)
+    end
+  end
+  local function fillp(pts, c, op) ink.smooth(pts, true) ink.fill(c, op) end
+
+  -- ---------------------------------------------------------------- fish
+  -- in units of L: the nose at x = 0.5, the tail stalk ending at `ped`, the tail fin past it; u runs 0 at
+  -- the nose to 1 at the stalk. Fins: { u0, u1, height, spiny?, notch? }
+  local FISH = {
+    senorita = { t0 = 0.52, ped = -0.32,       -- a slim cigar, a long low dorsal, a black crescent at the tail's base
+      top = { { 0, 0 }, { 0.04, 0.028 }, { 0.16, 0.058 }, { 0.45, 0.068 }, { 0.75, 0.054 }, { 1, 0.03 } },
+      bot = { { 0, 0.004 }, { 0.05, 0.026 }, { 0.2, 0.05 }, { 0.5, 0.058 }, { 0.8, 0.045 }, { 1, 0.028 } },
+      dorsal = { { 0.26, 0.88, 0.035, false } }, anal = { 0.56, 0.88, 0.03 }, tail = "truncate", th = 0.095, cl = 0.17,
+      eye = { 0.1, 0.022 }, mouth = 0.05, pect = 0.07 },
+    garibaldi = { t0 = 0.5, ped = -0.24,       -- deep and oval, a blunt head, small mouth, big round soft fins, a notched tail
+      top = { { 0, 0.0 }, { 0.03, 0.07 }, { 0.14, 0.17 }, { 0.38, 0.225 }, { 0.65, 0.19 }, { 0.88, 0.1 }, { 1, 0.06 } },
+      bot = { { 0, 0.02 }, { 0.05, 0.08 }, { 0.22, 0.16 }, { 0.48, 0.19 }, { 0.75, 0.14 }, { 1, 0.06 } },
+      dorsal = { { 0.22, 0.56, 0.045, true }, { 0.56, 0.92, 0.13, false } }, anal = { 0.6, 0.92, 0.12 }, tail = "forked", th = 0.17, cl = 0.18,
+      eye = { 0.12, 0.034 }, mouth = 0.05, pect = 0.11 },
+    rockfish = { t0 = 0.3, ped = -0.3,         -- a big head and eye, a deeply notched spiny dorsal, mottled, a square tail
+      top = { { 0, 0.0 }, { 0.05, 0.075 }, { 0.2, 0.15 }, { 0.42, 0.165 }, { 0.72, 0.115 }, { 1, 0.05 } },
+      bot = { { 0, 0.012 }, { 0.06, 0.07 }, { 0.3, 0.13 }, { 0.55, 0.12 }, { 1, 0.05 } },
+      dorsal = { { 0.24, 0.6, 0.12, true, true }, { 0.61, 0.86, 0.085, false } }, anal = { 0.6, 0.82, 0.09, 3 }, tail = "truncate", th = 0.15, cl = 0.18,
+      eye = { 0.13, 0.043 }, mouth = 0.14, pect = 0.13, mottle = true },
+    bass = { t0 = 0.36, ped = -0.31,           -- longer, a pointed head, the lower jaw jutting, spines 3-5 tallest, pale blotches
+      top = { { 0, 0 }, { 0.06, 0.05 }, { 0.25, 0.12 }, { 0.45, 0.13 }, { 0.75, 0.09 }, { 1, 0.045 } },
+      bot = { { 0, 0.014 }, { 0.08, 0.05 }, { 0.35, 0.105 }, { 0.6, 0.098 }, { 1, 0.045 } },
+      dorsal = { { 0.26, 0.6, 0.11, true }, { 0.6, 0.86, 0.075, false } }, anal = { 0.6, 0.82, 0.075, 3 }, tail = "square", th = 0.14, cl = 0.17,
+      eye = { 0.12, 0.03 }, mouth = 0.16, pect = 0.11, blotch = true },
+  }
+
+  function M.fish(rng, kind, L)
+    local F = FISH[kind] or FISH.senorita
+    local top, bot = profile(F.top), profile(F.bot)
+    local gt = rng.range(0.94, 1.08)                    -- a lean fish or a fat one
+    local tp = function(u) return top(u) * gt end
+    local bt = function(u) return bot(u) * gt end
+    local bend = rng.sym(0.06)                          -- the swimming curve of the rear half
+    local t0 = F.t0 + rng.sym(0.03)
+    ink.push() ink.scale(L)
+    local D = ink.unit()
+    local fine, finer = lifted() and D > 1.6, lifted() and D > 3.5
+    local bp = function(f) return f * D * CM end
+    -- the spine: u 0 at the nose, 1 at the stalk's end
+    local function S(u) local x = lerp(0.5, F.ped, u) local q = max(0, u - 0.3) return x, bend * q * q * 2 end
+    local function T(u) local a, b = S(clamp(u - 0.01, 0, 1)) local c, d = S(clamp(u + 0.01, 0, 1)) local dx, dy = a - c, b - d local l = sqrt(dx * dx + dy * dy) return dx / l, dy / l end   -- toward the nose
+    local function E(u, side, k)                        -- a point k of the way to the top (side 1) or bottom edge
+      local x, y = S(u) local tx, ty = T(u)
+      local w = side > 0 and tp(u) or bt(u)
+      return x - ty * w * k * side, y + tx * w * k * side
+    end
+    local spine = function(v) return S(1 - v) end
+    local body = ccw((ink.blade(spine, 36, function(v) return tp(1 - v) end, function(v) return bt(1 - v) end)))
+    -- fins: rays off an edge, leaning back; spiny ones pointed with the membrane dipping between the spines
+    local rays = {}
+    local function fin(u0, u1, h, side, spiny, notch, nspines)
+      local pts, n = {}, spiny and 10 or 8
+      for k = 0, n do
+        local t = k / n
+        local u = lerp(u0, u1, t)
+        local bx, by = E(u, side, 0.86)
+        local tx, ty = T(u)
+        local hh = h * rng.range(0.93, 1.07)
+        if spiny then hh = hh * (notch and (0.75 + 0.5 * sin(pi * min(1, t * 1.6))) * (1 - 0.45 * t) or (0.6 + 0.4 * sin(pi * min(1, t * 2.2 + 0.1)))) else hh = hh * (0.35 + 0.65 * sin(pi * (0.15 + 0.85 * t)) ^ 0.7) end
+        if nspines and k > nspines and side < 0 then hh = hh * 1.1 end
+        local nx, ny = -ty * side, tx * side
+        local px, py = bx + (nx * 0.92 - tx * 0.4) * hh, by + (ny * 0.92 - ty * 0.4) * hh
+        pts[#pts + 1] = { px, py }
+        rays[#rays + 1] = { bx, by, px, py }
+        if spiny and k < n then
+          local u2 = lerp(u0, u1, t + 0.5 / n) local mx, my = E(u2, side, 0.86)
+          pts[#pts + 1] = { mx + (nx * 0.92 - tx * 0.4) * hh * 0.62, my + (ny * 0.92 - ty * 0.4) * hh * 0.62 }
+        end
+      end
+      for k = 6, 0, -1 do pts[#pts + 1] = { E(lerp(u0, u1, k / 6), side, 0.7) } end
+      if spiny then ink.smooth(pts, true, 0.35) else ink.smooth(pts, true, 0.9) end
+      ink.fill(tone(t0 - 0.06), 0.82)
+    end
+    -- the tail fin, from the stalk's end
+    local function tailfin()
+      local px, py = S(1) local tx, ty = T(1)
+      local nx, ny = -ty, tx
+      local cl, th = F.cl * rng.range(0.92, 1.06), F.th * rng.range(0.92, 1.08)
+      local w = tp(1)
+      local function at(a, b) return { px - tx * a + nx * b, py - ty * a + ny * b } end
+      local P
+      if F.tail == "forked" then P = { at(0, w), at(cl * 0.55, th * 0.75), at(cl * 1.02, th * 1.02), at(cl * 0.92, th * 0.55), at(cl * 0.55, 0), at(cl * 0.92, -th * 0.55), at(cl * 1.02, -th * 1.02), at(cl * 0.55, -th * 0.75), at(0, -w) }
+      elseif F.tail == "square" then P = { at(0, w), at(cl * 0.7, th * 0.85), at(cl, th), at(cl * 0.96, 0), at(cl, -th), at(cl * 0.7, -th * 0.85), at(0, -w) }
+      else P = { at(0, w), at(cl * 0.7, th * 0.9), at(cl * 1.02, th * 0.75), at(cl * 1.05, 0), at(cl * 1.02, -th * 0.75), at(cl * 0.7, -th * 0.9), at(0, -w) } end
+      ink.smooth(P, true, F.tail == "forked" and 0.7 or 0.55) ink.fill(tone(t0 - 0.06), 0.85)
+      for k = 0, 8 do local b = lerp(-0.9, 0.9, k / 8) local q = at(cl * (F.tail == "forked" and (0.6 + 0.4 * abs(b)) or 0.95), th * b) rays[#rays + 1] = { px, py, q[1], q[2] } end
+      return P
+    end
+    -- painting: fins behind, the body, its shading, the head, the pectoral fin over it
+    local tf = tailfin()
+    for _, d in ipairs(F.dorsal) do fin(d[1], d[2], d[3], 1, d[4], d[5]) end
+    local a = F.anal
+    fin(a[1], a[2], a[3], -1, false, false, a[4])
+    local pvx, pvy = E(0.3, -1, 0.9)                     -- the pelvic fin
+    fillp({ { pvx + 0.02, pvy }, { pvx - 0.07, pvy - F.pect * 0.6 }, { pvx - 0.05, pvy + 0.01 } }, tone(t0 - 0.08), 0.85)
+    if fine then
+      for _, r in ipairs(rays) do ink.moveto(r[1], r[2]) ink.lineto(r[3], r[4]) end
+      ink.stroke(tone(t0 - 0.2), bp(0.0028), 0.55)
+    end
+    ink.smooth(body, true) ink.stroke(tone(t0 - 0.2), bp(0.008))
+    ink.smooth(body, true) ink.fill(tone(t0))
+    ink.smooth(body, true) ink.clip()
+      -- the back darker, the belly pale, a lit streak along the upper flank
+      ink.smooth(ink.blade(spine, 24, function(v) return tp(1 - v) * 1.1 end, function(v) return -tp(1 - v) * 0.25 end), true) ink.fill(tone(t0 - 0.12), 0.55)
+      ink.smooth(ink.blade(spine, 24, function(v) return -bt(1 - v) * 0.15 end, function(v) return bt(1 - v) * 1.1 end), true) ink.fill(white, kind == "garibaldi" and 0.12 or 0.42)
+      if F.mottle then                                   -- a rockfish's blotches
+        for _ = 1, 9 do local u = rng.range(0.25, 0.95) local x, y = E(u, 1, rng.range(-0.3, 0.7)) ink.smooth(ink.blob(rng, x, y, tp(u) * 0.35, tp(u) * 0.25, 0.3, 8), true) ink.fill(tone(t0 - 0.14), 0.6) end
+        for _ = 1, 5 do local u = rng.range(0.3, 0.9) local x, y = E(u, -1, rng.range(0.1, 0.6)) ink.circle(x, y, bt(u) * 0.16) ink.fill(tone(t0 + 0.25), 0.4) end
+      end
+      if F.blotch then                                   -- a kelp bass's pale squares in two rows on the back
+        for row = 1, 2 do
+          for k = 1, 6 do
+            local u = 0.24 + 0.115 * k + (row == 2 and 0.05 or 0) + rng.sym(0.015)
+            local x, y = E(u, 1, row == 1 and 0.5 or 0.05)
+            local r = tp(u) * 0.2
+            ink.smooth({ { x - r, y - r * 0.8 }, { x + r, y - r * 0.9 }, { x + r * 1.05, y + r * 0.8 }, { x - r * 0.9, y + r } }, true, 0.6)
+          end
+        end
+        ink.fill(tone(t0 + 0.32), 0.6)
+      end
+      if kind == "senorita" then                         -- the black crescent at the tail's base
+        local x, y = S(0.95)
+        ink.smooth(ellipse(x, y, 0.03, tp(0.95) * 0.95, 12), true) ink.fill(tone(0.04))
+      end
+      if finer then                                      -- scales: rows of arcs open to the nose
+        for row = -2, 3 do
+          for k = 1, 13 do
+            local u = 0.3 + 0.052 * k + (row % 2) * 0.026
+            if u < 0.98 then
+              local x, y = E(u, row >= 0 and 1 or -1, abs(row) / 3.6)
+              local r = tp(u) * 0.14
+              ink.moveto(x, y + r) ink.curveto(x - r, y + r * 0.6, x - r, y - r * 0.6, x, y - r)
+            end
+          end
+        end
+        ink.stroke(tone(t0 - 0.14), bp(0.0024), 0.45)
+      end
+      if fine then                                       -- the lateral line, following the back
+        local ll = {}
+        for k = 0, 8 do ll[#ll + 1] = { E(lerp(0.27, 0.98, k / 8), 1, 0.48 - 0.3 * k / 8) } end
+        ink.smooth(ll, false) ink.stroke(tone(t0 - 0.16), bp(0.003), 0.6)
+      end
+      local lt = {}
+      for k = 0, 8 do lt[#lt + 1] = { E(lerp(0.12, 0.85, k / 8), 1, 0.68) } end
+      ink.smooth(lt, false) ink.stroke(white, bp(0.012), kind == "garibaldi" and 0.25 or 0.2)
+      -- the gill cover's edge, a rockfish's spines on it
+      local uo = F.eye[1] + 0.13
+      local o1 = { E(uo, 1, 0.65) } local o2x, o2y = E(uo + 0.04, 1, 0.0) local o3 = { E(uo - 0.02, -1, 0.75) }
+      ink.smooth({ o1, { o2x, o2y }, o3 }, false) ink.stroke(tone(t0 - 0.2), bp(kind == "senorita" and 0.005 or 0.007), 0.8)
+      if kind == "rockfish" and fine then
+        for k = 1, 3 do local x, y = E(uo - 0.04 + 0.01 * k, 1, 0.5 - 0.25 * k) ink.moveto(x, y) ink.lineto(x - 0.035, y - 0.005) end
+        ink.stroke(tone(t0 - 0.2), bp(0.004), 0.8)
+      end
+      ink.smooth(body, true) ink.stroke(tone(t0 - 0.2), bp(0.005), 0.5)
+    ink.unclip()
+    -- the mouth: a line from the snout back toward the eye; a bass's lower jaw juts
+    do
+      local nx_, ny_ = S(0)
+      local mx, my = E(F.mouth, -1, 0.1)
+      ink.moveto(nx_ - 0.004, ny_ - 0.004) ink.lineto(mx, my) ink.stroke(tone(t0 - 0.28), bp(kind == "senorita" and 0.006 or 0.009))
+      if kind == "bass" or kind == "rockfish" then
+        local jx, jy = E(0.02, -1, 0.6)
+        fillp({ { nx_ + 0.008, ny_ - 0.006 }, { jx, jy }, { mx, my - 0.01 }, { mx + 0.02, my + 0.004 } }, tone(t0 - 0.04))
+      end
+    end
+    -- the pectoral fin, over the flank behind the gill cover
+    do
+      local px, py = E(F.eye[1] + 0.16, -1, 0.25)
+      local tx, ty = T(F.eye[1] + 0.16)
+      local l = F.pect * rng.range(0.9, 1.1)
+      local a = rng.range(-0.5, -0.15)                  -- spread down and back
+      local P = { { px, py } }
+      for k = 0, 6 do
+        local an = a + (k - 3) * 0.12
+        local dx, dy = -tx * cos(an) + ty * sin(an), -ty * cos(an) - tx * sin(an)
+        P[#P + 1] = { px + dx * l * (0.8 + 0.2 * sin(pi * k / 6)), py + dy * l * (0.8 + 0.2 * sin(pi * k / 6)) }
+      end
+      ink.smooth(P, true, 0.8) ink.fill(tone(t0 - 0.02), 0.8)
+      if fine then for k = 2, #P - 1 do ink.moveto(px, py) ink.lineto(P[k][1], P[k][2]) end ink.stroke(tone(t0 - 0.18), bp(0.0024), 0.5) end
+    end
+    -- the eye: a pale iris, a dark pupil, a highlight
+    do
+      local ex, ey = E(F.eye[1], 1, 0.32)
+      local r = F.eye[2]
+      if D * r > 0.05 then ink.circle(ex, ey, r) ink.fill(tone(kind == "garibaldi" and 0.3 or 0.82)) end
+      ink.circle(ex + r * 0.08, ey, r * (D * r > 0.05 and 0.62 or 0.8)) ink.fill(tone(0.03))
+      ink.circle(ex - r * 0.18, ey + r * 0.22, r * 0.2) ink.fill(white, 0.9)
+    end
+    ink.pop()
+  end
+
+  -- ---------------------------------------------------------------- jelly
+  -- a jelly drifting, the bell above the origin (s wide), its arms and tentacles trailing against the current:
+  -- a moon jelly (a shallow clear dome, four horseshoe gonads, a fringe of short tentacles, four short frilly arms)
+  -- or a sea nettle (a deeper bell striped by its radial bands, long ribbon arms spiraling, long tentacles)
+  function M.jelly(rng, s, cur)
+    local nettle = rng.chance(0.5)
+    cur = cur or 1
+    ink.push() ink.scale(s)
+    local D = ink.unit()
+    local fine = lifted() and D > 0.9
+    local bp = function(f) return f * D * CM end
+    local pulse = rng.range(0.85, 1.15)                -- relaxed and wide, or contracted and tall
+    local W, H = 0.5 / pulse ^ 0.3, (nettle and 0.4 or 0.28) * pulse
+    local lean = rng.sym(8) * pi / 180
+    local function bellpts(k)                           -- the dome, and its scalloped rim
+      local out = {}
+      for j = 0, 20 do local a = pi * j / 20 out[#out + 1] = { W * k * cos(a), H * k * sin(a) ^ (nettle and 0.6 or 0.8) } end
+      local nl = nettle and 16 or 24
+      for j = 1, nl - 1 do local t = j / nl out[#out + 1] = { lerp(-W, W, t) * k, -0.025 * abs(sin(t * pi * nl / 2)) * k } end
+      return out
+    end
+    local tent = tone(nettle and 0.42 or 0.55)
+    -- tentacles: from the rim, trailing against the current in a slow wave
+    local nt = nettle and 18 or 30
+    for k = 1, nt do
+      local x0 = lerp(-W * 0.95, W * 0.95, (k - 0.5) / nt)
+      local Lt = (nettle and rng.range(0.55, 0.9) or rng.range(0.12, 0.28))
+      local pts = {}
+      for j = 0, 6 do local t = j / 6 pts[#pts + 1] = { x0 - cur * Lt * 0.35 * t * t + 0.025 * sin(t * 7 + k), -0.02 - Lt * t } end
+      ink.smooth(pts, false)
+    end
+    ink.stroke(tent, bp(nettle and 0.004 or 0.003), 0.75)
+    -- oral arms
+    local na = 4
+    for k = 1, na do
+      local x0 = lerp(-W * 0.22, W * 0.22, (k - 0.5) / na)
+      local La = nettle and rng.range(0.6, 0.95) or rng.range(0.22, 0.32)
+      local ph = rng.range(0, 2 * pi)
+      local spine = function(v) return x0 - cur * La * 0.3 * v * v + (nettle and 0.05 or 0.02) * sin(v * 9 + ph) * v, -0.03 - La * v end
+      local wf = function(v) return (nettle and 0.045 or 0.05) * (1 - 0.7 * v) end
+      local frill = fine and function(v, sd) return 0.008 * sin(v * 26 + sd * 2 + ph) end or nil
+      local P = ink.blade(spine, 28, wf, wf, frill)
+      ink.smooth(P, true) ink.fill(tone(nettle and 0.5 or 0.6), 0.75)
+      if fine then local mid = {} for j = 0, 8 do mid[#mid + 1] = { spine(j / 8) } end ink.smooth(mid, false) ink.stroke(tone(0.4), bp(0.003), 0.6) end
+    end
+    -- the bell: the far inside darker, then the clear dome over everything
+    ink.push() ink.rotate(lean * 180 / pi * -cur)
+    ink.smooth(ellipse(0, -0.01, W * 0.8, 0.05, 16), true) ink.fill(tone(0.45), 0.5)
+    local bell = ccw(bellpts(1))
+    ink.smooth(bell, true) ink.stroke(tone(0.42), bp(0.006), 0.7)
+    ink.smooth(bell, true) ink.fill(tone(nettle and 0.62 or 0.74), 0.72)
+    ink.smooth(bell, true) ink.clip()
+      if nettle then                                   -- the radial bands, curving with the dome
+        for k = 1, 15 do
+          local t = (k - 0.5) / 15
+          local x0 = lerp(-W, W, t)
+          ink.moveto(x0, -0.02) ink.curveto(x0 * 0.9, H * 0.5, x0 * 0.5, H * 0.9, x0 * 0.2, H * 1.05)
+        end
+        ink.stroke(tone(0.38), bp(0.02), 0.45)
+      else                                             -- four horseshoe gonads seen through the top
+        for k = 1, 4 do
+          local cx = lerp(-W * 0.55, W * 0.55, (k - 0.5) / 4)
+          ink.smooth(ellipse(cx, H * 0.38, W * 0.12, H * 0.2, 14), true) ink.stroke(tone(0.4), bp(0.012), 0.75)
+        end
+        if fine then for k = 1, 12 do local t = (k - 0.5) / 12 local x0 = lerp(-W, W, t) ink.moveto(x0, 0) ink.lineto(x0 * 0.35, H * 0.92) end ink.stroke(tone(0.55), bp(0.003), 0.5) end
+      end
+      ink.smooth(ink.blade(function(v) local a = pi * (0.85 - 0.5 * v) return W * 0.82 * cos(a), H * 0.82 * sin(a) ^ 0.7 end, 12, function() return 0.03 end, function() return 0.03 end), true)
+      ink.fill(white, 0.45)                             -- the light on the dome
+      ink.smooth(bell, true) ink.stroke(white, bp(0.01), 0.35)
+    ink.unclip()
+    ink.pop()
+    ink.pop()
+  end
+
+  -- ---------------------------------------------------------------- by-the-wind sailor
+  -- Velella at the surface (waterline y = 0): a deep blue oval float seen a little from the side, ringed,
+  -- with a pale mantle edge; a thin clear sail standing across it on the diagonal, its top edge an S; a short
+  -- dark fringe of tentacles below the water. s = float length
+  function M.sailor(rng, s)
+    ink.push() ink.scale(s)
+    local D = ink.unit()
+    local fine = lifted() and D > 0.6
+    local bp = function(f) return f * D * CM end
+    local tilt = rng.sym(0.06)
+    -- the tentacles, short, under the water
+    for k = 1, 14 do
+      local x = lerp(-0.4, 0.4, (k - 0.5) / 14)
+      ink.moveto(x, -0.04) ink.lineto(x + rng.sym(0.03), -rng.range(0.12, 0.2))
+    end
+    ink.stroke(tone(0.25), bp(0.012), 0.85)
+    -- the float
+    local fl = ellipse(0, 0, 0.5, 0.13, 22, tilt)
+    ink.smooth(fl, true) ink.stroke(tone(0.12), bp(0.012))
+    ink.smooth(fl, true) ink.fill(tone(0.22))
+    ink.smooth(fl, true) ink.clip()
+      ink.smooth(ellipse(0, 0.02, 0.4, 0.085, 20, tilt), true) ink.fill(tone(0.4), 0.8)   -- the float's top, paler
+      if fine then for k = 1, 3 do ink.smooth(ellipse(0, 0.02, 0.4 - 0.1 * k, 0.085 - 0.02 * k, 18, tilt), true) end ink.stroke(tone(0.62), bp(0.008), 0.8) end
+      ink.smooth(ellipse(0, -0.11, 0.5, 0.05, 18), true) ink.fill(tone(0.12), 0.6)
+    ink.unclip()
+    -- the sail: a thin blade, edge on toward its ends, standing on a diagonal of the float
+    local x0, x1 = -0.3, 0.3
+    x0, x1 = -0.22, 0.16
+    local h = rng.range(0.5, 0.62)
+    local top = { { x0, 0.02 }, { x0 + 0.06, h * 0.35 }, { -0.06, h * 0.82 }, { 0.0, h }, { 0.035, h * 0.8 }, { 0.09, h * 0.35 }, { x1, 0.03 } }
+    local sail = {}
+    for _, q in ipairs(top) do sail[#sail + 1] = q end
+    sail[#sail + 1] = { 0.0, 0.05 }
+    ink.smooth(sail, true, 0.7) ink.fill(tone(0.84), 0.5)
+    ink.smooth(top, false)
+    ink.stroke(tone(0.35), bp(0.008), 0.9)
+    if fine then                                        -- the sail's growth lines
+      for k = 1, 3 do local t = k / 4 ink.moveto(lerp(x0, x1, t), 0.03) ink.curveto(lerp(x0, x1, t) * 0.8, h * 0.4, lerp(-0.05, 0.03, t), h * 0.7, lerp(-0.04, 0.03, t), h * 0.85) end
+      ink.stroke(tone(0.5), bp(0.004), 0.6)
+    end
+    ink.pop()
+  end
+
+  -- ---------------------------------------------------------------- shrimp
+  -- a shrimp side on, facing +x: the carapace ending in a toothed rostrum, a stalked eye, the abdomen's six
+  -- segments curving down, each a plate over the next, a fan of uropods and telson; five pairs of jointed
+  -- walking legs, swimmerets under the abdomen, long antennae and short antennules; s = length
+  function M.shrimp(rng, s)
+    ink.push() ink.scale(s)
+    local D = ink.unit()
+    local fine = lifted() and D > 0.6
+    local bp = function(f) return f * D * CM end
+    local t0 = rng.range(0.46, 0.56)
+    local curl = rng.range(1.7, 2.3)                    -- how far the tail curls under
+    -- the spine: from the rostrum's base (v 0) back along the carapace and down into the tail (v 1)
+    local c = (curl - 1.7) / 0.6                        -- 0..1
+    local spine = M._curve({ { 0.13, 0.15 }, { -0.04, 0.165 }, { -0.19, 0.155 }, { -0.31, 0.11 }, { -0.39 - 0.02 * c, 0.03 - 0.03 * c }, { -0.39 + 0.02 * c, -0.05 - 0.03 * c } })
+    local hw = function(v) return (0.045 + 0.045 * min(1, v * 5) ^ 0.5) * (1 - v) ^ 0.6 + 0.02 end
+    local function at(v, k) local x, y = spine(v) local x2, y2 = spine(min(1, v + 0.01)) local dx, dy = x2 - x, y2 - y local l = sqrt(dx * dx + dy * dy) + 1e-9 return x + dy / l * hw(v) * k, y - dx / l * hw(v) * k, dx / l, dy / l end   -- k > 0: the back
+    -- legs first, behind the body: five walking legs under the carapace, jointed
+    local legc = tone(t0 - 0.08)
+    for k = 1, 5 do
+      local x0, y0 = at(0.04 + 0.05 * k, -0.85)
+      local kx, ky = x0 + 0.03 - 0.01 * k, y0 - 0.06
+      ink.moveto(x0, y0) ink.lineto(kx, ky) ink.lineto(kx + 0.05 - 0.01 * k, ky - 0.065)
+    end
+    ink.stroke(legc, bp(0.008), 0.9)
+    -- swimmerets under the abdomen
+    for k = 1, 4 do local x0, y0, tx, ty = at(0.36 + 0.1 * k, -0.9) ink.moveto(x0, y0) ink.lineto(x0 - ty * 0.05 - tx * 0.02, y0 + tx * 0.05 - ty * 0.02) end
+    ink.stroke(legc, bp(0.01), 0.8)
+    -- the tail fan
+    local ex, ey = at(1, 0)
+    local qx, qy = at(0.96, 0)
+    local tx, ty = ex - qx, ey - qy                     -- the end tangent (at(1) has none: its step is clamped)
+    local tl = sqrt(tx * tx + ty * ty) + 1e-9
+    tx, ty = tx / tl, ty / tl
+    ex, ey = ex + tx * 0.03, ey + ty * 0.03             -- the fan starts just past the last segment
+    for _, sd in ipairs({ -1, 0, 1 }) do
+      local ax, ay = tx * 0.2 + sd * -ty * 0.075, ty * 0.2 + sd * tx * 0.075
+      fillp({ { ex, ey }, { ex + ax - ty * 0.035, ey + ay + tx * 0.035 }, { ex + ax * 1.08, ey + ay * 1.08 }, { ex + ax + ty * 0.035, ey + ay - tx * 0.035 } }, tone(t0 - 0.04), 0.9)
+    end
+    -- the body: carapace and abdomen, one outline
+    local body = ccw((ink.blade(spine, 30, hw, hw)))
+    local ros = { { 0.06, 0.22 }, { 0.36, 0.215 }, { 0.3, 0.2 }, { 0.12, 0.15 } }   -- the rostrum
+    ink.smooth(body, true) ink.poly(ros, true) ink.stroke(tone(t0 - 0.2), bp(0.012))
+    ink.smooth(body, true) ink.poly(ros, true) ink.fill(tone(t0))
+    ink.smooth(body, true) ink.clip()
+      ink.smooth(ink.blade(spine, 20, function(v) return hw(v) * 1.1 end, function(v) return -hw(v) * 0.3 end), true) ink.fill(tone(t0 - 0.1), 0.5)
+      ink.smooth(ink.blade(spine, 20, function(v) return -hw(v) * 0.2 end, function(v) return hw(v) * 1.1 end), true) ink.fill(white, 0.3)
+      -- segment plates: each overlaps the next, a line and a shade behind it
+      for k = 1, 6 do
+        local v = 0.36 + 0.095 * (k - 1)
+        local a1, b1 = at(v, 1.1) local a2, b2 = at(v + 0.02, 0) local a3, b3 = at(v, -1.1)
+        ink.moveto(a1, b1) ink.curveto(a2, b2, a2, b2, a3, b3)
+      end
+      ink.stroke(tone(t0 - 0.2), bp(0.006), 0.8)
+      if fine then                                       -- a red rock shrimp's stripes along the body
+        for _, k in ipairs({ 0.55, 0.05, -0.45 }) do local ln = {} for j = 0, 10 do ln[#ln + 1] = { at(0.02 + 0.09 * j, k) } end ink.smooth(ln, false) end
+        ink.stroke(tone(t0 - 0.22), bp(0.008), 0.55)
+      end
+      ink.smooth(ellipse(-0.02, 0.2, 0.12, 0.03, 12), true) ink.fill(white, 0.4)   -- light on the carapace
+    ink.unclip()
+    -- the eye on its stalk, the antennae and antennules
+    ink.moveto(0.1, 0.18) ink.lineto(0.13, 0.215) ink.stroke(tone(t0 - 0.15), bp(0.012))
+    ink.circle(0.135, 0.22, 0.026) ink.fill(tone(0.04))
+    if fine then ink.circle(0.128, 0.227, 0.008) ink.fill(white, 0.9) end
+    local w1 = rng.sym(0.08)
+    ink.moveto(0.12, 0.16) ink.curveto(0.35, 0.36 + w1, 0.55, 0.34, 0.72, 0.1 + w1)
+    ink.moveto(0.13, 0.18) ink.curveto(0.32, 0.45, 0.52, 0.5 - w1, 0.7, 0.42 - w1)
+    ink.stroke(tone(t0 - 0.12), bp(0.005), 0.9)
+    ink.moveto(0.15, 0.19) ink.curveto(0.25, 0.28, 0.32, 0.3, 0.4, 0.28)
+    ink.moveto(0.15, 0.19) ink.curveto(0.24, 0.25, 0.32, 0.25, 0.38, 0.22)
+    ink.stroke(tone(t0 - 0.12), bp(0.006), 0.9)
+    ink.pop()
+  end
+
+  return M
+end)()
+M.fish, M.jelly, M.sailor, M.shrimp = SW.fish, SW.jelly, SW.sailor, SW.shrimp
+
 -- ---------------------------------------------------------------- the forest
 function M.forest(rng, o)
   local W, H = o.w, o.h
