@@ -20,7 +20,7 @@ const mac = /Mac|iPhone|iPad/.test(navigator.platform)
 
 type Drag =
   | { kind: 'draw'; page: number; x0: number; y0: number; id: number; pid?: number }
-  | { kind: 'move' | 'size'; page: number; id: number; dx: number; dy: number; pid?: number }
+  | { kind: 'move' | 'size'; page: number; id: number; dx: number; dy: number; pid?: number; orig?: Box }
 type Caret = { x: number; y0: number; y1: number; base: number; size: number }
 type TextDrag = { story: number; anchor: number; unit: 'char' | 'word' | 'block'; lo: number; hi: number }
 
@@ -29,7 +29,7 @@ const ZOOMS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4]
 const ZOOM_KEY = 'felilegium-zoom'
 const clampZoom = (z: number) => Math.max(ZOOMS[0], Math.min(ZOOMS[ZOOMS.length - 1], +z.toFixed(3)))
 const PAGE_PX = 420             // a page's width on screen at 100%
-const NARROW = '(max-width: 760px)'
+const NARROW = '(max-width: 760px), (pointer: coarse) and (max-height: 500px)'   // a phone, either way up (style.css too)
 type Tab = 'text' | 'drawing' | 'page' | 'export'
 const TABS: [Tab, string][] = [['text', 'Text'], ['drawing', 'Drawing'], ['page', 'Page'], ['export', 'Export']]
 function useMedia(query: string) {
@@ -824,7 +824,7 @@ export function App() {
         </div>
         <p className="hint">{active ? 'Markdown works as you type: # heading, - list, **bold**, *italic*.' : 'Click into a box to type. Drag on an empty part of a page to draw a new box: it carries on your text, or click Unlink on it to give it its own.'}</p>
 
-        {coarse && !narrow && <button className={drawArm ? 'on' : ''} onClick={() => setDrawArm(!drawArm)}>{drawArm ? 'Cancel drawing' : 'Draw a box'}</button>}
+        {coarse && !narrow && <button className={drawArm ? 'on' : ''} onClick={() => { setLinking(null); setDrawArm(!drawArm) }}>{drawArm ? 'Cancel drawing' : 'Draw a box'}</button>}
         {selectedBox && active && (
           <div className="boxpanel">
             <label>This box and the drawing
@@ -987,7 +987,7 @@ export function App() {
         )}
         {linking !== null && (
           <div className="banner" role="status">
-            <span>Click the box to link, or draw a new one. Text flows through linked boxes in page order.</span>
+            <span>{coarse ? 'Tap the box to link. Text flows through linked boxes in page order.' : 'Click the box to link, or draw a new one. Text flows through linked boxes in page order.'}</span>
             <button onClick={() => setLinking(null)}>Cancel</button>
           </div>
         )}
@@ -1026,7 +1026,7 @@ export function App() {
         </div>
       ) : (
         <nav className="tabs" role="tablist" aria-label="Settings">
-          <button className={drawArm ? 'on' : ''} aria-pressed={drawArm} onClick={() => { setTab(null); setDrawArm(!drawArm) }}>{drawArm ? 'Cancel' : 'Draw a box'}</button>
+          <button className={drawArm ? 'on' : ''} aria-pressed={drawArm} onClick={() => { setTab(null); setLinking(null); setDrawArm(!drawArm) }}>{drawArm ? 'Cancel' : 'Draw a box'}</button>
           {TABS.filter(([t]) => t !== 'text').map(([t, label]) => (
             <button key={t} role="tab" aria-selected={tab === t} aria-controls="sheet" className={tab === t ? 'on' : ''} onClick={() => { setDrawArm(false); setTab(tab === t ? null : t) }}>{label}</button>
           ))}
@@ -1116,6 +1116,21 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
     el.addEventListener('touchstart', f, { passive: false })
     return () => el.removeEventListener('touchstart', f)
   }, [])
+  // a second finger anywhere means a pinch: a move or a draw in progress is undone
+  const undoDrag = useRef(() => {})
+  undoDrag.current = () => {
+    const d = drag.current
+    if (!d) return
+    drag.current = null
+    if (d.kind === 'draw') afterDraw(d.page, d.id, false)
+    else if (d.orig) { const o = d.orig; editPage(d.page, (bs) => bs.map((b) => (b.id === o.id ? o : b))) }
+    setDragging(false)
+  }
+  useEffect(() => {
+    const f = (e: TouchEvent) => { if (e.touches.length > 1) undoDrag.current() }
+    window.addEventListener('touchstart', f, { capture: true, passive: true })
+    return () => window.removeEventListener('touchstart', f, { capture: true })
+  }, [])
   const kind = useRef('mouse')             // the last pointer's kind: a mouse types on pointerdown, a finger on click
   const downOn = useRef<number | null>(null)
   const scale = PAGE_PX * zoom / W
@@ -1132,9 +1147,14 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
     e.preventDefault()
     e.stopPropagation()
     ref.current!.setPointerCapture(e.pointerId)
-    drag.current = { ...d, pid: e.pointerId }
+    drag.current = { ...d, pid: e.pointerId, ...(d.kind !== 'draw' ? { orig: page.boxes.find((b) => b.id === d.id) } : {}) }
     setDragging(true)
   }
+  // a box's buttons: a mouse acts on press; a finger on a tap, so a swipe that starts on one still scrolls
+  const tapOrPress = (act: () => void) => ({
+    onPointerDown: (e: React.PointerEvent) => { e.stopPropagation(); if (e.pointerType === 'mouse') { e.preventDefault(); act() } },
+    onClick: (e: React.MouseEvent) => { e.stopPropagation(); if (kind.current !== 'mouse') act() },
+  })
   const onDown = (e: React.PointerEvent) => {
     if (e.pointerType !== 'mouse' && !armed) return            // a finger scrolls, unless drawing is armed
     const p = at(e)
@@ -1202,27 +1222,26 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
                   onPointerDown={(e) => { downOn.current = b.id; if (e.pointerType === 'mouse') startText(e, index, b) }}
                   onClick={(e) => { if (kind.current !== 'mouse' && !armed && downOn.current === b.id) startText(e, index, b, false) }} />
                 {controls && <>
-                <rect className="edge ctl" x={b.x - 3 / scale} y={b.y - 3 / scale} width={b.w + 6 / scale} height={b.h + 6 / scale}
+                <rect className="edge ctl" x={b.x - (touch ? 13 : 3) / scale} y={b.y - (touch ? 13 : 3) / scale} width={b.w + (touch ? 26 : 6) / scale} height={b.h + (touch ? 26 : 6) / scale}
                   onPointerDown={(e) => { const p = at(e); select(b.id); begin(e, { kind: 'move', page: index, id: b.id, dx: p.x - b.x, dy: p.y - b.y }) }} />
                 <g className="ctl" onPointerDown={(e) => { select(b.id); begin(e, { kind: 'size', page: index, id: b.id, dx: 0, dy: 0 }) }}>
                   {touch && <circle className="hit" cx={b.x + b.w} cy={b.y + b.h} r={hit} />}
                   <rect className="handle" x={b.x + b.w - handle / 2} y={b.y + b.h - handle / 2} width={handle} height={handle} />
                 </g>
-                <g className="ctl" role="button" aria-label="Delete this text box" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); removeBox(index, b) }}>
+                <g role="button" aria-label="Delete this text box" {...tapOrPress(() => removeBox(index, b))}>
                   {touch && <circle className="hit" cx={b.x + b.w} cy={b.y} r={hit} />}
                   <circle className="del" cx={b.x + b.w} cy={b.y} r={dr} />
                   <path className="delx" d={`M${b.x + b.w - dr / 2} ${b.y - dr / 2}l${dr} ${dr}m0 ${-dr}l${-dr} ${dr}`} />
                 </g>
-                <g className="linker ctl" role="button" aria-label="Link this box to another" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); startLink(b) }}>
+                <g className="linker" role="button" aria-label="Link this box to another" {...tapOrPress(() => startLink(b))}>
                   <title>Link this box to another, so text flows between them</title>
                   {touch && <circle className="hit" cx={b.x + b.w} cy={b.y + b.h / 2} r={hit} />}
                   <circle cx={b.x + b.w} cy={b.y + b.h / 2} r={dr} />
                   <path d={`M${b.x + b.w - dr * 0.5} ${b.y + b.h / 2}h${dr}m${-dr * 0.4} ${-dr * 0.4}l${dr * 0.4} ${dr * 0.4}l${-dr * 0.4} ${dr * 0.4}`} />
                 </g>
                 </>}
-                {label && <text className="chain" x={b.x} y={b.y - (touch ? 8 : 5) / scale} fontSize={(touch ? 15 : 11) / scale}>{label}{' · '}
-                  <tspan className="unlink ctl" role="button" aria-label="Unlink this box, so it holds its own text"
-                    onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); unlink(b) }}>Unlink</tspan>
+                {label && <text className="chain" x={b.x} y={b.y - (touch ? 8 : 5) / scale} fontSize={(touch ? 15 : 11) / scale}>{label}
+                  {controls && <>{' · '}<tspan className="unlink" role="button" aria-label="Unlink this box, so it holds its own text" {...tapOrPress(() => unlink(b))}>Unlink</tspan></>}
                 </text>}
               </g>
             )

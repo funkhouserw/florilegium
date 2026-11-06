@@ -81,7 +81,7 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
 /* ---- the panel's sections: one column on a desktop, one tab at a time on a phone ---- */
 .sec { display: contents; }
 .tabs { display: none; }
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
   .shell { height: 100dvh; grid-template-rows: auto 1fr; }
   .top { padding: 6px 12px; align-items: center; }
   .top h1 { font-size: 18px; }
@@ -92,7 +92,7 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
   .zoombar .hint { display: none; }
   .pages { padding: 12px; gap: 16px; justify-content: center; }
   .panel { display: none; }
-  .panel.open { display: flex; position: absolute; z-index: 20; left: 0; right: 0; bottom: 0; max-height: 58%;
+  .panel.open { display: flex; position: absolute; z-index: 20; left: 0; right: 0; bottom: calc(48px + env(safe-area-inset-bottom)); max-height: 58%;
     border-right: 0; border-top: 1px solid #d5d9e6; border-radius: 14px 14px 0 0; box-shadow: 0 -4px 18px rgba(27, 42, 107, .18);
     overscroll-behavior: contain; padding-bottom: 20px; }
   .panel .sec { display: none; }
@@ -117,9 +117,10 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
   .stage.touch { touch-action: pan-x pan-y pinch-zoom; -webkit-touch-callout: none; cursor: default; }
   .stage.touch.armed { touch-action: none; cursor: crosshair; }
   .stage.touch .edge { stroke-width: 26px; }
+  .zoombar .hint { display: none; }
   .panel input, .panel select, .panel textarea { font-size: 16px; }    /* iOS zooms into anything smaller */
 }
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
   .panel .close { display: block; align-self: flex-end; margin-bottom: -6px; border: 0; padding: 4px 2px; font-size: 14px; min-height: 0; }
   .panel.tab-text .toolbar, .panel.tab-text .sec-text > .hint:first-of-type { display: none; }
   .strip { display: flex; grid-row: 2; gap: 6px; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); background: #fff;
