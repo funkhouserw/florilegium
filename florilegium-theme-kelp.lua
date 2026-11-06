@@ -50,6 +50,31 @@ function M.blade(rng, x, y, ang, L, W, cur, t0)
   local ruff = function(v, side) return W * 0.13 * sin(v * L * 26 + side * 1.9 + ph) * sin(pi * v) end
   local out = ink.blade(spine, max(10, floor(L * 12)), hw, hw, fine() and ruff or nil)
   ink.smooth(out, true) ink.fill(tone(t0))
+  if fine() and L > 0.35 then
+    -- shading inside the blade: one half in shadow past the fold, a lit band beside the fold on the
+    -- other, and the corrugations across it as soft darker chevrons
+    local sh = rng.chance(0.5) and 1 or -1
+    local zero = function() return 0 end
+    local half = function(v) return hw(v) * 1.3 end
+    ink.smooth(out, true) ink.clip()
+      ink.smooth(ink.blade(spine, 8, sh > 0 and zero or half, sh > 0 and half or zero), true) ink.fill(tone(t0 - 0.14), 0.45)
+      local lit = function(v) return hw(v) * 0.45 end
+      local off = function(v) return hw(v) * 0.08 end
+      ink.smooth(ink.blade(spine, 8, sh > 0 and lit or off, sh > 0 and off or lit), true) ink.fill(white, 0.28)
+      local nr = L > 0.7 and floor(L * 3) or 0
+      for k = 1, nr do
+        local v = (k - 0.3 + rng.sym(0.2)) / (nr + 0.5)
+        local cx, cy = spine(v)
+        local dx, dy = spine(min(1, v + 0.02))
+        local tx, ty = dx - cx, dy - cy
+        local tl = math.sqrt(tx * tx + ty * ty) + 1e-9
+        tx, ty = tx / tl, ty / tl
+        local w = hw(v)
+        ink.smooth({ { cx - ty * w + tx * w * 0.5, cy + tx * w + ty * w * 0.5 }, { cx, cy }, { cx + ty * w + tx * w * 0.5, cy - tx * w + ty * w * 0.5 } }, false)
+        ink.stroke(tone(t0 - 0.12), 0.4, 0.4)
+      end
+    ink.unclip()
+  end
   if fine() then
     local mid = {}
     for k = 1, 5 do mid[k] = { spine(0.1 + 0.18 * (k - 1)) } end
@@ -1068,17 +1093,17 @@ function M.boa(rng, h, cur)
   local spine = function(t) return cur * h * 0.32 * t * t + h * 0.05 * sin(t * 4 + ph), h * t end
   local pts = {}
   for k = 0, 16 do pts[#pts + 1] = { spine(k / 16) } end
-  ink.smooth(ink.ribbon(pts, function(t) return h * lerp(0.018, 0.01, t) end), true) ink.fill(tone(0.18))
-  local n = floor(h * 22)
+  ink.smooth(ink.ribbon(pts, function(t) return min(0.06, h * 0.018) * lerp(1, 0.55, t) end), true) ink.fill(tone(0.2))
+  local n = floor(h * 9)
   for k = 2, n do
     local t = k / (n + 1)
     local x, y = spine(t)
     for side = -1, 1, 2 do
-      if rng.chance(0.85) then
+      if rng.chance(0.7) then
         if rng.chance(0.12) then
-          ink.circle(x + side * h * 0.018, y, h * 0.011) ink.fill(tone(0.16))
+          ink.circle(x + side * 0.05, y, 0.03) ink.fill(tone(0.18))
         else
-          leaflet(x, y, (side * rng.range(40, 75) + cur * 25) * rad, h * rng.range(0.045, 0.08) * (1 - 0.4 * t), h * 0.011, tone(0.26 + rng.range(0, 0.1)))
+          leaflet(x, y, (side * rng.range(40, 75) + cur * 25) * rad, min(0.4, h * 0.07) * rng.range(0.65, 1.1) * (1 - 0.4 * t), min(0.05, h * 0.011), tone(0.32 + rng.range(0, 0.12)))
         end
       end
     end
@@ -2373,7 +2398,7 @@ M.crab, M.star, M.anemone, M.whelk, M.eggcase, M.urchin = SF.crab, SF.star, SF.a
 -- ---------------------------------------------------------------- the forest
 -- the understory's mix (a kind twice is twice as likely), and how much taller than the rest a kind grows
 local WEEDS = { "palm", "red", "eel", "red", "eel", "oar", "oar", "boa", "sarg", "sarg", "wrack", "wrack", "beads", "padina", "hali", "grapes", "sugar", "sugar", "thong", "dulse", "dulse", "lettuce" }
-local TALL = { sugar = 1.8, thong = 2.4, dulse = 0.9, lettuce = 0.6, boa = 2.6, sarg = 1.5, oar = 1.3, beads = 0.7, grapes = 0.6, padina = 0.7, hali = 0.8 }
+local TALL = { sugar = 2.2, thong = 2.6, dulse = 1.3, lettuce = 0.6, boa = 3.0, sarg = 2.2, oar = 1.6, wrack = 1.4, red = 1.2, beads = 0.7, grapes = 0.6, padina = 0.7, hali = 0.8 }
 
 function M.forest(rng, o)
   local W, H = o.w, o.h
@@ -2710,7 +2735,7 @@ function M.forest(rng, o)
   for _ = 1, floor(W * 2.4) do
     local x = rng.range(0.3, W - 0.3)
     local kind = rng.pick(WEEDS)
-    local h = rng.range(1.3, 2.8) * (TALL[kind] or 1)
+    local h = rng.range(1.3, 2.8) * min(1.2, TALL[kind] or 1)   -- young ones of the tall kinds
     if free(x - h * 0.3, sandtop - 0.2, x + h * 0.3, sandtop + h * 0.8) then
       weed(kind, x, sandtop - 0.1, h)
       reg(x - h * 0.3, sandtop - 0.2, x + h * 0.3, sandtop + h * 0.6, "weed")
@@ -2719,8 +2744,8 @@ function M.forest(rng, o)
   -- the taller weeds among the kelp: feather boas, sugar kelp, thongweed, sargassum, oarweed, each a
   -- different shape at the scale of the stipes, so the forest is more than one plant
   ink.layer(L_KELP)
-  local TALLW = { "boa", "sugar", "thong", "sarg", "oar", "sugar", "boa", "wrack", "dulse" }
-  for _ = 1, floor(W * rng.range(0.3, 0.5)) do
+  local TALLW = { "boa", "sugar", "thong", "sarg", "sarg", "oar", "sugar", "boa", "wrack", "dulse", "red" }
+  for _ = 1, floor(W * rng.range(0.4, 0.65)) do
     local x = rng.range(0.6, W - 0.6)
     local kind = rng.pick(TALLW)
     local h = rng.range(2.2, 4.2) * (TALL[kind] or 1)
