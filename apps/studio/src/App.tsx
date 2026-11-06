@@ -718,7 +718,7 @@ export function App() {
     // page: whose drawing a page grows, its own or (perPage 'match') every page's, so pages laid out alike match;
     // flowers: the work's seed picks its plants, the page its garden
     grows, ink: inkName, crown, season, spanishmoss, heart, w: S.w, h: S.h, page: perPage === 'match' ? 0 : index,
-    seed: grows === 'flowers' || perPage === 'match' ? seed : seed + index * 101, cats,
+    seed: grows === 'flowers' || grows === 'kelp' || perPage === 'match' ? seed : seed + index * 101, cats,
     size: pieces, density: 1, index,
     keepouts: p.boxes.filter((b) => b.layer === 'clear').map((b) => {
       const empty = !texts.find((t) => t.id === b.story)?.doc.textContent.trim()
@@ -926,6 +926,7 @@ export function App() {
               <option value="gym">Cat gym</option>
               <option value="oak">One huge oak</option>
               <option value="flowers">Kevin's flowers</option>
+              <option value="kelp">Kelp forest</option>
             </select>
           </label>
           <label>Ink
@@ -974,9 +975,12 @@ export function App() {
             <p className="hint">Kevin Raymond's florilegium garden: plants sampled from genomes, with the insects, snails and birds they bring. It grows beside your text, on the wider side, and under where the text ends. Each seed is a different set of plants. A full page can take a few seconds.</p>
           </>
         )}
+        {grows === 'kelp' && (
+          <p className="hint">Florilegium's margin as a kelp bed: kelp rising from rocks, sea palms and red seaweed, bubbles, fish, crabs, shrimp, sea stars, urchins, jellyfish, and otters floating on their backs. It grows beside your text and under where it ends.</p>
+        )}
         <div className="row">
-          {grows !== 'flowers' && <NumberField label="Cats a page" min={0} max={6} value={cats} onChange={setCats} />}
-          <NumberField label={grows === 'flowers' ? 'Flower size' : grows === 'oak' ? 'Tree size' : 'Cat gym size'} unit="×" min={grows === 'flowers' ? 0.8 : 0.5} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
+          {grows !== 'flowers' && <NumberField label={grows === 'kelp' ? 'Otters a page' : 'Cats a page'} min={0} max={grows === 'kelp' ? 3 : 6} value={grows === 'kelp' ? Math.min(cats, 3) : cats} onChange={setCats} />}
+          <NumberField label={grows === 'flowers' ? 'Flower size' : grows === 'kelp' ? 'Kelp size' : grows === 'oak' ? 'Tree size' : 'Cat gym size'} unit="×" min={grows === 'flowers' || grows === 'kelp' ? 0.8 : 0.5} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
           <NumberField label="Seed" min={1} max={1e9} value={seed} onChange={setSeed} />
         </div>
         </section>

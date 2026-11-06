@@ -32,13 +32,15 @@ local function flowers(o, w, h, k)
   local B = 0.5                                      -- the text block reaches the foot: no footer band, the
   local cm = function(v) return string.format("%.3fcm", v) end   -- spill runs under the text to the paper
   local SEASON = { spring = "spring", summer = "summer", autumn = "autumn", winter = "autumn", dead = "autumn" }
+  local theme = o.grows == "kelp" and "kelp" or nil         -- the kelp bed: florilegium's growth, drawn as seaweed
+  if theme then require("florilegium-theme-kelp").set_otters(math.max(0, math.floor(o.cats or 1))) end
   local INK = { green = "2F6B4F", blue = "2456C4" }
   local svg = require("florilegium-svg")
   local _, _, extra = svg.page{ paper = { cm(fw), cm(fh) }, left = cm(L), right = cm(R), top = cm(T), bottom = cm(B),
     headheight = "0pt", headsep = "0pt", footskip = "0pt", head = false,
     seed = math.max(1, math.floor(o.seed or 1)), page = math.floor(o.page or o.index or 0) + 1,
-    textend = cm(math.max(0, (fh - T) - math.max(B, y0))), season = SEASON[o.season] or "summer",
-    density = o.density or 1, ink = INK[o.ink] or INK.blue }
+    textend = cm(math.max(0, (fh - T) - math.max(B, y0))),
+    density = o.density or 1, ink = INK[o.ink] or INK.blue, theme = theme, season = theme and "summer" or (SEASON[o.season] or "summer") }
   local streams = {}
   for i, st in ipairs(extra.streams) do streams[i] = k == 1 and st or string.format("q %.4f 0 0 %.4f 0 0 cm\n%s\nQ", k, k, st) end
   return extra.streams, streams
@@ -46,7 +48,7 @@ end
 
 function M.page(o)
   local w, h, k = o.w, o.h, o.size or 1
-  if o.grows == "flowers" then
+  if o.grows == "flowers" or o.grows == "kelp" then
     local drawn, scaled = flowers(o, w, h, k)
     M.last_streams = scaled
     local svg = require("florilegium-svg")

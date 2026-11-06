@@ -18,7 +18,7 @@ export type SizeKey = keyof typeof SIZES
 export type Margins = { top: number; right: number; bottom: number; left: number }   // in cm
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter', 'dead'] as const
 export type Season = typeof SEASONS[number]
-export type Grows = 'gym' | 'oak' | 'flowers'
+export type Grows = 'gym' | 'oak' | 'flowers' | 'kelp'
 // each page grows its own drawing, or pages laid out alike (where their text ends included) get the same one
 export type PerPage = 'new' | 'match'
 export type Heart = 'sometimes' | 'never' | 'always'    // the oak's carved I + C
@@ -162,7 +162,7 @@ export function checkDoc(raw: unknown): Doc {
     seed: Math.round(num(o.seed, 1, 1e9, d.seed)),
     cats: Math.round(num(o.cats, 0, 6, d.cats)),
     pieces: num(o.pieces, 0.8, 2.5, d.pieces),
-    grows: oneOf(o.grows, ['gym', 'oak', 'flowers'] as const, d.grows),   // a file with the old cats opens as a cat gym
+    grows: oneOf(o.grows, ['gym', 'oak', 'flowers', 'kelp'] as const, d.grows),   // a file with the old cats opens as a cat gym
     inkName: oneOf(o.inkName, ['green', 'blue'] as const, d.inkName),
     crown: oneOf(o.crown, ['lush', 'open'] as const, d.crown),
     season: oneOf(o.season, SEASONS, d.season),
