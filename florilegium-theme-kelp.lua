@@ -60,22 +60,31 @@ function M.blade(rng, x, y, ang, L, W, cur, t0)
   if fine() then ink.circle(x - W * 0.12, y + W * 0.15, W * 0.15) ink.fill(white, 0.5) end
 end
 
--- the holdfast: a cone of branching haptera gripping the rock at (x, y), w wide
+-- the holdfast: a low cone of fine, branching haptera, from the stipes' foot at (x, y + w * 0.45) spreading
+-- out and down over the rock, w wide at the rock; no knob, the roots themselves make its shape
 local function holdfast(rng, x, y, w, t0)
-  local n = max(9, floor(w * 9))
+  local apex = y + w * 0.45
+  local n = max(14, floor(w * 22))
   for k = 1, n do
     local u = (k - 0.5) / n
-    local ex = x + (u - 0.5) * w * 1.6 + rng.sym(0.06)
-    local ey = y - rng.range(0.05, 0.25)
-    local mx = lerp(x, ex, 0.5) + rng.sym(0.05)
-    ink.smooth(ink.ribbon({ { x + (u - 0.5) * w * 0.3, y + w * 0.35 }, { mx, y + w * 0.1 }, { ex, ey } }, function(t) return lerp(0.07, 0.025, t) end), true)
-    ink.fill(tone(t0 - 0.04))
-    if rng.chance(0.5) then
-      ink.moveto(lerp(mx, ex, 0.5), lerp(y + w * 0.1, ey, 0.5)) ink.lineto(ex + rng.sym(0.12), ey - rng.range(0.02, 0.1))
-      ink.stroke(tone(t0 - 0.04), 0.5)
+    local ex = x + (u - 0.5) * w * rng.range(1.0, 1.25)
+    local ey = y + rng.range(-0.04, 0.06) - abs(u - 0.5) * w * 0.15
+    local sx = x + (u - 0.5) * w * 0.18
+    local c1x, c1y = lerp(sx, ex, 0.25), lerp(apex, ey, 0.6)
+    local pts = {}
+    for j = 0, 6 do
+      local t = j / 6
+      local a, b = 1 - t, t
+      pts[#pts + 1] = { a * a * sx + 2 * a * b * c1x + b * b * ex, a * a * apex + 2 * a * b * c1y + b * b * ey }
+    end
+    ink.smooth(ink.ribbon(pts, function(t) return lerp(0.05, 0.018, t) end), true)
+    ink.fill(tone(t0 + rng.range(-0.06, 0.06)))
+    if rng.chance(0.55) then                         -- a fork near the foot
+      local m = pts[5]
+      ink.moveto(m[1], m[2]) ink.lineto(m[1] + (u - 0.5) * w * 0.3 + rng.sym(0.06), ey - rng.range(0.0, 0.06))
+      ink.stroke(tone(t0), 0.45)
     end
   end
-  fill(ellipse(x, y + w * 0.3, w * 0.28, w * 0.2, 12), tone(t0 - 0.06))
 end
 
 -- ---------------------------------------------------------------- the floor
@@ -93,45 +102,68 @@ local function lump(rng, x, y, rx, ry, rough, n)
   end
   return out
 end
--- a rock at (x, y) on the floor, w wide: its kind's outline, shading, pits; returns its top (where kelp holds)
+-- one stone: an angular outline (chipped, not round), sitting on the sand at y, cx its middle, w wide, h high
+local function stone(rng, cx, y, w, h, sharp)
+  local n = rng.int(7, 10)
+  local pts = {}
+  for i = 0, n - 1 do
+    local a = pi * i / (n - 1)                          -- the top half, left to right... then the flat foot
+    local k = 1 + rng.sym(sharp)
+    pts[#pts + 1] = { cx - w / 2 * cos(a) * k, y + h * sin(a) ^ 0.7 * k }
+  end
+  pts[#pts + 1] = { cx + w / 2 + w * 0.04, y - h * 0.08 }
+  pts[#pts + 1] = { cx - w / 2 - w * 0.04, y - h * 0.08 }
+  return pts
+end
+-- a rock at (x, y) on the floor, w wide: stones of its kind, each with a lit top face and a shaded side
+-- split along a ridge, cracks, pale crusts of coralline and a few tufts; a shadow and a lip of sand at the
+-- foot. Returns its top (where kelp holds)
 local function rock(rng, x, y, w, kind, t0)
-  local h
   local parts = {}
-  if kind == "slab" then
-    h = w * rng.range(0.22, 0.3)
-    parts[1] = { x, y + h * 0.45, w * 0.5, h * 0.55, 0.07 }
+  if kind == "slab" then parts[1] = { x, w, w * rng.range(0.2, 0.28), 0.1 }
   elseif kind == "cobbles" then
-    h = w * 0.35
-    for _ = 1, rng.int(3, 5) do
-      local r_ = w * rng.range(0.14, 0.22)
-      parts[#parts + 1] = { x + rng.sym(w * 0.36), y + r_ * 0.7 + rng.range(0, h * 0.3), r_, r_ * 0.75, 0.1 }
-    end
+    for _ = 1, rng.int(3, 5) do local s_ = w * rng.range(0.25, 0.42) parts[#parts + 1] = { x + rng.sym(w * 0.32), s_, s_ * rng.range(0.55, 0.8), 0.12 } end
   elseif kind == "ledge" then
-    h = w * rng.range(0.38, 0.5)
-    parts[1] = { x, y + h * 0.42, w * 0.5, h * 0.55, 0.16 }
-    parts[2] = { x + w * rng.sym(0.2), y + h * 0.85, w * 0.32, h * 0.3, 0.12 }
-  else                                                -- a boulder
-    h = w * rng.range(0.5, 0.65)
-    parts[1] = { x, y + h * 0.48, w * 0.5, h * 0.52, 0.1 }
-  end
-  for _, p in ipairs(parts) do
-    local b = lump(rng, p[1], p[2], p[3], p[4], p[5], 14)
-    fill(b, tone(t0))
+    parts[1] = { x, w, w * rng.range(0.32, 0.42), 0.14 }
+    parts[2] = { x + w * rng.sym(0.18), w * 0.55, w * 0.25, 0.16 }
+  else parts[1] = { x, w, w * rng.range(0.45, 0.6), 0.12 } end
+  -- the shadow on the sand, then each stone back to front
+  fill(ellipse(x + w * 0.08, y + 0.02, w * 0.6, w * 0.07, 16), tone(0.62), 0.7)
+  local top = y
+  local base = y
+  for pi_, p in ipairs(parts) do
+    local cx, sw, sh = p[1], p[2], p[3]
+    local by = base + (pi_ > 1 and parts[1][3] * 0.55 or 0)   -- a second stone of a ledge sits on the first
+    local out = stone(rng, cx, by, sw, sh, p[4])
+    ink.poly(out, true) ink.fill(tone(t0))
+    top = max(top, by + sh)
     if fine() then
-      fill(lump(rng, p[1] - p[3] * 0.22, p[2] + p[4] * 0.3, p[3] * 0.6, p[4] * 0.42, 0.12, 10), tone(t0 + 0.14), 0.7)   -- lit top
-      fill(lump(rng, p[1] + p[3] * 0.15, p[2] - p[4] * 0.2, p[3] * 0.75, p[4] * 0.3, 0.1, 10), tone(t0 - 0.08), 0.6)  -- shade
-      for _ = 1, floor(p[3] * 10) do
-        ink.circle(p[1] + rng.sym(p[3] * 0.75), p[2] + rng.sym(p[4] * 0.6), rng.range(0.012, 0.035)) ink.fill(tone(t0 - 0.1), 0.7)
+      -- the lit face: the upper left part of the outline, down to a ridge across the stone
+      local ridge = { cx + sw * rng.range(0.05, 0.25), by + sh * rng.range(0.35, 0.55) }
+      local lit = {}
+      for i = 1, floor(#out * 0.55) do lit[#lit + 1] = out[i] end
+      lit[#lit + 1] = ridge
+      lit[#lit + 1] = { cx - sw * 0.35, by + sh * 0.2 }
+      ink.poly(lit, true) ink.fill(tone(t0 + 0.16), 0.85)
+      -- the shaded side, low on the right
+      ink.poly({ ridge, out[#out - 2], { cx + sw * 0.5, by }, { cx + sw * 0.1, by } }, true) ink.fill(tone(t0 - 0.08), 0.7)
+      -- a crack or two from the ridge
+      for _ = 1, rng.int(1, 2) do
+        local ax, ay = ridge[1] + rng.sym(sw * 0.15), ridge[2] + rng.sym(sh * 0.1)
+        ink.moveto(ax, ay) ink.lineto(ax + rng.sym(sw * 0.12), ay - sh * rng.range(0.2, 0.4)) ink.lineto(ax + rng.sym(sw * 0.2), ay - sh * rng.range(0.4, 0.6))
+        ink.stroke(tone(t0 - 0.12), 0.45, 0.8)
       end
-      if kind == "ledge" or kind == "boulder" then   -- cracks
-        for _ = 1, 2 do
-          local cx, cy = p[1] + rng.sym(p[3] * 0.5), p[2] + rng.sym(p[4] * 0.4)
-          ink.moveto(cx, cy) ink.lineto(cx + rng.sym(p[3] * 0.3), cy - rng.range(0.1, p[4] * 0.6)) ink.stroke(tone(t0 - 0.12), 0.4, 0.7)
-        end
+      -- pale crusts of coralline on the lit face, barnacles as specks
+      for _ = 1, rng.int(1, 3) do
+        fill(ellipse(cx + rng.sym(sw * 0.3), by + sh * rng.range(0.55, 0.85), sw * rng.range(0.06, 0.12), sh * rng.range(0.04, 0.08), 9, rng.sym(0.4)), tone(0.7), 0.8)
       end
+      for _ = 1, floor(sw * 6) do ink.circle(cx + rng.sym(sw * 0.4), by + rng.range(sh * 0.1, sh * 0.8), rng.range(0.012, 0.03)) end
+      ink.fill(tone(t0 + 0.25), 0.8)
     end
   end
-  return y + h
+  -- a lip of sand against the foot
+  fill({ { x - w * 0.62, y - 0.06 }, { x - w * 0.3, y + 0.07 }, { x, y + 0.04 }, { x + w * 0.35, y + 0.08 }, { x + w * 0.62, y - 0.06 } }, tone(0.86))
+  return top
 end
 
 -- the sand along the floor, `top` high, with ripples and pebbles
@@ -524,6 +556,22 @@ function M.forest(rng, o)
   local L_FAR, L_FLOOR, L_KELP, L_UNDER, L_LIFE, L_TOP = 1, 2, 3, 4, 5, 6
   local sandtop = rng.range(0.7, 1.1)
 
+  -- the water: one current across the page, the same way for everything, and a slow wave travelling across
+  -- it, so neighbors sway together; a little turbulence on top of both, so no two are alike
+  local FL = {
+    lean = cur * rng.range(0.05, 0.11),            -- how far a stipe leans downstream per cm of height
+    amp = rng.range(0.35, 0.7), lam = rng.range(2.6, 4.2), across = rng.range(5, 9), ph = rng.range(0, 2 * pi),
+    blade = cur * rng.range(48, 62),               -- a blade's angle from up, downstream
+  }
+  local n1, n2 = ink.noise1(rng.fork()), ink.noise1(rng.fork())
+  local function turb(x, y) return 0.6 * n1(x * 0.45 + y * 0.21) + 0.4 * n2(y * 0.38 - x * 0.17 + 40) end   -- about -1..1
+  -- the wave's sideways offset at (x0, y): it travels across the page, so a stipe further downstream is a
+  -- little behind its neighbor
+  local function wave(x0, y) return FL.amp * sin(y / FL.lam - x0 / FL.across * cur + FL.ph) end
+  -- the blades crowd no cell more than twice (cells half a centimeter across)
+  local crowd = {}
+  local function cell(x, y) return floor(x / 0.5) * 1000 + floor(y / 0.5) end
+
   -- the rocks along the floor, left to right, of varying kinds and sizes
   local rocks = {}
   do
@@ -540,20 +588,27 @@ function M.forest(rng, o)
   -- a stipe from (x0, y0) toward the surface, with the current and a slow wave, steering round the text;
   -- returns its points (the last ones lie over into the canopy)
   local surface = H - rng.range(0.3, 0.8)
-  local function stipe(x0, y0, srng)
+  local function stipe(x0, y0, srng, spread)
     local pts = { { x0, y0 } }
     local x, y = x0, y0
-    local amp, lam, ph = srng.range(0.3, 0.9), srng.range(2.2, 4.0), srng.range(0, 2 * pi)
-    local lean = cur * srng.range(0.03, 0.12)
+    local lean = FL.lean + srng.sym(0.015) + (spread or 0)
+    local w0 = wave(x0, y0)
     local stop = surface - srng.range(0.4, 2.5)
     local dy = 0.22
     while y < stop do
       local ny = y + dy
-      local tx = x0 + lean * (ny - y0) + amp * sin((ny - y0) / lam + ph) + amp * 0.3 * sin((ny - y0) / (lam * 0.4) + ph * 2)
+      local tx = x0 + lean * (ny - y0) + (wave(x0, ny) - w0) * min(1, (ny - y0) / 3) + 0.12 * turb(x0, ny)
       -- look ahead: a text box above turns the stipe to its nearer side
       for la = 0.3, 2.4, 0.7 do
         local q = blocked(tx, ny + la, 0.15)
-        if q then tx = (x < (q[1] + q[3]) / 2) and q[1] - 0.3 or q[3] + 0.3 break end
+        if q then
+          local side = (x < (q[1] + q[3]) / 2) and q[1] - 0.3 or q[3] + 0.3
+          -- round it, if there is room beside it and the stipe is near that side; else it stops short under
+          -- the text and lies over there, a little below it
+          if side > 2.5 and side < W - 2.5 and abs(side - x) < 1.6 then tx = side
+          else stop = min(stop, q[2] - srng.range(0.6, 3.0)) end
+          break
+        end
       end
       local nx = x + clamp(tx - x, -0.16, 0.16)
       if blocked(nx, ny, 0.05) or nx < -0.5 or nx > W + 0.5 then break end
@@ -564,8 +619,9 @@ function M.forest(rng, o)
     -- box it couldn't get round, which it treats the same)
     if #pts > 8 then
       local L = srng.range(1.0, 3.0)
+      local droop = srng.range(0.02, 0.07)
       for k = 1, floor(L / 0.2) do
-        local nx, ny = x + cur * 0.2, y + 0.03 * cos(k * 0.5)
+        local nx, ny = x + cur * 0.2, y + 0.04 - droop * k ^ 0.7
         if blocked(nx, ny, 0.1) then break end
         x, y = nx, ny
         pts[#pts + 1] = { x, y }
@@ -579,35 +635,47 @@ function M.forest(rng, o)
     local old = far and ink.set_lift(0.45) or nil
     ink.layer(far and L_FAR or L_KELP)
     local stipes = {}
+    local hw = max(0.45, min(1.1, w * 0.45))           -- the holdfast's spread on the rock
     for k = 1, n do
-      local sx = x + (k - (n + 1) / 2) * min(0.16, w * 0.3 / n) + brng.sym(0.05)
-      stipes[#stipes + 1] = stipe(sx, y + w * 0.25, brng.fork())
+      local u = n > 1 and (k - 1) / (n - 1) - 0.5 or 0      -- a bunch fans out from its holdfast as it rises
+      local sx = x + u * min(0.3, w * 0.25) + brng.sym(0.05)
+      stipes[#stipes + 1] = stipe(sx, y + hw * 0.42, brng.fork(), u * brng.range(0.08, 0.2))
+    end
+    -- the blades are planned first, so each stipe is drawn only a little past its last blade (a bare stipe
+    -- running on round a text box would trace its outline)
+    local plan = {}
+    for si, pts in ipairs(stipes) do
+      local side = brng.chance(0.5) and 1 or -1
+      local i = brng.int(3, 5)
+      local last = 1
+      while i <= #pts do
+        local p = pts[i]
+        local canopy = p[2] > surface - 2.6 or (i > 3 and abs(pts[i][2] - pts[i - 1][2]) < 0.1)
+        -- downstream, at the field's angle here, give or take its turbulence; the upstream side's blades
+        -- swing round with the rest, a little higher
+        local ang = (canopy and cur * 98 or FL.blade) + 16 * turb(p[1], p[2]) + brng.sym(7) + ((side > 0) == (cur > 0) and 0 or -cur * 18)
+        local L = (canopy and brng.range(2.0, 3.4) or brng.range(1.5, 3.0)) * (far and 0.8 or 1)
+        local ex, ey = p[1] + L * sin(ang * rad), p[2] + L * cos(ang * rad)
+        local mx, my = lerp(p[1], ex, 0.5), lerp(p[2], ey, 0.5)
+        local c0, c1 = cell(p[1], p[2]), cell(mx, my)
+        local cap = canopy and 3 or 2
+        if not blocked(ex, ey, 0.05) and not blocked(mx, my, 0.05) and (crowd[c0] or 0) < cap and (crowd[c1] or 0) < cap then
+          crowd[c0], crowd[c1] = (crowd[c0] or 0) + 1, (crowd[c1] or 0) + 1
+          plan[#plan + 1] = { brng.fork(), p[1], p[2], ang, L, brng.range(0.16, 0.26) * (far and 0.8 or 1), t0 + brng.range(-0.06, 0.1) }
+          last = i
+        end
+        side = -side
+        i = i + brng.int(4, 7)
+      end
+      stipes[si] = { table.unpack(pts, 1, min(#pts, last + 3)) }
     end
     for _, pts in ipairs(stipes) do
       if #pts >= 3 then
         ink.smooth(ink.ribbon(pts, function(t) return lerp(0.08, 0.04, t) end), true) ink.fill(tone(t0 - 0.16))
       end
     end
-    holdfast(brng, x, y, max(0.35, w * 0.4), t0 - 0.12)
-    -- blades: every half centimeter or so, alternately, leaning downstream; longer, flatter in the canopy
-    for _, pts in ipairs(stipes) do
-      local side = brng.chance(0.5) and 1 or -1
-      local i = brng.int(3, 5)
-      while i <= #pts do
-        local p = pts[i]
-        local canopy = p[2] > surface - 2.6 or (i > 3 and abs(pts[i][2] - pts[i - 1][2]) < 0.1)
-        local ang = canopy and cur * brng.range(65, 115) or ((side > 0) == (cur > 0)) and cur * brng.range(35, 80) or -cur * brng.range(5, 40)
-        local L = (canopy and brng.range(2.0, 3.4) or brng.range(1.5, 3.0)) * (far and 0.8 or 1)
-        -- a blade reaching into a text box is shorter, or left out
-        local ex, ey = p[1] + L * sin(ang * rad), p[2] + L * cos(ang * rad)
-        if blocked(ex, ey, 0.1) then L = L * 0.45 ex, ey = p[1] + L * sin(ang * rad), p[2] + L * cos(ang * rad) end
-        if not blocked(ex, ey, 0.05) and not blocked(lerp(p[1], ex, 0.5), lerp(p[2], ey, 0.5), 0.05) then
-          M.blade(brng, p[1], p[2], ang, L, brng.range(0.16, 0.26) * (far and 0.8 or 1), cur, t0 + brng.range(-0.06, 0.1))
-        end
-        side = -side
-        i = i + brng.int(4, 7)
-      end
-    end
+    holdfast(brng, x, y, hw, t0 - 0.08)
+    for _, b in ipairs(plan) do M.blade(b[1], b[2], b[3], b[4], b[5], b[6], cur, b[7]) end
     if far then ink.set_lift(old) end
   end
 
@@ -620,14 +688,16 @@ function M.forest(rng, o)
   ink.layer(L_FLOOR)
   sand(rng.fork(), W, sandtop)
   for _, r in ipairs(rocks) do
-    r.top = rock(rng.fork(), r.x, sandtop - 0.15, r.w, r.kind, rng.range(0.16, 0.26))
+    r.top = rock(rng.fork(), r.x, sandtop - 0.12, r.w, r.kind, rng.range(0.16, 0.24))
     reg(r.x - r.w / 2, 0, r.x + r.w / 2, r.top, "rock")
   end
   -- 3. the near bunches: most big rocks carry one, from a couple of stipes to nine; now and then a bull kelp
   for _, r in ipairs(rocks) do
     if r.w > 1.2 and rng.chance(0.85) then
       local brng = rng.fork()
-      if rng.chance(0.18) then
+      local clear = true
+      for yy = r.top, H, 0.5 do if blocked(r.x, yy, 0.8) then clear = false break end end
+      if clear and rng.chance(0.3) then
         -- bull kelp: one long whip to a float, a fountain of blades streaming from it
         ink.layer(L_KELP)
         local pts = stipe(r.x, r.top - 0.05, brng.fork())
@@ -640,7 +710,7 @@ function M.forest(rng, o)
           holdfast(brng, r.x, r.top - 0.05, 0.4, 0.22)
         end
       else
-        bunch(r.x + brng.sym(r.w * 0.15), r.top - 0.08, r.w, clamp(floor(r.w * brng.range(1.5, 3.6)), 2, 9), false, brng)
+        bunch(r.x + brng.sym(r.w * 0.15), r.top - 0.08, r.w, clamp(floor(r.w * brng.range(1.0, 2.2)), 2, 6), false, brng)
       end
       r.kelp = true
     end
