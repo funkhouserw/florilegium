@@ -144,7 +144,7 @@ export function checkDoc(raw: unknown): Doc {
     if (story === undefined) {
       story = newStoryId()
       storyIds.set(q.story ?? {}, story)
-      stories.push({ id: story, doc: newStoryDoc(), auto: false })
+      stories.push({ id: story, doc: newStoryDoc(), auto: true })
     }
     return [{ ...box, id: newBoxId(), story, layer: oneOf(q.layer, LAYERS, 'clear') }]
   })) : []

@@ -624,7 +624,8 @@ export function App() {
     if (story === null) {
       story = newStoryId()
       const made = story
-      setStories((all) => [...all, { id: made, state: newState(newStoryDoc()), auto: false }])
+      // a new story: like the first, it adds pages when it runs over
+      setStories((all) => [...all, { id: made, state: newState(newStoryDoc()), auto: true }])
     }
     editPage(page, (bs) => [...bs, { id, x, y, w: 1, h: 1, story: story!, layer: 'clear' }])
     setLinking(null)
@@ -699,6 +700,7 @@ export function App() {
   }
   function unlink(page: number, box: Box) {
     const id = newStoryId()
+    // a box of its own text, such as a caption: running over marks it rather than adding pages
     setStories((all) => [...all, { id, state: newState(newStoryDoc()), auto: false }])
     editPage(page, (bs) => bs.map((b) => (b.id === box.id ? { ...b, story: id } : b)))
     setActiveId(id)
@@ -716,7 +718,7 @@ export function App() {
     // flowers: the work's seed picks its plants, the page its garden
     grows, ink: inkName, crown, season, spanishmoss, w: S.w, h: S.h, page: perPage === 'match' ? 0 : index,
     seed: grows === 'flowers' || perPage === 'match' ? seed : seed + index * 101, cats,
-    size: grows === 'gym' || grows === 'flowers' ? pieces : 1, density: 1, index,
+    size: pieces, density: 1, index,
     keepouts: p.boxes.filter((b) => b.layer === 'clear').map((b) => {
       const empty = !texts.find((t) => t.id === b.story)?.doc.textContent.trim()
       const h = empty ? b.h : p.used.get(b.id) ?? 0
@@ -919,7 +921,7 @@ export function App() {
         <button onClick={() => { setSeed((s) => s + 1); setGrowTick((t) => t + 1) }}>Grow a different one</button>
         <div className="row">
           <label>What grows
-            <select value={grows} onChange={(e) => { const g = e.target.value as Grows; setGrows(g); setInkName(g === 'oak' ? 'green' : 'blue') }}>
+            <select value={grows} onChange={(e) => { const g = e.target.value as Grows; setGrows(g); setInkName(g === 'oak' ? 'green' : 'blue'); if (g === 'oak') setPieces(1); else if (grows === 'oak') setPieces(1.4) }}>
               <option value="gym">Cat gym</option>
               <option value="oak">One huge oak</option>
               <option value="flowers">Kevin's flowers</option>
@@ -966,7 +968,7 @@ export function App() {
         )}
         <div className="row">
           {grows !== 'flowers' && <NumberField label="Cats a page" min={0} max={6} value={cats} onChange={setCats} />}
-          <NumberField label={grows === 'flowers' ? 'Flower size' : 'Piece size'} unit="×" min={0.8} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
+          <NumberField label={grows === 'flowers' ? 'Flower size' : grows === 'oak' ? 'Tree size' : 'Piece size'} unit="×" min={0.8} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
           <NumberField label="Seed" min={1} max={1e9} value={seed} onChange={setSeed} />
         </div>
         </section>
