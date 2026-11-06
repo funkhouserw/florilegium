@@ -209,7 +209,10 @@ export function App() {
     vv.addEventListener('scroll', f)
     return () => { vv.removeEventListener('resize', f); vv.removeEventListener('scroll', f) }
   }, [])
-  // a phone fits a page to the screen's width, again whenever the width changes (not the height: the keyboard)
+  // a phone fits a page to the screen's width, again whenever the width changes (not the height: the keyboard);
+  // held sideways, the whole page
+  const aspect = useRef(1)
+  aspect.current = H / W
   useEffect(() => {
     const el = pagesEl.current
     if (!narrow || !el) return
@@ -217,7 +220,8 @@ export function App() {
     const ro = new ResizeObserver(() => {
       if (Math.abs(el.clientWidth - w) < 2) return
       w = el.clientWidth
-      setZoom(clampZoom((w - 24) / PAGE_PX))
+      const byWidth = (w - 24) / PAGE_PX, byHeight = (el.clientHeight - 48) / (PAGE_PX * aspect.current)
+      setZoom(clampZoom(w > window.innerHeight ? Math.min(byWidth, byHeight) : byWidth))
     })
     ro.observe(el)
     return () => ro.disconnect()
