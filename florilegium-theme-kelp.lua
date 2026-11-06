@@ -2253,11 +2253,11 @@ function M.forest(rng, o)
           local a2 = ang + cur * swing
           ex, ey = p[1] + L * sin(a2 * rad), p[2] + L * cos(a2 * rad)
           mx, my = lerp(p[1], ex, 0.5), lerp(p[2], ey, 0.5)
-          if not blocked(ex, ey, 0.05) and not blocked(mx, my, 0.05) then ang = a2 break end
+          if not blocked(ex, ey, 0.25) and not blocked(mx, my, 0.25) then ang = a2 break end
         end
         local c0, c1 = cell(p[1], p[2]), cell(mx, my)
         local cap = canopy and 2 or 1
-        if not blocked(ex, ey, 0.05) and not blocked(mx, my, 0.05) and (crowd[c0] or 0) < cap and (crowd[c1] or 0) < cap then
+        if not blocked(ex, ey, 0.25) and not blocked(mx, my, 0.25) and (crowd[c0] or 0) < cap and (crowd[c1] or 0) < cap then
           crowd[c0], crowd[c1] = (crowd[c0] or 0) + 1, (crowd[c1] or 0) + 1
           plan[#plan + 1] = { brng.fork(), p[1], p[2], ang, L, brng.range(0.16, 0.26) * (far and 0.8 or 1), t0 + brng.range(-0.06, 0.1) }
           last = i
@@ -2312,17 +2312,57 @@ function M.forest(rng, o)
     end
     ink.set_lift(old)
   end
+  -- a column: a tight bundle of two to four stipes leaning together on one slant downstream, thick with short
+  -- blades all the way up, hanging out to both sides and drooping a little; isolated, with open water round it
+  local function column(x, y, w, brng, lift_)
+    local old = lift_ and ink.set_lift(lift_) or nil
+    ink.layer(lift_ and L_FAR or L_KELP)
+    local t0 = lift_ and 0.5 or brng.range(0.3, 0.4)
+    local slant = math.tan(brng.range(6, 20) * rad) * cur
+    local n = brng.int(2, 4)
+    local hw = max(0.4, min(0.9, w * 0.35))
+    local stipes = {}
+    for k = 1, n do
+      local u = n > 1 and (k - 1) / (n - 1) - 0.5 or 0
+      stipes[k] = stipe(x + u * 0.14, y + hw * 0.42, brng.fork(), slant - FL.lean + u * 0.015)
+    end
+    local plan = {}
+    for _, pts in ipairs(stipes) do
+      local side = brng.chance(0.5) and 1 or -1
+      for i = 3, #pts, 2 do
+        local p = pts[i]
+        local q = pts[min(#pts, i + 1)]
+        local axis = math.atan(q[1] - p[1], q[2] - p[2]) / rad
+        -- out to its side, drooping: further down on the upstream side, the current pushes both a bit downstream
+        local ang = axis + side * brng.range(55, 105) + cur * brng.range(5, 25) + 10 * turb(p[1], p[2])
+        local L = brng.range(0.6, 1.5) * (1 - 0.35 * (p[2] / H)) * (lift_ and 0.85 or 1)
+        local ex, ey = p[1] + L * sin(ang * rad), p[2] + L * cos(ang * rad)
+        if not blocked(ex, ey, 0.25) and not blocked(lerp(p[1], ex, 0.5), lerp(p[2], ey, 0.5), 0.25) then
+          plan[#plan + 1] = { brng.fork(), p[1], p[2], ang, L, brng.range(0.1, 0.16), t0 + brng.range(-0.06, 0.1) }
+        end
+        side = -side
+      end
+    end
+    for _, pts in ipairs(stipes) do
+      if #pts >= 3 then ink.smooth(ink.ribbon(pts, function(t) return lerp(0.07, 0.045, t) end), true) ink.fill(tone(t0 - 0.16)) end
+    end
+    holdfast(brng, x, y, hw, t0 - 0.08)
+    for _, b in ipairs(plan) do M.blade(b[1], b[2], b[3], b[4], b[5], b[6], cur * 0.6, b[7]) end
+    if lift_ then ink.set_lift(old) end
+  end
+
   -- 1. the far bunches, between and behind the near rocks
   for _ = 1, floor(W / 4.5) + 1 do
     local x = rng.range(0, W)
     if not blocked(x, sandtop + 1) then bunch(x, sandtop + 0.2, 0.6, rng.int(1, 3), true, rng.fork()) end
   end
   -- 1b. a middle row of kelp, nearer than the far one, behind the near rocks: fuller and less regular
-  for _ = 1, floor(W / 3.0) + 1 do
+  for _ = 1, floor(W / 4.5) + 1 do
     local x = rng.range(0.5, W - 0.5)
     if not blocked(x, sandtop + 1.5) then
       local old = ink.set_lift(0.28)
-      bunch(x, sandtop + 0.1, rng.range(0.7, 1.4), rng.int(1, 3), false, rng.fork(), L_FAR)
+      if rng.chance(0.5) then column(x, sandtop + 0.1, 1.0, rng.fork(), 0.3)
+      else bunch(x, sandtop + 0.1, rng.range(0.7, 1.4), rng.int(1, 3), false, rng.fork(), L_FAR) end
       ink.set_lift(old)
     end
   end
@@ -2352,7 +2392,8 @@ function M.forest(rng, o)
           holdfast(brng, r.x, r.top - 0.05, 0.4, 0.22)
         end
       else
-        bunch(r.x + brng.sym(r.w * 0.15), r.top - 0.08, r.w, clamp(floor(r.w * brng.range(1.0, 2.2)), 2, 6), false, brng)
+        if brng.chance(0.6) then column(r.x + brng.sym(r.w * 0.15), r.top - 0.08, r.w, brng)
+        else bunch(r.x + brng.sym(r.w * 0.15), r.top - 0.08, r.w, clamp(floor(r.w * brng.range(1.0, 2.2)), 2, 6), false, brng) end
       end
       r.kelp = true
     end
