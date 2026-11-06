@@ -1,525 +1,753 @@
--- florilegium-theme-kelp.lua -- a theme for florilegium: the margin as a kelp bed. The garden grows as it
--- always does (stems up the column from a root, branches into the holes, fillers, visitors), drawn as
--- seaweed and the things that live in it.
+-- florilegium-theme-kelp.lua -- a kelp forest on a whole page, without TeX (Felilegium's "Kelp forest").
 -- Copyright (c) 2026 Ilse Funkhouser. MIT License: see LICENSE or florilegium.sty.
 --
--- What each of florilegium's primitives becomes:
---   stem      a kelp stipe; a main stem's root grips a rock with a holdfast (haptera)
---   leaf      a kelp blade, ruffled and wrinkled, a gas float at its base, leaning with the current
---   leaflet   a small blade with its float
---   flower    a sea anemone seen from above          lily     a bull kelp float, a fountain of blades
---   blossom   a sea star                            floret   a bubble
---   bud       a gas float on its stalk              bell     a jellyfish (it hangs, as a bell does)
---   cyme      feather boa kelp: a strap of small blades ending in a curl
---   sprig     a red seaweed, forking flat fronds    umbel    a sea palm: a stalk and a drooping crown
---   seedhead  a sea urchin                          tendril  a kelp tip curling (florilegium's spiral)
---   butterfly a fish (copper: a garibaldi now and then)
---   bee       a sea otter on its back, a shell on its chest, wrapped in a strand of kelp (M.otters a page)
---   snail     a shrimp clinging to the stipe       bird     a crab on its twig
---   sparkle   a few bubbles in copper
--- The current runs one way across the page (M.current, +1 to the right): blades and blade fountains lean
--- with it, fish and otters lie level whatever their branch, so the whole bed sways together.
--- Use: \usepackage[grown,theme=kelp]{florilegium}; Felilegium's "Kelp".
+-- M.forest(rng, o): o = { w, h (cm), keepouts = { {x0, y0, x1, y1}, ... } (page cm, y up), otters (a page),
+-- current (+1: the water runs to the right) }. Painted back to front:
+--   1. the far bunches, pale (behind everything else)
+--   2. the seafloor: sand with ripples and pebbles; rocks (boulders, slabs, cobbles, a reef ledge)
+--   3. the near bunches: each on a rock, a holdfast gripping it, stipes rising to the surface in a slow
+--      wave, steering round the text, then lying over into the canopy with the current; blades along each
+--      stipe, a gas float at the foot of each, leaning downstream; now and then a bull kelp instead
+--   4. the understory between the rocks: sea palms, red seaweed, eelgrass
+--   5. what lives there: fish in open water (a school, a garibaldi, a rockfish, a kelp bass), otters on their
+--      backs at the surface, jellyfish, a shrimp, and on the rocks and the sand crabs, sea stars, urchins,
+--      anemones, a whelk, a skate's egg case caught in a holdfast; bubbles rising
+-- Everything keeps clear of the keep-outs. Delft blue (the ink's ramp); the garibaldi in the accent.
 
 local ink = require("florilegium-ink")
-local flora = require("florilegium-flora")
 local M = {}
 M.version = "2.0.0"
 
-local sin, cos, sqrt, pi, abs, max, min, atan, floor = math.sin, math.cos, math.sqrt, math.pi, math.abs, math.max, math.min, math.atan, math.floor
+local sin, cos, pi, abs, max, min, floor = math.sin, math.cos, math.pi, math.abs, math.max, math.min, math.floor
 local tone, white = ink.tone, ink.white
 local rad = pi / 180
 local function lerp(a, b, t) return a + (b - a) * t end
-local function ghost() return ink.get_lift() > 0.3 end
-local function fine(u) return ink.unit() > (u or 0.25) and not ghost() end
-
-M.current = 1                  -- the current: +1 flows to the right of the page, -1 to the left
-M.otters = 1                   -- otters a page, at most
-local otter_row
-function M.set_otters(n)
-  M.otters = n
-  if otter_row then otter_row.max, otter_row.w = n, n > 0 and 2 or 0 end
-end
-
--- a page direction (px, py) in the local frame: the inverse of ink's transform, normalized
-local function page_dir(px, py)
-  local T = ink.get_transform()
-  local det = T[1] * T[4] - T[2] * T[3]
-  if abs(det) < 1e-12 then return 0, 1 end
-  local x, y = (T[4] * px - T[3] * py) / det, (-T[2] * px + T[1] * py) / det
-  local L = sqrt(x * x + y * y)
-  return x / L, y / L
-end
--- how far the current leans the local +y axis toward its local +x side (-1..1)
-local function drift() local x = page_dir(M.current, 0) return x end
--- turn the frame so +y is the page's up and +x the way the current flows; returns nothing
-local function level()
-  local ux, uy = page_dir(0, 1)
-  ink.rotate(atan(-ux, uy) / rad)
-  local fx = page_dir(M.current, 0)
-  if fx < 0 then ink.scale(-1, 1) end
-end
+local function clamp(v, a, b) return max(a, min(b, v)) end
+local function fine() return ink.get_lift() < 0.3 end
 local function ellipse(cx, cy, rx, ry, n, a0)
   local out = {}
-  n = n or 14
+  n = n or 16
   for k = 0, n - 1 do local a = (a0 or 0) + 2 * pi * k / n out[#out + 1] = { cx + rx * cos(a), cy + ry * sin(a) } end
   return out
 end
+local function fill(pts, c, op) ink.smooth(pts, true) ink.fill(c, op) end
 
--- ---------------------------------------------------------------- the rock and its holdfast
-local rooted, rooted_on = {}, nil        -- roots already given a rock on this page
-local function holdfast(rng, x, y, w)
-  -- the rock: a boulder, a flat slab, or a heap of cobbles
-  local kind = rng.pick({ "boulder", "slab", "cobbles", "boulder" })
-  local rocks = {}
-  if kind == "slab" then rocks[1] = { x + rng.sym(0.2), y - 0.18, rng.range(1.0, 1.4), rng.range(0.22, 0.32) }
+-- ---------------------------------------------------------------- kelp
+-- one blade from (x, y), its axis at `ang` (degrees from up, + toward the current), L long: narrow at the
+-- float, broad, ruffled, trailing with the current as it goes
+function M.blade(rng, x, y, ang, L, W, cur, t0)
+  local a = ang * rad
+  local trail = (0.3 + rng.range(0, 0.45)) * cur
+  local ph = rng.range(0, 2 * pi)
+  local spine = function(v)
+    local s = v * L
+    local bend = trail * v * v * L                 -- the far end swings downstream
+    local wob = 0.05 * L * sin(v * 6 + ph) * v
+    local lx, ly = bend + wob, s
+    return x + lx * cos(a) + ly * sin(a), y - lx * sin(a) + ly * cos(a)
+  end
+  local hw = function(v) return W * sin(pi * min(1, v * 1.04) ^ 0.55) ^ 0.85 * (1 - 0.3 * v) end
+  local ruff = function(v, side) return W * 0.13 * sin(v * L * 26 + side * 1.9 + ph) * sin(pi * v) end
+  local out = ink.blade(spine, max(10, floor(L * 12)), hw, hw, fine() and ruff or nil)
+  ink.smooth(out, true) ink.fill(tone(t0))
+  if fine() then
+    local mid = {}
+    for k = 1, 5 do mid[k] = { spine(0.1 + 0.18 * (k - 1)) } end
+    ink.smooth(mid, false) ink.stroke(tone(t0 - 0.12), 0.35, 0.5)   -- the fold down the blade
+  end
+  -- the float at its foot
+  ink.smooth(ellipse(x, y, W * 0.45, W * 0.7, 10, a), true) ink.fill(tone(t0 - 0.1))
+  if fine() then ink.circle(x - W * 0.12, y + W * 0.15, W * 0.15) ink.fill(white, 0.5) end
+end
+
+-- the holdfast: a cone of branching haptera gripping the rock at (x, y), w wide
+local function holdfast(rng, x, y, w, t0)
+  local n = max(9, floor(w * 9))
+  for k = 1, n do
+    local u = (k - 0.5) / n
+    local ex = x + (u - 0.5) * w * 1.6 + rng.sym(0.06)
+    local ey = y - rng.range(0.05, 0.25)
+    local mx = lerp(x, ex, 0.5) + rng.sym(0.05)
+    ink.smooth(ink.ribbon({ { x + (u - 0.5) * w * 0.3, y + w * 0.35 }, { mx, y + w * 0.1 }, { ex, ey } }, function(t) return lerp(0.07, 0.025, t) end), true)
+    ink.fill(tone(t0 - 0.04))
+    if rng.chance(0.5) then
+      ink.moveto(lerp(mx, ex, 0.5), lerp(y + w * 0.1, ey, 0.5)) ink.lineto(ex + rng.sym(0.12), ey - rng.range(0.02, 0.1))
+      ink.stroke(tone(t0 - 0.04), 0.5)
+    end
+  end
+  fill(ellipse(x, y + w * 0.3, w * 0.28, w * 0.2, 12), tone(t0 - 0.06))
+end
+
+-- ---------------------------------------------------------------- the floor
+-- a lump: an irregular round outline, upright (never turned), flattened where it sits on the sand
+local function lump(rng, x, y, rx, ry, rough, n)
+  n = n or 14
+  local ph, ph2 = rng.range(0, 2 * pi), rng.range(0, 2 * pi)
+  local out = {}
+  for i = 0, n - 1 do
+    local a = 2 * pi * i / n
+    local k = 1 + rough * (0.6 * sin(2 * a + ph) + 0.4 * sin(3 * a + ph2)) + rough * 0.4 * rng.sym(1)
+    local py = ry * k * sin(a)
+    if py < 0 then py = py * 0.55 end                  -- a flatter underside
+    out[#out + 1] = { x + rx * k * cos(a), y + py }
+  end
+  return out
+end
+-- a rock at (x, y) on the floor, w wide: its kind's outline, shading, pits; returns its top (where kelp holds)
+local function rock(rng, x, y, w, kind, t0)
+  local h
+  local parts = {}
+  if kind == "slab" then
+    h = w * rng.range(0.22, 0.3)
+    parts[1] = { x, y + h * 0.45, w * 0.5, h * 0.55, 0.07 }
   elseif kind == "cobbles" then
-    for k = 1, rng.int(3, 4) do rocks[#rocks + 1] = { x + rng.sym(0.9), y - rng.range(0.1, 0.35), rng.range(0.3, 0.5), rng.range(0.22, 0.34) } end
-  else rocks[1] = { x + rng.sym(0.25), y - 0.28, rng.range(0.7, 1.0), rng.range(0.42, 0.58) } end
-  for _, r in ipairs(rocks) do
-    local b = ink.blob(rng, r[1], r[2], r[3], r[4], 0.12, 12)
-    ink.smooth(b, true) ink.fill(tone(rng.range(0.18, 0.26)))
-    if fine(0.2) then
-      ink.smooth(ink.blob(rng, r[1] - r[3] * 0.2, r[2] + r[4] * 0.25, r[3] * 0.55, r[4] * 0.45, 0.15, 9), true) ink.fill(tone(0.42), 0.55)
-      for _ = 1, rng.int(4, 9) do                   -- pits and barnacles
-        ink.circle(r[1] + rng.sym(r[3] * 0.7), r[2] + rng.sym(r[4] * 0.6), rng.range(0.015, 0.04)) ink.fill(tone(0.1), 0.7)
+    h = w * 0.35
+    for _ = 1, rng.int(3, 5) do
+      local r_ = w * rng.range(0.14, 0.22)
+      parts[#parts + 1] = { x + rng.sym(w * 0.36), y + r_ * 0.7 + rng.range(0, h * 0.3), r_, r_ * 0.75, 0.1 }
+    end
+  elseif kind == "ledge" then
+    h = w * rng.range(0.38, 0.5)
+    parts[1] = { x, y + h * 0.42, w * 0.5, h * 0.55, 0.16 }
+    parts[2] = { x + w * rng.sym(0.2), y + h * 0.85, w * 0.32, h * 0.3, 0.12 }
+  else                                                -- a boulder
+    h = w * rng.range(0.5, 0.65)
+    parts[1] = { x, y + h * 0.48, w * 0.5, h * 0.52, 0.1 }
+  end
+  for _, p in ipairs(parts) do
+    local b = lump(rng, p[1], p[2], p[3], p[4], p[5], 14)
+    fill(b, tone(t0))
+    if fine() then
+      fill(lump(rng, p[1] - p[3] * 0.22, p[2] + p[4] * 0.3, p[3] * 0.6, p[4] * 0.42, 0.12, 10), tone(t0 + 0.14), 0.7)   -- lit top
+      fill(lump(rng, p[1] + p[3] * 0.15, p[2] - p[4] * 0.2, p[3] * 0.75, p[4] * 0.3, 0.1, 10), tone(t0 - 0.08), 0.6)  -- shade
+      for _ = 1, floor(p[3] * 10) do
+        ink.circle(p[1] + rng.sym(p[3] * 0.75), p[2] + rng.sym(p[4] * 0.6), rng.range(0.012, 0.035)) ink.fill(tone(t0 - 0.1), 0.7)
+      end
+      if kind == "ledge" or kind == "boulder" then   -- cracks
+        for _ = 1, 2 do
+          local cx, cy = p[1] + rng.sym(p[3] * 0.5), p[2] + rng.sym(p[4] * 0.4)
+          ink.moveto(cx, cy) ink.lineto(cx + rng.sym(p[3] * 0.3), cy - rng.range(0.1, p[4] * 0.6)) ink.stroke(tone(t0 - 0.12), 0.4, 0.7)
+        end
       end
     end
   end
-  -- the haptera: little branching claws from the stipe's foot down over the rock
-  local n = rng.int(7, 11)
-  for k = 1, n do
-    local a = lerp(-160, -20, (k - 0.5) / n) * rad + rng.sym(0.12)
-    local L = rng.range(0.25, 0.5) * (0.6 + 0.6 * sin(-a))
-    local ex, ey = x + L * cos(a), y + L * sin(a) * 0.7
-    local mx, my = x + L * 0.5 * cos(a) + rng.sym(0.06), y + L * 0.2
-    ink.smooth(ink.ribbon({ { x, y + 0.05 }, { mx, my }, { ex, ey } }, function(t) return w * lerp(0.55, 0.12, t) end), true)
-    ink.fill(tone(0.12))
-    if rng.chance(0.5) then                          -- a fork near the tip
-      local fa = a + rng.sym(0.6)
-      ink.moveto(lerp(mx, ex, 0.6), lerp(my, ey, 0.6)) ink.lineto(ex + 0.12 * cos(fa), ey + 0.12 * sin(fa) * 0.7)
-      ink.stroke(tone(0.12), 0.4)
+  return y + h
+end
+
+-- the sand along the floor, `top` high, with ripples and pebbles
+local function sand(rng, W, top)
+  local edge = { { -0.2, -0.2 } }
+  for k = 0, 40 do local x = W * k / 40 edge[#edge + 1] = { x, top + 0.12 * sin(x * 1.3 + 1) + 0.06 * sin(x * 3.7) } end
+  edge[#edge + 1] = { W + 0.2, -0.2 }
+  ink.smooth(edge, true) ink.fill(tone(0.88))
+  if not fine() then return end
+  for _ = 1, floor(W * 1.6) do                        -- ripples
+    local x, y = rng.range(0, W), rng.range(0.1, top - 0.1)
+    local L = rng.range(0.4, 1.1)
+    ink.moveto(x, y) ink.curveto(x + L * 0.3, y + 0.06, x + L * 0.7, y + 0.06, x + L, y) ink.stroke(tone(0.7), 0.4, 0.8)
+  end
+  for _ = 1, floor(W * 3) do                          -- pebbles and bits of shell
+    local x, y = rng.range(0, W), rng.range(0.05, top - 0.05)
+    fill(ellipse(x, y, rng.range(0.03, 0.08), rng.range(0.02, 0.05), 8, rng.range(0, pi)), tone(rng.range(0.5, 0.75)))
+  end
+end
+
+-- ---------------------------------------------------------------- the creatures
+-- each draws at the origin, in cm; side views face +x unless flipped by the caller
+
+-- a fish, side on, facing +x; kind: garibaldi (deep, rounded), rockfish (spiny, mottled), bass (spotted),
+-- senorita (slender, for schools); L = length nose to tail
+function M.fish(rng, kind, L)
+  local H = L * ({ garibaldi = 0.42, rockfish = 0.33, bass = 0.28, senorita = 0.18 })[kind]
+  local t0 = kind == "garibaldi" and 0.45 or kind == "senorita" and 0.5 or 0.36
+  local nose, tail = L * 0.5, -L * 0.32
+  -- the body: a deep front, a narrowing to the tail stalk
+  local top, bot = {}, {}
+  for k = 0, 12 do
+    local u = k / 12                                   -- 0 nose .. 1 tail stalk
+    local x = lerp(nose, tail, u)
+    local d = sin(pi * min(1, (u + 0.05) * 0.95) ^ 0.75)
+    top[#top + 1] = { x, H * 0.5 * d * (kind == "garibaldi" and 1.05 or 1) + H * 0.04 }
+    bot[#bot + 1] = { x, -H * 0.5 * d * 0.92 }
+  end
+  local body = {}
+  for k = 1, #top do body[#body + 1] = top[k] end
+  for k = #bot, 1, -1 do body[#body + 1] = bot[k] end
+  local fin = tone(t0 - 0.08)
+  -- tail: forked, or rounded for a garibaldi
+  if kind == "garibaldi" then fill({ { tail + L * 0.02, H * 0.1 }, { tail - L * 0.18, H * 0.38 }, { tail - L * 0.24, 0 }, { tail - L * 0.18, -H * 0.38 }, { tail + L * 0.02, -H * 0.1 } }, fin)
+  else
+    ink.poly({ { tail + L * 0.03, H * 0.08 }, { tail - L * 0.2, H * 0.42 }, { tail - L * 0.13, 0 }, { tail - L * 0.2, -H * 0.42 }, { tail + L * 0.03, -H * 0.08 } }, true) ink.fill(fin)
+  end
+  -- dorsal fin: spiny for a rockfish or a bass, a long soft one for the others
+  local dors = {}
+  local spiny = kind == "rockfish" or kind == "bass"
+  local n = spiny and 11 or 6
+  for k = 0, n do
+    local u = k / n
+    local x = lerp(L * 0.18, -L * 0.28, u)
+    local base = H * 0.5 * sin(pi * min(1, ((nose - x) / (nose - tail) + 0.05) * 0.95) ^ 0.75) + H * 0.02
+    local up = H * (spiny and (k % 2 == 0 and 0.42 or 0.24) * (1 - 0.4 * u) or 0.3 * sin(pi * u) + 0.06)
+    dors[#dors + 1] = { x, base + up }
+  end
+  dors[#dors + 1] = { -L * 0.28, H * 0.2 } dors[#dors + 1] = { L * 0.18, H * 0.3 }
+  if spiny then ink.poly(dors, true) else ink.smooth(dors, true) end
+  ink.fill(fin)
+  -- anal fin
+  fill({ { -L * 0.02, -H * 0.38 }, { -L * 0.14, -H * 0.62 }, { -L * 0.24, -H * 0.28 } }, fin)
+  -- the body over the fins
+  fill(body, tone(t0))
+  if fine() then
+    -- countershading: a paler belly
+    local belly = {}
+    for k = 2, #bot - 1 do belly[#belly + 1] = { bot[k][1], bot[k][2] * 0.95 } end
+    for k = #bot - 1, 2, -1 do belly[#belly + 1] = { bot[k][1], bot[k][2] * 0.2 } end
+    fill(belly, white, kind == "garibaldi" and 0.15 or 0.4)
+    if kind == "rockfish" then for _ = 1, 9 do fill(ellipse(rng.range(tail * 0.8, nose * 0.6), rng.range(-H * 0.1, H * 0.35), L * 0.04, L * 0.025, 8), tone(t0 - 0.16), 0.7) end end
+    if kind == "bass" then for _ = 1, 14 do ink.circle(rng.range(tail * 0.8, nose * 0.5), rng.range(-H * 0.2, H * 0.35), L * 0.014) end ink.fill(tone(0.9), 0.8) end
+    if kind == "senorita" then ink.smooth({ { nose * 0.8, 0 }, { 0, H * 0.02 }, { tail, 0 } }, false) ink.stroke(tone(t0 - 0.2), max(0.3, L * 0.6), 0.6) end
+    -- scales: a few rows of arcs
+    for r = -1, 1 do
+      for k = 1, 6 do
+        local x, y = lerp(nose * 0.45, tail * 0.75, k / 6), r * H * 0.18
+        ink.moveto(x, y + L * 0.025) ink.curveto(x - L * 0.025, y + L * 0.02, x - L * 0.025, y - L * 0.02, x, y - L * 0.025)
+      end
+    end
+    ink.stroke(tone(t0 - 0.12), 0.25, 0.5)
+    -- gill cover, pectoral fin, mouth, eye
+    ink.smooth({ { nose - L * 0.2, H * 0.38 }, { nose - L * 0.25, 0 }, { nose - L * 0.2, -H * 0.36 } }, false) ink.stroke(tone(t0 - 0.16), 0.4, 0.8)
+    fill({ { nose - L * 0.27, -H * 0.02 }, { nose - L * 0.45, H * 0.08 }, { nose - L * 0.43, -H * 0.18 } }, tone(t0 - 0.1), 0.85)
+    ink.moveto(nose, -H * 0.06) ink.lineto(nose - L * 0.05, -H * 0.1) ink.stroke(tone(t0 - 0.25), 0.35)
+    local ex, ey, er = nose - L * 0.11, H * 0.12, L * 0.045
+    ink.circle(ex, ey, er) ink.fill(tone(0.95))
+    ink.circle(ex + er * 0.15, ey, er * 0.62) ink.fill(tone(0.05))
+    ink.circle(ex - er * 0.15, ey + er * 0.25, er * 0.2) ink.fill(white)
+  end
+end
+
+-- a sea otter on its back at the surface, head toward +x, a clam held on its chest in its forepaws, hind
+-- feet up; L = length nose to tail tip
+function M.otter(rng, L)
+  local fur, dark, pale = tone(0.22), tone(0.12), tone(0.72)
+  -- tail, flat and tapering
+  fill({ { -L * 0.3, -L * 0.02 }, { -L * 0.48, L * 0.03 }, { -L * 0.55, L * 0.0 }, { -L * 0.48, -L * 0.06 }, { -L * 0.3, -L * 0.08 } }, dark)
+  -- the body, lying on its back
+  local body = {}
+  for k = 0, 22 do
+    local a = 2 * pi * k / 22
+    local x, y = L * 0.33 * cos(a), L * 0.085 * sin(a)
+    if y > 0 then y = y * 1.2 end
+    body[#body + 1] = { x - L * 0.02, y }
+  end
+  fill(body, fur)
+  -- hind feet, webbed, up out of the water
+  for _, dx in ipairs({ -0.24, -0.17 }) do
+    local fx = L * dx
+    fill({ { fx, L * 0.06 }, { fx - L * 0.05, L * 0.16 }, { fx - L * 0.02, L * 0.2 }, { fx + L * 0.02, L * 0.19 }, { fx + L * 0.04, L * 0.16 }, { fx + L * 0.02, L * 0.06 } }, dark)
+    if fine() then for k = -1, 1 do ink.moveto(fx, L * 0.1) ink.lineto(fx + k * L * 0.025, L * 0.185) end ink.stroke(tone(0.3), 0.25) end
+  end
+  if fine() then
+    fill(ellipse(L * 0.05, L * 0.045, L * 0.24, L * 0.045, 16), tone(0.32), 0.9)   -- the lighter chest
+    for _ = 1, 30 do                                   -- fur
+      local x, y = rng.range(-L * 0.3, L * 0.28), rng.range(-L * 0.06, L * 0.08)
+      ink.moveto(x, y) ink.lineto(x - L * 0.02, y + rng.sym(L * 0.01))
+    end
+    ink.stroke(tone(0.14), 0.25, 0.6)
+  end
+  -- the head, lifted toward +x: round, a pale whiskered face, small ears
+  local hx, hy = L * 0.36, L * 0.07
+  fill(ellipse(hx, hy, L * 0.09, L * 0.085, 16), fur)
+  fill(ellipse(hx + L * 0.035, hy - L * 0.01, L * 0.065, L * 0.06, 14), pale)
+  fill(ellipse(hx - L * 0.05, hy + L * 0.07, L * 0.02, L * 0.018, 8), dark)       -- ear
+  ink.circle(hx + L * 0.02, hy + L * 0.025, L * 0.011) ink.circle(hx + L * 0.06, hy + L * 0.03, L * 0.011) ink.fill(tone(0.04))
+  fill(ellipse(hx + L * 0.085, hy - L * 0.002, L * 0.016, L * 0.012, 8), tone(0.04))  -- nose
+  if fine() then
+    ink.moveto(hx + L * 0.08, hy - L * 0.025) ink.curveto(hx + L * 0.07, hy - L * 0.04, hx + L * 0.05, hy - L * 0.04, hx + L * 0.045, hy - L * 0.03)
+    ink.stroke(tone(0.1), 0.3)
+    for k = -1, 1 do
+      ink.moveto(hx + L * 0.08, hy - L * 0.012) ink.lineto(hx + L * 0.15, hy - L * 0.012 + k * L * 0.018)
+      ink.moveto(hx + L * 0.05, hy - L * 0.015) ink.lineto(hx - L * 0.0, hy - L * 0.035 + k * L * 0.012)
+    end
+    ink.stroke(tone(0.3), 0.2, 0.8)
+  end
+  -- the clam on its chest, the forepaws round it
+  ink.in_accent(function()
+    local cx, cy = L * 0.17, L * 0.12
+    local sh = {}
+    for k = 0, 12 do local a = pi * k / 12 sh[#sh + 1] = { cx + L * 0.045 * cos(a), cy + L * 0.035 * sin(a) } end
+    fill(sh, tone(0.45))
+    if fine() then for k = 1, 5 do local a = pi * k / 6 ink.moveto(cx, cy) ink.lineto(cx + L * 0.042 * cos(a), cy + L * 0.033 * sin(a)) end ink.stroke(tone(0.25), 0.25) end
+  end)
+  fill(ellipse(L * 0.12, L * 0.11, L * 0.022, L * 0.03, 10, 0.4), dark)
+  fill(ellipse(L * 0.22, L * 0.11, L * 0.022, L * 0.03, 10, -0.4), dark)
+end
+
+-- a crab from above, facing +y; s = carapace width
+function M.crab(rng, s)
+  local c = tone(0.3)
+  for _, sd in ipairs({ -1, 1 }) do
+    for k = 1, 4 do                                    -- walking legs, jointed
+      local y0 = s * lerp(0.12, -0.22, (k - 1) / 3)
+      local a = lerp(30, -40, (k - 1) / 3) * rad
+      local kx, ky = sd * (s * 0.45 + s * 0.35 * cos(a)), y0 + s * 0.35 * sin(a)
+      local ex, ey = kx + sd * s * 0.12, ky - s * 0.3
+      ink.moveto(sd * s * 0.35, y0) ink.lineto(kx, ky) ink.lineto(ex, ey)
+    end
+    ink.stroke(tone(0.24), max(0.4, s * 2.2))
+    -- the claw on its arm
+    local ax, ay = sd * s * 0.55, s * 0.4
+    ink.moveto(sd * s * 0.3, s * 0.2) ink.lineto(ax, ay) ink.stroke(tone(0.24), max(0.5, s * 3))
+    fill({ { ax - s * 0.1, ay - s * 0.05 }, { ax - sd * s * 0.02, ay + s * 0.32 }, { ax + s * 0.1, ay + s * 0.2 }, { ax + s * 0.08, ay - s * 0.06 } }, tone(0.26))
+    ink.moveto(ax, ay + s * 0.12) ink.lineto(ax + sd * s * 0.1, ay + s * 0.3) ink.stroke(tone(0.26), max(0.4, s * 2))
+  end
+  local shell = {}
+  for k = 0, 20 do
+    local a = 2 * pi * k / 20
+    local r = 1 + 0.08 * cos(2 * a) - (sin(a) > 0.7 and 0.05 or 0)
+    shell[#shell + 1] = { s * 0.42 * r * cos(a), s * 0.34 * r * sin(a) - s * 0.02 }
+  end
+  fill(shell, c)
+  if fine() then
+    fill(ellipse(-s * 0.08, s * 0.08, s * 0.22, s * 0.14, 12), tone(0.48), 0.6)
+    ink.moveto(-s * 0.18, 0) ink.curveto(-s * 0.05, -s * 0.08, s * 0.05, -s * 0.08, s * 0.18, 0) ink.stroke(tone(0.18), 0.35, 0.8)
+    for _, sd in ipairs({ -1, 1 }) do
+      ink.moveto(sd * s * 0.07, s * 0.28) ink.lineto(sd * s * 0.1, s * 0.4) ink.stroke(tone(0.18), 0.45)
+      ink.circle(sd * s * 0.1, s * 0.41, s * 0.03) ink.fill(tone(0.04))
     end
   end
 end
 
--- ---------------------------------------------------------------- stipes
--- a kelp stipe: florilegium's stem, darker and leaner; a stem rising from near the page's foot is a main
--- stem from the root, so its foot gets a rock and a holdfast (one for the stems sharing a root)
-function M.stem(pts, w0, w1, c, op, tip)
-  local T = ink.get_transform()
-  if T ~= rooted_on then rooted, rooted_on = {}, T end
-  local p = pts[1]
-  if p and p[2] < 1.3 and not ghost() then            -- the root, at the foot of the margin
-    local near = false
-    for _, q in ipairs(rooted) do if abs(q[1] - p[1]) < 1.4 and abs(q[2] - p[2]) < 1.0 then near = true end end
-    if not near then
-      rooted[#rooted + 1] = { p[1], p[2] }
-      holdfast(ink.rng(floor(p[1] * 1000 + p[2] * 37) + 7), p[1], p[2], max(w0, 0.06))
-    end
-  end
-  flora.stem(pts, w0 * 0.85, w1 * 0.8, c or tone(0.14), op, tip)
-end
-
--- ---------------------------------------------------------------- blades
--- a kelp blade along +y, length 1: narrow at the float, broad, ruffled at the edges and wrinkled across,
--- bending with the current; o.w its half-width, o.float false for none
-local function blade(rng, o)
-  o = o or {}
-  local W = min(o.w or 1, rng.range(0.075, 0.115))     -- kelp is narrow, whatever leaf it stands in for
-  local b = 0.32 * drift() + rng.sym(0.08) + (o.bend or 0) * 0.3
-  local wave = rng.range(0.02, 0.05)
-  local ph = rng.range(0, 2 * pi)
-  local spine = function(v) return b * v ^ 1.7 + wave * sin(v * 7 + ph) * v, v end
-  local hw = function(v) return W * sin(pi * min(1, v * 1.05) ^ 0.6) ^ 0.9 * (1 - 0.25 * v) end
-  local ruff = function(v, side) return W * 0.1 * sin(v * 46 + side * 1.7 + ph) * sin(pi * v) end
-  local out, c = ink.blade(spine, 26, hw, hw, fine(0.15) and ruff or nil)
-  local t0 = o.tone or rng.range(0.36, 0.5)
-  ink.smooth(out, true) ink.fill(tone(t0))
-  if fine(0.25) then
-    -- the darker side of the twist, and the wrinkles across the blade
-    local half = {}
-    for i = 1, #c do half[#half + 1] = { c[i][1], c[i][2] } end
-    for i = #c, 1, -1 do local v = (i - 1) / (#c - 1) half[#half + 1] = { c[i][1] + hw(v) * 0.9, c[i][2] - 0.01 } end
-    ink.smooth(half, true) ink.fill(tone(t0 - 0.12), 0.45)
-    for k = 1, rng.int(3, 6) do
-      local v = rng.range(0.15, 0.9)
-      local x, y = spine(v)
-      local w_ = hw(v) * rng.range(0.4, 0.8)
-      ink.moveto(x - w_, y - 0.01) ink.curveto(x - w_ * 0.3, y + 0.02, x + w_ * 0.3, y - 0.02, x + w_, y + 0.01)
-      ink.stroke(tone(t0 - 0.14), 0.25, 0.35)
-    end
-    ink.smooth({ { spine(0.06) }, { spine(0.5) }, { spine(0.92) } }, false) ink.stroke(white, 0.35, 0.35)
-  end
-  if o.float ~= false then                          -- the gas float at the blade's base
-    ink.smooth(ellipse(0, -0.02, 0.045, 0.07, 12), true) ink.fill(tone(t0 - 0.1))
-    if fine(0.2) then ink.circle(-0.015, 0.0, 0.015) ink.fill(white, 0.6) end
-  end
-end
-M.leaf = blade
-function M.leaflet(rng, o) blade(rng, { w = 0.17, bend = o and o.bend, tone = rng.range(0.32, 0.45) }) end
-
--- ---------------------------------------------------------------- the sea's blossoms
--- a sea anemone from above: a ring of tentacles round an oral disc; s = tentacle length (cm), centered
-function M.flower(rng, s, o)
-  local n = rng.int(16, 24)
-  local R = s * 0.3
-  for ring = 1, 2 do
-    local L = s * (ring == 1 and 1 or 0.72)
-    for k = 1, n do
-      local a = 2 * pi * (k + (ring == 2 and 0.5 or 0)) / n + rng.sym(0.06)
-      local curl = rng.sym(0.35)
-      local x0, y0 = R * cos(a), R * sin(a)
-      local x1, y1 = (R + L * 0.55) * cos(a + curl * 0.3), (R + L * 0.55) * sin(a + curl * 0.3)
-      local x2, y2 = (R + L) * cos(a + curl), (R + L) * sin(a + curl)
-      ink.smooth(ink.ribbon({ { x0, y0 }, { x1, y1 }, { x2, y2 } }, function(t) return s * lerp(0.11, 0.03, t) end), true)
-      ink.fill(tone(ring == 1 and rng.range(0.36, 0.46) or rng.range(0.2, 0.3)))
-      if fine(0.3) then ink.circle(x2, y2, s * 0.025) ink.fill(white, 0.7) end
-    end
-  end
-  ink.circle(0, 0, R * 1.05) ink.fill(tone(0.16))
-  if fine(0.25) then
-    for k = 1, 12 do local a = 2 * pi * k / 12 ink.moveto(R * 0.35 * cos(a), R * 0.35 * sin(a)) ink.lineto(R * cos(a), R * sin(a)) end
-    ink.stroke(tone(0.4), 0.3, 0.7)
-  end
-  ink.smooth(ellipse(0, 0, R * 0.35, R * 0.18, 10, rng.range(0, pi)), true) ink.fill(tone(0.04))
-end
-
--- bull kelp: a stalk up from the origin to one round float, and a fountain of long blades streaming from
--- it with the current; s = the fountain's reach (cm), facing +y
-function M.lily(rng, s, o)
-  local fx, fy = 0.05 * s * drift(), 0.32 * s
-  flora.stem({ { 0, -0.15 * s }, { fx * 0.5, fy * 0.5 }, { fx, fy - 0.08 * s } }, 0.06 * s, 0.09 * s, tone(0.14))
-  local n = rng.int(6, 10)
-  local d = drift()
-  for k = 1, n do
-    local spread = (k - (n + 1) / 2) / n
-    ink.push() ink.translate(fx, fy + 0.04 * s) ink.rotate(-spread * 70 - d * 25 + rng.sym(8))
-    ink.scale(s * rng.range(0.6, 0.85))
-    blade(rng, { w = rng.range(0.06, 0.09), float = false, bend = d * 0.6 })
-    ink.pop()
-  end
-  ink.circle(fx, fy, 0.11 * s) ink.fill(tone(0.18))
-  if fine(0.25) then ink.circle(fx - 0.035 * s, fy + 0.035 * s, 0.035 * s) ink.fill(white, 0.5) end
-end
-
--- a sea star, five arms; r = radius (cm), centered
-function M.blossom(rng, r, o)
+-- a sea star: five tapering arms, a little curled, studded; r = arm length
+function M.star(rng, r, t0)
   local a0 = rng.range(0, 2 * pi)
   local pts = {}
-  for k = 0, 9 do
-    local a = a0 + pi * k / 5
-    local rr = (k % 2 == 0) and r * rng.range(0.92, 1.05) or r * 0.38
-    pts[#pts + 1] = { rr * cos(a), rr * sin(a) }
-  end
-  ink.smooth(pts, true, 0.35) ink.fill(tone(rng.range(0.24, 0.36)))
-  if fine(0.3) then
-    for k = 0, 4 do
-      local a = a0 + 2 * pi * k / 5
-      for j = 1, 4 do ink.circle(r * 0.2 * j * cos(a), r * 0.2 * j * sin(a), r * 0.045) end
+  for k = 0, 4 do
+    local a = a0 + 2 * pi * k / 5
+    local curl = rng.sym(0.18)
+    local L = r * rng.range(0.88, 1.06)
+    local arm = function(u, side)
+      local w = (r * 0.24 * (1 - u) ^ 0.8 + r * 0.03) * side
+      local aa = a + curl * u * u
+      local d = r * 0.2 + L * u
+      return { d * cos(aa) - w * sin(aa), d * sin(aa) + w * cos(aa) }
     end
-    ink.fill(tone(0.55), 0.9)
+    for j = 0, 6 do pts[#pts + 1] = arm(j / 6, 1) end
+    for j = 5, 0, -1 do pts[#pts + 1] = arm(j / 6, -1) end
+  end
+  fill(pts, tone(t0))
+  if fine() then
+    for k = 0, 4 do                                    -- a ridge of studs down each arm
+      local a = a0 + 2 * pi * k / 5
+      for j = 1, 5 do local u = j / 6 ink.circle((r * 0.2 + r * u) * cos(a), (r * 0.2 + r * u) * sin(a), r * 0.04 * (1 - u * 0.5)) end
+    end
+    ink.fill(tone(t0 + 0.25))
+    ink.circle(0, 0, r * 0.08) ink.fill(tone(t0 + 0.3))
   end
 end
 
--- a bubble: r = radius (cm)
-function M.floret(rng, r, o)
-  ink.circle(0, 0, r) ink.stroke(tone(0.3), max(0.25, r * 6), 0.8)
-  ink.circle(-r * 0.35, r * 0.35, r * 0.25) ink.fill(tone(0.3), 0.7)
-end
-
--- a gas float on its stalk: base at the origin, +y; s = length (cm)
-function M.bud(rng, s, o)
-  flora.stem({ { 0, 0 }, { 0.04 * s * drift(), 0.3 * s }, { 0.06 * s * drift(), 0.5 * s } }, 0.05 * s, 0.035 * s, tone(0.14))
-  ink.smooth(ellipse(0.06 * s * drift(), 0.72 * s, 0.17 * s, 0.26 * s, 14), true) ink.fill(tone(0.22))
-  if fine(0.2) then ink.circle(0.06 * s * drift() - 0.06 * s, 0.8 * s, 0.05 * s) ink.fill(white, 0.55) end
-end
-
--- a jellyfish, hanging from the origin along -y: a bell, frilled arms and trailing tentacles; s = length
-function M.bell(rng, s, o)
-  local W, H = 0.36 * s, 0.32 * s
-  local d = drift() * 0.15 * s
-  for k = 1, rng.int(6, 9) do                       -- tentacles, trailing with the current
-    local x0 = lerp(-W * 0.85, W * 0.85, (k - 0.5) / 8)
-    local L = s * rng.range(0.7, 1.1)
-    ink.smooth({ { x0, -H }, { x0 + d * 0.5 + rng.sym(0.05 * s), -H - L * 0.4 }, { x0 + d + rng.sym(0.08 * s), -H - L * 0.75 }, { x0 + d * 1.3, -H - L } }, false)
-    ink.stroke(tone(0.3), 0.3, 0.75)
+-- a sea urchin: a dark test bristling with long spines; r = radius of the spines
+function M.urchin(rng, r)
+  for layer = 1, 2 do
+    local n = layer == 1 and 40 or 26
+    for k = 1, n do
+      local a = 2 * pi * (k + layer * 0.5) / n + rng.sym(0.06)
+      if layer == 1 or sin(a) > -0.3 then
+        local L = r * rng.range(0.8, 1.05) * (layer == 1 and 1 or 0.75)
+        ink.moveto(r * 0.3 * cos(a), r * 0.3 * sin(a)) ink.lineto(L * cos(a), L * sin(a))
+      end
+    end
+    ink.stroke(tone(layer == 1 and 0.1 or 0.18), max(0.35, r * (layer == 1 and 1.3 or 1.6)))
   end
-  for k = 1, 4 do                                    -- the frilled oral arms
-    local x0 = lerp(-W * 0.35, W * 0.35, (k - 0.5) / 4)
+  fill(ellipse(0, 0, r * 0.36, r * 0.3, 14), tone(0.08))
+  if fine() then ink.circle(-r * 0.1, r * 0.1, r * 0.08) ink.fill(tone(0.4), 0.6) end
+end
+
+-- an anemone on a rock, side on: a column and a crown of tentacles; h = height
+function M.anemone(rng, h)
+  fill({ { -h * 0.22, 0 }, { -h * 0.18, h * 0.55 }, { -h * 0.3, h * 0.68 }, { h * 0.3, h * 0.68 }, { h * 0.18, h * 0.55 }, { h * 0.22, 0 } }, tone(0.3))
+  local n = 15
+  for k = 1, n do
+    local u = (k - 0.5) / n
+    local x0 = lerp(-h * 0.3, h * 0.3, u)
+    local a = lerp(-70, 70, u) * rad + rng.sym(0.12)
+    local L = h * rng.range(0.35, 0.55)
+    ink.smooth(ink.ribbon({ { x0, h * 0.66 }, { x0 + L * 0.5 * sin(a), h * 0.66 + L * 0.55 * cos(a) }, { x0 + L * sin(a * 1.3), h * 0.66 + L * cos(a * 1.3) * 0.9 } },
+      function(t) return h * lerp(0.07, 0.025, t) end), true)
+    ink.fill(tone(rng.range(0.45, 0.6)))
+  end
+  if fine() then for k = 1, 4 do local y = h * k * 0.12 ink.moveto(-h * 0.2, y) ink.lineto(h * 0.2, y) end ink.stroke(tone(0.22), 0.3, 0.6) end
+end
+
+-- a whelk shell on the sand, side on, spire up and to the left; s = length
+function M.whelk(rng, s)
+  fill(ellipse(0, 0, s * 0.32, s * 0.22, 16, 0.5), tone(0.55))
+  for k = 1, 4 do                                      -- the spire's whorls, each smaller
+    local f = 0.75 ^ k
+    local w = ellipse(-s * 0.2 * (1 - f) * 1.6, s * 0.18 * (1 - f) * 1.6, s * 0.3 * f, s * 0.2 * f, 14, 0.5)
+    fill(w, tone(0.55 - 0.04 * k))
+    if fine() then ink.smooth(w, true) ink.stroke(tone(0.3), 0.3, 0.7) end
+  end
+  fill(ellipse(s * 0.1, -s * 0.05, s * 0.12, s * 0.08, 12, 0.5), tone(0.82))   -- the aperture
+  fill({ { s * 0.22, -s * 0.12 }, { s * 0.38, -s * 0.2 }, { s * 0.3, -s * 0.08 } }, tone(0.5))   -- the siphon canal
+  if fine() then for k = 1, 5 do local a = 0.5 + k * 0.4 ink.moveto(s * 0.05 * cos(a), s * 0.05 * sin(a)) ink.lineto(s * 0.3 * cos(a), s * 0.2 * sin(a)) end ink.stroke(tone(0.4), 0.3, 0.6) end
+end
+
+-- a skate's egg case (a mermaid's purse): a pillow with four curling horns; s = length
+function M.eggcase(rng, s)
+  fill({ { -s * 0.3, -s * 0.18 }, { -s * 0.34, s * 0.0 }, { -s * 0.3, s * 0.18 }, { s * 0.3, s * 0.18 }, { s * 0.34, 0 }, { s * 0.3, -s * 0.18 } }, tone(0.16))
+  for _, cx in ipairs({ -1, 1 }) do
+    for _, cy in ipairs({ -1, 1 }) do
+      local x0, y0 = cx * s * 0.3, cy * s * 0.16
+      ink.moveto(x0, y0) ink.curveto(x0 + cx * s * 0.25, y0 + cy * s * 0.05, x0 + cx * s * 0.3, y0 + cy * s * 0.25, x0 + cx * s * 0.15, y0 + cy * s * 0.3)
+      ink.stroke(tone(0.16), max(0.4, s * 1.5))
+    end
+  end
+  if fine() then ink.smooth({ { -s * 0.25, 0.02 * s }, { 0, s * 0.05 }, { s * 0.25, 0.02 * s } }, false) ink.stroke(tone(0.4), 0.3, 0.6) end
+end
+
+-- a moon jelly drifting: a clear bell, four rings seen through it, a fringe and frilled arms; s = bell width
+function M.jelly(rng, s, cur)
+  local W, H = s * 0.5, s * 0.32
+  for k = 1, 16 do                                     -- the fringe of fine tentacles, trailing
+    local x0 = lerp(-W, W, (k - 0.5) / 16)
+    local L = s * rng.range(0.3, 0.6)
+    ink.smooth({ { x0, 0 }, { x0 - cur * s * 0.05, -L * 0.5 }, { x0 - cur * s * 0.12, -L } }, false)
+  end
+  ink.stroke(tone(0.55), 0.25, 0.8)
+  for k = 1, 4 do                                      -- frilled oral arms
+    local x0 = lerp(-W * 0.3, W * 0.3, (k - 0.5) / 4)
     local pts = {}
-    for j = 0, 8 do local t = j / 8 pts[#pts + 1] = { x0 + d * t + 0.03 * s * sin(t * 12 + k), -H - s * 0.5 * t } end
-    ink.smooth(ink.ribbon(pts, function(t) return s * lerp(0.07, 0.02, t) end), true) ink.fill(tone(0.38), 0.75)
+    for j = 0, 8 do local t = j / 8 pts[#pts + 1] = { x0 - cur * s * 0.15 * t + s * 0.03 * sin(t * 10 + k), -s * 0.75 * t } end
+    ink.smooth(ink.ribbon(pts, function(t) return s * lerp(0.07, 0.025, t) end), true) ink.fill(tone(0.5), 0.7)
   end
   local bell = {}
-  for j = 0, 16 do
-    local a = pi * j / 16
-    bell[#bell + 1] = { W * cos(a), -H + H * 1.0 * sin(a) ^ 0.8 }
-  end
-  for j = 1, 9 do local t = j / 10 bell[#bell + 1] = { lerp(-W, W, t), -H - 0.03 * s * abs(sin(t * pi * 6)) } end
-  ink.smooth(bell, true) ink.fill(tone(0.5), 0.7)
-  if fine(0.25) then
-    for k = 1, 4 do                                  -- the four rings seen through the bell
+  for k = 0, 18 do local a = pi * k / 18 bell[#bell + 1] = { W * cos(a), H * sin(a) ^ 0.75 } end
+  for k = 1, 11 do local t = k / 12 bell[#bell + 1] = { lerp(-W, W, t), -s * 0.03 * abs(sin(t * pi * 7)) } end
+  fill(bell, tone(0.68), 0.75)
+  if fine() then
+    for k = 1, 4 do                                    -- the four horseshoe rings
       local a = pi * (k - 0.5) / 4
-      ink.smooth(ellipse(W * 0.5 * cos(a), -H * 0.45, W * 0.12, H * 0.14, 10), true)
-      ink.stroke(tone(0.3), 0.35, 0.8)
+      ink.smooth(ellipse(W * 0.48 * cos(a), H * 0.38, W * 0.13, H * 0.17, 12), true) ink.stroke(tone(0.4), 0.4, 0.8)
     end
-    ink.smooth({ { -W * 0.6, -H * 0.2 }, { -W * 0.2, -H * 0.02 }, { W * 0.2, -H * 0.05 } }, false) ink.stroke(white, 0.5, 0.6)
+    ink.smooth({ { -W * 0.65, H * 0.45 }, { -W * 0.25, H * 0.8 }, { W * 0.15, H * 0.85 } }, false) ink.stroke(white, 0.6, 0.7)
   end
 end
 
--- feather boa kelp: a strap along +y set with small blades both sides, ending in a curl; L = length (cm)
-function M.cyme(rng, L, o)
-  local d = drift()
-  local pts = {}
-  for j = 0, 14 do local t = j / 14 pts[#pts + 1] = { L * (0.25 * d * t * t + 0.03 * sin(t * 9)), L * t * 0.92 } end
-  flora.stem(pts, 0.05, 0.03, tone(0.14))
-  for j = 2, 13 do
-    local t = j / 14
-    local p = pts[j + 1]
-    for _, sd in ipairs({ -1, 1 }) do
-      ink.push() ink.translate(p[1], p[2]) ink.rotate(sd * rng.range(50, 75) - d * 15) ink.scale(L * rng.range(0.1, 0.15) * (1 - 0.5 * t))
-      blade(rng, { w = 0.2, float = false })
+-- a shrimp, side on, facing +x; s = length
+function M.shrimp(rng, s)
+  local seg = {}
+  for k = 0, 6 do                                      -- the abdomen arching back from the carapace
+    local t = k / 6
+    local a = lerp(0.2, -2.3, t)
+    seg[#seg + 1] = { -s * 0.18 + s * 0.28 * cos(a) - s * 0.28, s * 0.25 * sin(a) + s * 0.05 }
+  end
+  fill({ { s * 0.1, s * 0.12 }, { s * 0.42, s * 0.05 }, { s * 0.1, -s * 0.06 }, { -s * 0.2, -s * 0.02 }, { -s * 0.2, s * 0.14 } }, tone(0.5))
+  for k = 1, #seg do ink.circle(seg[k][1], seg[k][2], s * lerp(0.1, 0.05, (k - 1) / 6)) ink.fill(tone(lerp(0.52, 0.45, (k - 1) / 6))) end
+  local e = seg[#seg]
+  fill({ { e[1], e[2] }, { e[1] + s * 0.14, e[2] - s * 0.1 }, { e[1] - s * 0.05, e[2] - s * 0.14 } }, tone(0.42))
+  if fine() then
+    for k = 1, 5 do local x = lerp(s * 0.05, -s * 0.35, k / 5) ink.moveto(x, -s * 0.02) ink.lineto(x + s * 0.05, -s * 0.16) end
+    ink.stroke(tone(0.3), 0.3)
+    ink.moveto(s * 0.4, s * 0.08) ink.curveto(s * 0.7, s * 0.25, s * 0.85, s * 0.1, s * 1.0, -s * 0.05)
+    ink.moveto(s * 0.38, s * 0.1) ink.curveto(s * 0.55, s * 0.35, s * 0.7, s * 0.4, s * 0.85, s * 0.35)
+    ink.stroke(tone(0.35), 0.25)
+    ink.circle(s * 0.3, s * 0.1, s * 0.03) ink.fill(tone(0.04))
+  end
+end
+
+-- a sea palm: a rubbery stalk and a drooping crown; h = height
+function M.seapalm(rng, h, cur)
+  local tx, ty = h * 0.08 * cur, h * 0.7
+  ink.smooth(ink.ribbon({ { 0, 0 }, { h * 0.03 * cur, h * 0.35 }, { tx, ty } }, function(t) return h * lerp(0.07, 0.045, t) end), true) ink.fill(tone(0.22))
+  for k = 1, 11 do
+    local u = (k - 0.5) / 11
+    local a = lerp(-80, 80, u) - cur * 10
+    M.blade(rng, tx, ty, a, h * rng.range(0.32, 0.45), h * 0.035, (a > 0 and 1 or -1) * 1.4, rng.range(0.32, 0.45))
+  end
+end
+
+-- a red seaweed: flat fronds forking again and again; h = height
+function M.redweed(rng, h, t0)
+  local function frond(x, y, a, len, w, depth)
+    local ex, ey = x + len * sin(a), y + len * cos(a)
+    ink.smooth(ink.ribbon({ { x, y }, { lerp(x, ex, 0.5) + rng.sym(0.02), lerp(y, ey, 0.5) }, { ex, ey } }, function(t) return w * lerp(1, 0.8, t) end), true)
+    ink.fill(tone(t0))
+    if depth == 0 or len < 0.1 then ink.circle(ex, ey, w * 0.55) ink.fill(tone(t0 + 0.05)) return end
+    local sp = rng.range(0.3, 0.55)
+    frond(ex, ey, a - sp, len * rng.range(0.65, 0.82), w * 0.82, depth - 1)
+    frond(ex, ey, a + sp, len * rng.range(0.65, 0.82), w * 0.82, depth - 1)
+  end
+  frond(0, 0, rng.sym(0.15), h * 0.3, h * 0.05, rng.int(3, 4))
+end
+
+-- eelgrass: a tuft of long ribbons swaying with the current; h = height
+function M.eelgrass(rng, h, cur)
+  for _ = 1, rng.int(5, 9) do
+    local x0 = rng.sym(h * 0.08)
+    local L = h * rng.range(0.6, 1)
+    local pts = {}
+    for k = 0, 10 do local t = k / 10 pts[#pts + 1] = { x0 + cur * L * 0.35 * t * t + h * 0.04 * sin(t * 5 + x0 * 9), L * t } end
+    ink.smooth(ink.ribbon(pts, function(t) return h * lerp(0.035, 0.02, t) end), true) ink.fill(tone(rng.range(0.3, 0.42)))
+  end
+end
+
+-- a chain of bubbles rising from (x, y); r = the first bubble's size
+local function bubbles(rng, x, y, r, n)
+  for k = 1, n do
+    local rr = r * (1 - 0.06 * k) * rng.range(0.6, 1.1)
+    local by = y + (k - 1) * r * 2.6 * rng.range(0.8, 1.2)
+    local bx = x + rng.sym(r * 0.6) + 0.15 * sin(k * 1.3)
+    ink.circle(bx, by, rr) ink.stroke(tone(0.45), max(0.3, rr * 6), 0.8)
+    ink.circle(bx - rr * 0.35, by + rr * 0.35, rr * 0.25) ink.fill(white, 0.9)
+  end
+end
+
+-- ---------------------------------------------------------------- the forest
+function M.forest(rng, o)
+  local W, H = o.w, o.h
+  local cur = o.current or 1
+  local keeps = {}
+  for i, q in ipairs(o.keepouts or {}) do keeps[i] = { q[1] - 0.25, q[2] - 0.25, q[3] + 0.25, q[4] + 0.25 } end
+  local boxes = {}                                     -- what's been placed, for free()
+  local function reg(a, b, c, d, tag) boxes[#boxes + 1] = { a, b, c, d, tag } end
+  local function blocked(x, y, m)
+    m = m or 0
+    for _, q in ipairs(keeps) do if x > q[1] - m and x < q[3] + m and y > q[2] - m and y < q[4] + m then return q end end
+    return nil
+  end
+  local function free(a, b, c, d)
+    if a < 0.1 or c > W - 0.1 or b < 0.05 or d > H - 0.05 then return false end
+    for _, q in ipairs(keeps) do if a < q[3] and c > q[1] and b < q[4] and d > q[2] then return false end end
+    for _, q in ipairs(boxes) do if a < q[3] and c > q[1] and b < q[4] and d > q[2] then return false end end
+    return true
+  end
+  local L_FAR, L_FLOOR, L_KELP, L_UNDER, L_LIFE, L_TOP = 1, 2, 3, 4, 5, 6
+  local sandtop = rng.range(0.7, 1.1)
+
+  -- the rocks along the floor, left to right, of varying kinds and sizes
+  local rocks = {}
+  do
+    local x = rng.range(-0.3, 0.6)
+    while x < W + 0.3 do
+      local w = rng.range(1.4, 3.6)
+      local kind = rng.pick({ "boulder", "boulder", "slab", "cobbles", "ledge" })
+      local cx = x + w / 2
+      if not blocked(cx, sandtop + 0.5) then rocks[#rocks + 1] = { x = cx, w = w, kind = kind } end
+      x = x + w + rng.range(0.3, 2.4)
+    end
+  end
+
+  -- a stipe from (x0, y0) toward the surface, with the current and a slow wave, steering round the text;
+  -- returns its points (the last ones lie over into the canopy)
+  local surface = H - rng.range(0.3, 0.8)
+  local function stipe(x0, y0, srng)
+    local pts = { { x0, y0 } }
+    local x, y = x0, y0
+    local amp, lam, ph = srng.range(0.3, 0.9), srng.range(2.2, 4.0), srng.range(0, 2 * pi)
+    local lean = cur * srng.range(0.03, 0.12)
+    local stop = surface - srng.range(0.4, 2.5)
+    local dy = 0.22
+    while y < stop do
+      local ny = y + dy
+      local tx = x0 + lean * (ny - y0) + amp * sin((ny - y0) / lam + ph) + amp * 0.3 * sin((ny - y0) / (lam * 0.4) + ph * 2)
+      -- look ahead: a text box above turns the stipe to its nearer side
+      for la = 0.3, 2.4, 0.7 do
+        local q = blocked(tx, ny + la, 0.15)
+        if q then tx = (x < (q[1] + q[3]) / 2) and q[1] - 0.3 or q[3] + 0.3 break end
+      end
+      local nx = x + clamp(tx - x, -0.16, 0.16)
+      if blocked(nx, ny, 0.05) or nx < -0.5 or nx > W + 0.5 then break end
+      x, y = nx, ny
+      pts[#pts + 1] = { x, y }
+    end
+    -- the canopy: lying over with the current, drifting down a little (under the surface, or under a text
+    -- box it couldn't get round, which it treats the same)
+    if #pts > 8 then
+      local L = srng.range(1.0, 3.0)
+      for k = 1, floor(L / 0.2) do
+        local nx, ny = x + cur * 0.2, y + 0.03 * cos(k * 0.5)
+        if blocked(nx, ny, 0.1) then break end
+        x, y = nx, ny
+        pts[#pts + 1] = { x, y }
+      end
+    end
+    return pts
+  end
+  -- a bunch on a rock: stipes, then their blades; far ones paler and smaller
+  local function bunch(x, y, w, n, far, brng)
+    local t0 = far and 0.55 or brng.range(0.32, 0.42)
+    local old = far and ink.set_lift(0.45) or nil
+    ink.layer(far and L_FAR or L_KELP)
+    local stipes = {}
+    for k = 1, n do
+      local sx = x + (k - (n + 1) / 2) * min(0.16, w * 0.3 / n) + brng.sym(0.05)
+      stipes[#stipes + 1] = stipe(sx, y + w * 0.25, brng.fork())
+    end
+    for _, pts in ipairs(stipes) do
+      if #pts >= 3 then
+        ink.smooth(ink.ribbon(pts, function(t) return lerp(0.08, 0.04, t) end), true) ink.fill(tone(t0 - 0.16))
+      end
+    end
+    holdfast(brng, x, y, max(0.35, w * 0.4), t0 - 0.12)
+    -- blades: every half centimeter or so, alternately, leaning downstream; longer, flatter in the canopy
+    for _, pts in ipairs(stipes) do
+      local side = brng.chance(0.5) and 1 or -1
+      local i = brng.int(3, 5)
+      while i <= #pts do
+        local p = pts[i]
+        local canopy = p[2] > surface - 2.6 or (i > 3 and abs(pts[i][2] - pts[i - 1][2]) < 0.1)
+        local ang = canopy and cur * brng.range(65, 115) or ((side > 0) == (cur > 0)) and cur * brng.range(35, 80) or -cur * brng.range(5, 40)
+        local L = (canopy and brng.range(2.0, 3.4) or brng.range(1.5, 3.0)) * (far and 0.8 or 1)
+        -- a blade reaching into a text box is shorter, or left out
+        local ex, ey = p[1] + L * sin(ang * rad), p[2] + L * cos(ang * rad)
+        if blocked(ex, ey, 0.1) then L = L * 0.45 ex, ey = p[1] + L * sin(ang * rad), p[2] + L * cos(ang * rad) end
+        if not blocked(ex, ey, 0.05) and not blocked(lerp(p[1], ex, 0.5), lerp(p[2], ey, 0.5), 0.05) then
+          M.blade(brng, p[1], p[2], ang, L, brng.range(0.16, 0.26) * (far and 0.8 or 1), cur, t0 + brng.range(-0.06, 0.1))
+        end
+        side = -side
+        i = i + brng.int(4, 7)
+      end
+    end
+    if far then ink.set_lift(old) end
+  end
+
+  -- 1. the far bunches, between and behind the near rocks
+  for _ = 1, floor(W / 3.2) + 1 do
+    local x = rng.range(0, W)
+    if not blocked(x, sandtop + 1) then bunch(x, sandtop + 0.2, 0.6, rng.int(1, 3), true, rng.fork()) end
+  end
+  -- 2. the floor and the rocks
+  ink.layer(L_FLOOR)
+  sand(rng.fork(), W, sandtop)
+  for _, r in ipairs(rocks) do
+    r.top = rock(rng.fork(), r.x, sandtop - 0.15, r.w, r.kind, rng.range(0.16, 0.26))
+    reg(r.x - r.w / 2, 0, r.x + r.w / 2, r.top, "rock")
+  end
+  -- 3. the near bunches: most big rocks carry one, from a couple of stipes to nine; now and then a bull kelp
+  for _, r in ipairs(rocks) do
+    if r.w > 1.2 and rng.chance(0.85) then
+      local brng = rng.fork()
+      if rng.chance(0.18) then
+        -- bull kelp: one long whip to a float, a fountain of blades streaming from it
+        ink.layer(L_KELP)
+        local pts = stipe(r.x, r.top - 0.05, brng.fork())
+        if #pts > 10 then
+          local fpt = pts[#pts]
+          ink.smooth(ink.ribbon(pts, function(t) return lerp(0.06, 0.03, t) end), true) ink.fill(tone(0.2))
+          for _ = 1, brng.int(6, 10) do M.blade(brng, fpt[1], fpt[2], cur * brng.range(40, 110), brng.range(1.6, 2.8), 0.09, cur * 1.3, brng.range(0.3, 0.42)) end
+          ink.circle(fpt[1], fpt[2], 0.2) ink.fill(tone(0.16))
+          if fine() then ink.circle(fpt[1] - 0.06, fpt[2] + 0.06, 0.06) ink.fill(white, 0.5) end
+          holdfast(brng, r.x, r.top - 0.05, 0.4, 0.22)
+        end
+      else
+        bunch(r.x + brng.sym(r.w * 0.15), r.top - 0.08, r.w, clamp(floor(r.w * brng.range(1.5, 3.6)), 2, 9), false, brng)
+      end
+      r.kelp = true
+    end
+  end
+  -- 4. the understory: in the gaps between the rocks, on the sand
+  ink.layer(L_UNDER)
+  for _ = 1, floor(W * 0.9) do
+    local x = rng.range(0.3, W - 0.3)
+    local h = rng.range(0.6, 1.4)
+    if free(x - h * 0.35, sandtop - 0.2, x + h * 0.35, sandtop + h) then
+      ink.push() ink.translate(x, sandtop - 0.1)
+      local kind = rng.pick({ "palm", "red", "eel", "red", "eel" })
+      if kind == "palm" then M.seapalm(rng.fork(), h, cur) elseif kind == "red" then M.redweed(rng.fork(), h, rng.range(0.25, 0.4)) else M.eelgrass(rng.fork(), h, cur) end
+      ink.pop()
+      reg(x - h * 0.3, sandtop - 0.2, x + h * 0.3, sandtop + h * 0.6, "weed")
+    end
+  end
+
+  -- 5. what lives there
+  ink.layer(L_LIFE)
+  local function place(w, h, ylo, yhi, tries, fn)
+    for _ = 1, tries do
+      local x, y = rng.range(w / 2 + 0.2, W - w / 2 - 0.2), rng.range(ylo, yhi)
+      if free(x - w / 2, y - h / 2, x + w / 2, y + h / 2) then
+        reg(x - w / 2, y - h / 2, x + w / 2, y + h / 2, "life")
+        fn(x, y)
+        return true
+      end
+    end
+    return false
+  end
+  -- on the rocks: sea stars, urchins, an anemone, a crab
+  for _, r in ipairs(rocks) do
+    local x, y = r.x + rng.sym(r.w * 0.3), r.top - 0.05
+    local what = rng.pick({ "star", "urchin", "anemone", "crab", "none", "star", "urchin" })
+    if what ~= "none" and not blocked(x, y + 0.6) then
+      ink.push() ink.translate(x, y)
+      if what == "star" then ink.translate(0, -0.1) M.star(rng.fork(), rng.range(0.5, 0.75), rng.range(0.25, 0.45))
+      elseif what == "urchin" then M.urchin(rng.fork(), rng.range(0.4, 0.6))
+      elseif what == "anemone" then M.anemone(rng.fork(), rng.range(0.8, 1.2))
+      else M.crab(rng.fork(), rng.range(0.7, 1.0)) end
       ink.pop()
     end
   end
-  local e = pts[#pts]
-  ink.push() ink.translate(e[1], e[2]) ink.rotate(d > 0 and -20 or 200) flora.tendril(rng, 0.2 * L) ink.pop()
-end
-
--- a red seaweed: flat fronds forking again and again; L = height (cm), from the origin along +y
-function M.sprig(rng, L, o)
-  local function frond(x, y, a, len, w, depth)
-    local ex, ey = x + len * sin(a), y + len * cos(a)
-    ink.smooth(ink.ribbon({ { x, y }, { lerp(x, ex, 0.5) + rng.sym(0.02), lerp(y, ey, 0.5) }, { ex, ey } }, function(t) return w * lerp(1, 0.75, t) end), true)
-    ink.fill(tone(lerp(0.22, 0.4, (4 - depth) / 4)))
-    if depth == 0 or len < 0.12 then
-      ink.circle(ex, ey, w * 0.6) ink.fill(tone(0.4))
-      return
+  -- on the sand: a whelk, a sea star, a crab
+  for _ = 1, 2 do
+    local what = rng.pick({ "whelk", "star", "crab" })
+    place(1.3, 0.7, sandtop * 0.45, sandtop * 0.7, 20, function(x, y)
+      ink.push() ink.translate(x, y)
+      if what == "whelk" then ink.scale(cur, 1) M.whelk(rng.fork(), rng.range(0.9, 1.2))
+      elseif what == "star" then M.star(rng.fork(), rng.range(0.45, 0.65), 0.35)
+      else M.crab(rng.fork(), rng.range(0.7, 0.9)) end
+      ink.pop()
+    end)
+  end
+  -- a skate's egg case caught in a holdfast
+  for _, r in ipairs(rocks) do
+    if r.kelp and rng.chance(0.3) then
+      ink.push() ink.translate(r.x + rng.sym(0.3), r.top + 0.1) ink.rotate(rng.sym(25)) M.eggcase(rng.fork(), rng.range(0.8, 1.0)) ink.pop()
+      break
     end
-    local sp = rng.range(0.35, 0.6)
-    frond(ex, ey, a - sp + rng.sym(0.1), len * rng.range(0.62, 0.8), w * 0.8, depth - 1)
-    frond(ex, ey, a + sp + rng.sym(0.1), len * rng.range(0.62, 0.8), w * 0.8, depth - 1)
   end
-  frond(0, 0, 0.1 * drift(), L * 0.3, max(0.035, L * 0.045), rng.int(3, 4))
-end
-
--- a sea palm: a rubbery stalk, a crown of narrow blades drooping all round; R = height (cm)
-function M.umbel(rng, R, o)
-  local d = drift()
-  local top = { 0.12 * R * d, R * 0.68 }
-  flora.stem({ { 0, 0 }, { 0.03 * R * d, R * 0.35 }, top }, 0.11 * R, 0.07 * R, tone(0.16))
-  local n = rng.int(9, 14)
-  for k = 1, n do
-    local a = lerp(-75, 75, (k - 0.5) / n) + rng.sym(6) - d * 12
-    ink.push() ink.translate(top[1], top[2]) ink.rotate(a) ink.scale(R * rng.range(0.38, 0.5))
-    blade(rng, { w = 0.07, float = false, bend = (a > 0 and 1 or -1) * 0.9 })
-    ink.pop()
-  end
-end
-
--- a sea urchin: a dark ball bristling with spines; r = radius (cm), centered
-function M.seedhead(rng, r, o)
-  local n = fine(0.2) and 46 or 20
-  for k = 1, n do
-    local a = 2 * pi * k / n + rng.sym(0.05)
-    local L = r * rng.range(0.95, 1.25)
-    ink.moveto(0.45 * r * cos(a), 0.45 * r * sin(a)) ink.lineto(L * cos(a), L * sin(a))
-  end
-  ink.stroke(tone(0.12), max(0.3, r * 2.2))
-  ink.circle(0, 0, r * 0.55) ink.fill(tone(0.08))
-  if fine(0.25) then ink.circle(-r * 0.18, r * 0.18, r * 0.15) ink.fill(tone(0.4), 0.6) end
-end
-
--- ---------------------------------------------------------------- visitors
--- a fish swimming with the current, level whatever its branch; s = length (cm). Now and then a garibaldi
--- in copper; else a rockfish or a striped perch in the ink
-function M.butterfly(rng, s, o)
-  level()
-  local kind = rng.pick({ "garibaldi", "rockfish", "perch", "rockfish" })
-  local paint = function()
-    local L, H = s * 0.5, s * (kind == "garibaldi" and 0.24 or 0.19)
-    local body = {}
-    for j = 0, 18 do
-      local a = 2 * pi * j / 18
-      local x = L * cos(a)
-      local y = H * sin(a) * (x > 0 and 1 or (0.55 + 0.45 * (1 + x / L)))
-      body[#body + 1] = { x, y }
-    end
-    -- the tail, then the fins, then the body over them
-    ink.poly({ { -L * 0.85, 0 }, { -L * 1.35, H * 0.95 }, { -L * 1.22, 0 }, { -L * 1.35, -H * 0.95 } }, true) ink.fill(tone(0.3))
-    ink.smooth({ { -L * 0.3, H * 0.8 }, { L * 0.05, H * 1.55 }, { L * 0.35, H * 0.85 } }, true) ink.fill(tone(0.3))
-    ink.smooth({ { -L * 0.2, -H * 0.8 }, { L * 0.0, -H * 1.3 }, { L * 0.2, -H * 0.8 } }, true) ink.fill(tone(0.32))
-    ink.smooth(body, true) ink.fill(tone(kind == "garibaldi" and 0.45 or 0.38))
-    if fine(0.2) then
-      ink.smooth({ { -L * 0.9, -H * 0.1 }, { -L * 0.2, -H * 0.55 }, { L * 0.6, -H * 0.45 }, { L * 0.95, -H * 0.05 }, { L * 0.4, -H * 0.85 }, { -L * 0.5, -H * 0.75 } }, true)
-      ink.fill(white, 0.35)                           -- the pale belly
-      if kind == "perch" then
-        for k = 1, 4 do local x = lerp(-L * 0.55, L * 0.4, k / 4) ink.moveto(x, H * 0.85) ink.lineto(x - L * 0.05, -H * 0.7) end
-        ink.stroke(tone(0.14), max(0.35, s * 1.4), 0.75)
-      elseif kind == "rockfish" then
-        for _ = 1, 7 do ink.circle(rng.range(-L * 0.6, L * 0.5), rng.range(-H * 0.4, H * 0.7), s * 0.025) end
-        ink.fill(tone(0.16), 0.8)
+  -- in open water: a school of small fish, a few big ones, jellyfish, a shrimp
+  local mid_lo, mid_hi = sandtop + 2.0, surface - 2.0
+  if mid_hi > mid_lo then
+    local sx, sy = rng.range(W * 0.2, W * 0.8), rng.range(mid_lo, mid_hi)
+    for _ = 1, rng.int(7, 13) do                       -- the school: senoritas swimming with the current
+      local L = rng.range(0.7, 0.95)
+      local x, y = sx + rng.sym(2.2), sy + rng.sym(1.0)
+      if free(x - L / 2, y - 0.1, x + L / 2, y + 0.1) then
+        reg(x - L / 2, y - 0.12, x + L / 2, y + 0.12, "fish")
+        ink.push() ink.translate(x, y) ink.scale(cur, 1) ink.rotate(rng.sym(6)) M.fish(rng.fork(), "senorita", L) ink.pop()
       end
-      ink.smooth({ { L * 0.45, H * 0.65 }, { L * 0.35, 0 }, { L * 0.45, -H * 0.6 } }, false) ink.stroke(tone(0.16), max(0.3, s * 0.8), 0.7)
-      ink.circle(L * 0.66, H * 0.2, s * 0.05) ink.fill(white)
-      ink.circle(L * 0.67, H * 0.2, s * 0.028) ink.fill(tone(0.05))
+    end
+    for _, kind in ipairs({ "garibaldi", "rockfish", "bass", rng.pick({ "garibaldi", "rockfish", "bass" }) }) do
+      local L = ({ garibaldi = 1.9, rockfish = 2.4, bass = 2.6 })[kind] * rng.range(0.85, 1.1)
+      place(L * 1.2, L * 0.6, mid_lo, mid_hi, 30, function(x, y)
+        local face = rng.chance(0.7) and cur or -cur
+        ink.push() ink.translate(x, y) ink.scale(face, 1) ink.rotate(rng.sym(8))
+        if kind == "garibaldi" then ink.in_accent(function() M.fish(rng.fork(), kind, L) end) else M.fish(rng.fork(), kind, L) end
+        ink.pop()
+      end)
+    end
+    for _ = 1, rng.int(1, 3) do
+      local s = rng.range(1.0, 1.6)
+      place(s * 1.1, s * 1.2, mid_lo + 1, mid_hi + 1, 25, function(x, y) ink.push() ink.translate(x, y + s * 0.2) M.jelly(rng.fork(), s, cur) ink.pop() end)
+    end
+    place(1.0, 0.5, sandtop + 0.6, mid_lo + 1.5, 25, function(x, y) ink.push() ink.translate(x, y) ink.scale(rng.chance(0.5) and 1 or -1, 1) M.shrimp(rng.fork(), rng.range(0.8, 1.1)) ink.pop() end)
+  end
+  -- otters at the surface, on their backs in the canopy
+  ink.layer(L_TOP)
+  for _ = 1, o.otters or 1 do
+    local L = rng.range(4.0, 5.0)
+    place(L * 1.1, L * 0.45, surface - 0.8, surface + 0.2, 60, function(x, y)
+      ink.push() ink.translate(x, y - L * 0.05) ink.scale(rng.chance(0.5) and 1 or -1, 1) M.otter(rng.fork(), L) ink.pop()
+      bubbles(rng, x + rng.sym(L * 0.3), y + L * 0.2, 0.05, 3)
+    end)
+  end
+  -- bubbles rising from the rocks
+  for _ = 1, rng.int(2, 5) do
+    local r = rocks[rng.int(1, max(1, #rocks))]
+    if r then
+      local x, y = r.x + rng.sym(r.w * 0.3), (r.top or sandtop) + 0.3
+      local n = rng.int(4, 8)
+      if free(x - 0.2, y, x + 0.2, y + n * 0.25) then bubbles(rng, x, y, rng.range(0.04, 0.08), n) end
     end
   end
-  if kind == "garibaldi" then ink.in_accent(paint) else paint() end
-end
-
--- a sea otter floating on its back, belly up, a shell held on its chest, a strand of kelp wrapped over it so
--- it doesn't drift; level, head toward the current. s = length nose to tail (cm), centered
-function M.bee(rng, s, o)
-  level()
-  local L, H = s * 0.5, s * 0.15
-  -- the strand of kelp it holds itself to, across the page under it
-  ink.smooth({ { -L * 1.3, -H * 0.3 }, { -L * 0.4, -H * 0.9 }, { L * 0.4, H * 0.2 }, { L * 1.3, -H * 0.5 } }, false)
-  ink.stroke(tone(0.16), max(0.5, s * 2.2))
-  -- tail, body, belly, head
-  ink.smooth({ { -L * 0.78, -H * 0.1 }, { -L * 1.1, H * 0.15 }, { -L * 1.32, H * 0.05 }, { -L * 1.12, -H * 0.25 } }, true) ink.fill(tone(0.16))
-  local body = {}
-  for j = 0, 20 do
-    local a = 2 * pi * j / 20
-    body[#body + 1] = { L * 0.82 * cos(a), H * sin(a) * (sin(a) > 0 and 1.15 or 0.9) }
-  end
-  ink.smooth(body, true) ink.fill(tone(0.2))
-  if fine(0.2) then ink.smooth(ellipse(L * 0.05, H * 0.45, L * 0.6, H * 0.4, 16), true) ink.fill(tone(0.42), 0.8) end
-  -- the hind feet up in the air, the head lifted, pale face
-  ink.smooth({ { -L * 0.6, H * 0.7 }, { -L * 0.75, H * 1.5 }, { -L * 0.5, H * 1.65 }, { -L * 0.45, H * 0.9 } }, true) ink.fill(tone(0.16))
-  ink.smooth(ellipse(L * 0.9, H * 0.55, L * 0.24, H * 0.95, 16, 0.2), true) ink.fill(tone(0.24))
-  if fine(0.2) then
-    ink.smooth(ellipse(L * 0.98, H * 0.65, L * 0.15, H * 0.62, 14, 0.2), true) ink.fill(tone(0.62))
-    ink.circle(L * 1.05, H * 1.05, s * 0.018) ink.circle(L * 0.92, H * 1.15, s * 0.018) ink.fill(tone(0.04))
-    ink.circle(L * 1.12, H * 0.72, s * 0.022) ink.fill(tone(0.04))
-    ink.circle(L * 0.8, H * 1.38, s * 0.03) ink.fill(tone(0.18))   -- an ear
-    for k = -1, 1 do ink.moveto(L * 1.12, H * 0.65) ink.lineto(L * 1.32, H * (0.6 + k * 0.18)) end
-    ink.stroke(tone(0.1), 0.25, 0.7)
-  end
-  -- the shell on its chest, held in its forepaws
-  ink.in_accent(function()
-    local sx, sy = L * 0.45, H * 1.05
-    local sh = {}
-    for j = 0, 12 do local a = pi * j / 12 sh[#sh + 1] = { sx + s * 0.08 * cos(a), sy + s * 0.06 * sin(a) } end
-    ink.smooth(sh, true) ink.fill(tone(0.42))
-    if fine(0.2) then for k = 1, 5 do local a = pi * k / 6 ink.moveto(sx, sy) ink.lineto(sx + s * 0.075 * cos(a), sy + s * 0.055 * sin(a)) end ink.stroke(tone(0.2), 0.3) end
-  end)
-  ink.smooth(ellipse(L * 0.32, H * 1.0, s * 0.035, s * 0.05, 10), true) ink.smooth(ellipse(L * 0.6, H * 1.05, s * 0.035, s * 0.05, 10), true)
-  ink.fill(tone(0.16))
-end
-
--- a shrimp clinging to the stipe, head up along +y, its legs on the y axis; s = size (cm)
-function M.snail(rng, s, o)
-  local L = s * 1.1
-  local seg = {}
-  for j = 0, 7 do                                    -- the curled body, segment by segment
-    local t = j / 7
-    local a = lerp(1.35, -0.2, t)
-    seg[#seg + 1] = { L * 0.35 * cos(a) + L * 0.1, L * (0.9 - 0.95 * t) }
-  end
-  for j = #seg, 1, -1 do
-    local p = seg[j]
-    local r = L * lerp(0.07, 0.13, (j - 1) / 7)
-    ink.circle(p[1], p[2], r) ink.fill(tone(lerp(0.42, 0.32, (j - 1) / 7)), 0.95)
-  end
-  ink.poly({ { seg[8][1] - L * 0.05, seg[8][2] }, { seg[8][1] - L * 0.2, seg[8][2] - L * 0.12 }, { seg[8][1] + L * 0.12, seg[8][2] - L * 0.12 } }, true) ink.fill(tone(0.3))
-  if fine(0.2) then
-    for j = 2, 6 do ink.moveto(seg[j][1] - L * 0.05, seg[j][2]) ink.lineto(L * 0.0, seg[j][2] - L * 0.04) end
-    ink.stroke(tone(0.15), 0.35)
-    local h = seg[1]
-    ink.moveto(h[1], h[2]) ink.curveto(h[1] - L * 0.1, h[2] + L * 0.4, h[1] - L * 0.5, h[2] + L * 0.5, h[1] - L * 0.7, h[2] + L * 0.3)
-    ink.moveto(h[1], h[2]) ink.curveto(h[1] + L * 0.1, h[2] + L * 0.45, h[1] + L * 0.4, h[2] + L * 0.6, h[1] + L * 0.55, h[2] + L * 0.45)
-    ink.stroke(tone(0.2), 0.3)
-    ink.circle(h[1] + L * 0.06, h[2] + L * 0.02, L * 0.035) ink.fill(tone(0.04))
-  end
-end
-
--- a crab on its twig, side on, claws up; feet at the origin, s = width (cm)
-function M.bird(rng, s, o)
-  local W, H = s * 0.5, s * 0.28
-  local base = H * 0.6
-  for _, sd in ipairs({ -1, 1 }) do                   -- three walking legs a side, jointed, splayed out
-    for k = 1, 3 do
-      local x0 = sd * W * lerp(0.3, 0.7, k / 3)
-      local kx, ky = x0 + sd * W * lerp(0.45, 0.7, k / 3), base + H * lerp(0.9, 0.55, k / 3)
-      ink.moveto(x0, base + H * 0.3) ink.lineto(kx, ky) ink.lineto(kx + sd * W * 0.18, 0)
-    end
-  end
-  ink.stroke(tone(0.2), max(0.35, s * 1.1))
-  for _, sd in ipairs({ -1, 1 }) do                   -- the claws, raised
-    local cx, cy = sd * W * 0.85, base + H * 1.6
-    ink.moveto(sd * W * 0.6, base + H * 0.6) ink.lineto(cx, cy - H * 0.4) ink.stroke(tone(0.2), max(0.5, s * 2.5))
-    ink.smooth({ { cx - W * 0.16, cy - H * 0.35 }, { cx - W * 0.2, cy + H * 0.3 }, { cx + sd * W * 0.05, cy + H * 0.55 }, { cx + W * 0.18, cy + H * 0.1 }, { cx + W * 0.12, cy - H * 0.3 } }, true)
-    ink.fill(tone(0.28))
-    if fine(0.2) then ink.moveto(cx, cy + H * 0.05) ink.lineto(cx + sd * W * 0.12, cy + H * 0.5) ink.stroke(white, 0.4, 0.7) end
-  end
-  local shell = {}
-  for j = 0, 16 do local a = pi * j / 16 shell[#shell + 1] = { W * 0.78 * cos(a), base + H * 1.05 * sin(a) } end
-  ink.smooth(shell, true) ink.fill(tone(0.3))
-  if fine(0.2) then
-    ink.smooth(ellipse(-W * 0.2, base + H * 0.6, W * 0.32, H * 0.28, 12), true) ink.fill(tone(0.5), 0.5)
-    for _, sd in ipairs({ -1, 1 }) do
-      ink.moveto(sd * W * 0.15, base + H * 0.95) ink.lineto(sd * W * 0.2, base + H * 1.35) ink.stroke(tone(0.15), 0.4)
-      ink.circle(sd * W * 0.2, base + H * 1.38, s * 0.03) ink.fill(tone(0.04))
-    end
-  end
-end
-
--- a few bubbles in copper, rising: r = size (cm), centered
-function M.sparkle(rng, r, o)
-  ink.in_accent(function()
-    for k = 1, 3 do
-      local rr = r * (0.55 - 0.12 * k)
-      ink.circle(rng.sym(r * 0.25), (k - 2) * r * 0.9, rr) ink.stroke(tone(0.35), 0.35)
-    end
-  end)
-end
-
--- ---------------------------------------------------------------- the theme
-M.flora = {
-  stem = M.stem, leaf = M.leaf, leaflet = M.leaflet,
-  flower = M.flower, lily = M.lily, blossom = M.blossom, floret = M.floret, bud = M.bud, bell = M.bell,
-  cyme = M.cyme, sprig = M.sprig, umbel = M.umbel, seedhead = M.seedhead,
-  butterfly = M.butterfly, bee = M.bee, snail = M.snail, bird = M.bird, sparkle = M.sparkle,
-}
-
-function M.motifs(rows, F)
-  local by = {}                     -- luacheck: ignore 241 (the rows are changed through it)
-  for _, m in ipairs(rows) do by[m.name] = m end
-  local up = function(rng, s, n, fn)               -- things rising in a loose column, the way bubbles go
-    for k = 1, n do
-      local y = s * (k - 1) * rng.range(0.38, 0.5)
-      ink.push() ink.translate(rng.sym(s * 0.15), y) fn(k) ink.pop()
-    end
-  end
-  -- blossoms: a column of bubbles rising off a blade
-  by.blossoms.draw = function(rng, s)
-    up(rng, s, rng.int(3, 6), function(k) F.floret(rng, s * rng.range(0.07, 0.16) * (1 + 0.15 * k)) end)
-  end
-  by.blossoms.upright = 1.0
-  -- the bells: one jellyfish, or two drifting together
-  by.bells.draw = function(rng, s)
-    F.bell(rng, s)
-    if rng.chance(0.4) then ink.push() ink.translate(0.6 * s, -0.25 * s) F.bell(rng, 0.6 * s) ink.pop() end
-  end
-  by.bells.w, by.bells.max = 1.2, 2
-  -- more sea stars and urchins than flora has seed heads; fewer anemones than flowers
-  by.seedhead.spring, by.seedhead.summer, by.seedhead.autumn, by.seedhead.max = 0.3, 0.3, 0.3, 2
-  by.flower.w, by.flower.smin, by.flower.smax, by.flower.max = 0.8, 0.55, 0.85, 1
-  -- sea stars: a row of their own, on the blades and stipes as they climb kelp
-  rows[#rows + 1] = { name = "star", w = 1.6, smin = 0.3, smax = 0.55, max = 3, hard = true, layer = by.bud.layer, upright = 0.2,
-    r = function(s) return 1.0 * s end, off = function(s) return 0.6 * s end,
-    draw = function(rng, s) ink.translate(0, 0.6 * s) F.blossom(rng, s) end }
-  -- the otter: the bee's place, larger, as many as M.otters a page (M.set_otters changes it later: the
-  -- rows are made once a document)
-  by.bee.smin, by.bee.smax = 2.0, 2.6
-  by.bee.r = function(s) return 0.62 * s end
-  otter_row = by.bee
-  M.set_otters(M.otters)
-  -- the fish: a little more often than butterflies
-  by.butterfly.w, by.butterfly.max = 1.2, 3
-  return rows
 end
 
 return M

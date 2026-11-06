@@ -718,7 +718,7 @@ export function App() {
     // page: whose drawing a page grows, its own or (perPage 'match') every page's, so pages laid out alike match;
     // flowers: the work's seed picks its plants, the page its garden
     grows, ink: inkName, crown, season, spanishmoss, heart, w: S.w, h: S.h, page: perPage === 'match' ? 0 : index,
-    seed: grows === 'flowers' || grows === 'kelp' || perPage === 'match' ? seed : seed + index * 101, cats,
+    seed: grows === 'flowers' || perPage === 'match' ? seed : seed + index * 101, cats,
     size: pieces, density: 1, index,
     keepouts: p.boxes.filter((b) => b.layer === 'clear').map((b) => {
       const empty = !texts.find((t) => t.id === b.story)?.doc.textContent.trim()
@@ -976,7 +976,7 @@ export function App() {
           </>
         )}
         {grows === 'kelp' && (
-          <p className="hint">Florilegium's margin as a kelp bed: kelp rising from rocks, sea palms and red seaweed, bubbles, fish, crabs, shrimp, sea stars, urchins, jellyfish, and otters floating on their backs. It grows beside your text and under where it ends.</p>
+          <p className="hint">A kelp forest from the seafloor to the surface: bunches of kelp on rocks, swaying with the current round your text, with fish, otters at the surface, jellyfish, crabs, sea stars and urchins.</p>
         )}
         <div className="row">
           {grows !== 'flowers' && <NumberField label={grows === 'kelp' ? 'Otters a page' : 'Cats a page'} min={0} max={grows === 'kelp' ? 3 : 6} value={grows === 'kelp' ? Math.min(cats, 3) : cats} onChange={setCats} />}
