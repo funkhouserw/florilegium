@@ -201,8 +201,6 @@ local function rope(pts, w, o)
   ink.smooth(pts, false) ink.stroke(ink.accent(0.45), w * 0.4, 0.8, false, fmt("[%.2f %.2f] 0", w * 0.7, w * 1.1))
 end
 
-local function hw(c, x0, y0, x1, y1, w, op) ink.moveto(x0, y0) ink.lineto(x1, y1) ink.stroke(c, w, op) end
-
 -- ---------------------------------------------------------------- A. posts
 -- A post standing on the origin. o: h (height), d (diameter), kind = plush |
 -- banded | sisal | rope, bands (banded: how many), tone
@@ -765,9 +763,8 @@ function M.hex(rng, o)
     local i, j = k + 1, (k + 1) % 6 + 1
     local quad = { fi[i], fi[j], bk[j], bk[i] }
     plush(rng, quad, WALL[k] + rng.sym(0.03), { smooth = false, size = (Ri - Rb) * 0.6 })
-    if doors[k] then
-      -- a doorway into the next hexagon: drawn with the frame, below (the wall only darkens toward it)
-    elseif cuts[k] then
+    -- a doorway into the next hexagon is drawn with the frame, below (the wall only darkens toward it)
+    if not doors[k] and cuts[k] then
       local cx = (fi[i][1] + fi[j][1] + bk[i][1] + bk[j][1]) / 4
       local cy = (fi[i][2] + fi[j][2] + bk[i][2] + bk[j][2]) / 4
       local ex, ey = fi[j][1] - fi[i][1], fi[j][2] - fi[i][2]
@@ -1196,7 +1193,6 @@ end
 -- into one rope (origin at its foot). hoop: a ring on one rope (origin at its foot).
 function M.hang(rng, kind, top, o)
   o = o or {}
-  local u = M.U
   if kind == "swing" then
     local w = o.w or real(40)
     local t = real(3.5)
@@ -1258,12 +1254,11 @@ end
 -- returns the cats: { { x, y, pose, facing, angle } }.
 -- col = { x0, y0, x1, y1 } page cm; o: foot (the footer band), field (grow.field
 -- over the regions, for the fill), D (density), head (x, y of the header's fleuron)
-function M.compose(C, ink, seed, col, o)
+function M.compose(C, ink, seed, col, o)               -- luacheck: ignore 431 (the module and ink are handed in, as theme-math's page is)
   o = o or {}
-  local real = C.real
+  local real = C.real                                  -- luacheck: ignore 431 (the module's own real)
   local rng = ink.rng(seed * 7919 + 17)
   local x0, y0, x1, y1 = col[1], col[2], col[3], col[4]
-  local mid = (x0 + x1) / 2
   local pr = real(C.DIM.post_d) / 2
   local st = real(C.DIM.shelf_t)
   local boxes, cats = {}, {}
@@ -1323,76 +1318,12 @@ function M.compose(C, ink, seed, col, o)
     if a < bound[1] - 0.05 or c > bound[3] + 0.05 or b < bound[2] - 0.05 or d > bound[4] + 0.05 then return false end
     if o.spill and c > x1 + 0.05 and d > o.spill[4] then return false end
     for _, q in ipairs(boxes) do
-      if q[5] ~= ignore and a < q[3] - m and c > q[1] + m and b < q[4] - m and d > q[2] + m then LASTHIT = string.format("%s[%.2f,%.2f,%.2f,%.2f]vs[%.2f,%.2f,%.2f,%.2f]", q[5], q[1], q[2], q[3], q[4], a, b, c, d) return false end
+      if q[5] ~= ignore and a < q[3] - m and c > q[1] + m and b < q[4] - m and d > q[2] + m then M.LASTHIT = string.format("%s[%.2f,%.2f,%.2f,%.2f]vs[%.2f,%.2f,%.2f,%.2f]", q[5], q[1], q[2], q[3], q[4], a, b, c, d) return false end
     end
     return true
   end
   -- what is added after the structure keeps a gap from everything (3 cm real)
   local GAP = real(3)
-  -- a chain (steps, pegs, dots) as a row of small boxes along it; free() over its
-  -- middle (its ends touch what it joins)
-  local function chain_boxes(ax, ay, bx, by, hw, hh)
-    local L = sqrt((bx - ax) ^ 2 + (by - ay) ^ 2)
-    local n = max(2, floor(L / 0.25))
-    local out = {}
-    for k = 0, n do
-      local u = k / n
-      local x, y = ax + (bx - ax) * u, ay + (by - ay) * u
-      out[#out + 1] = { x - hw, y - hh, x + hw, y + hh, min(u, 1 - u) * L }
-    end
-    return out
-  end
-  local function chain_free(bs)
-    for _, q in ipairs(bs) do
-      if q[5] > 0.35 and not free(q[1], q[2], q[3], q[4], -GAP * 0.5) then return false end
-    end
-    return true
-  end
-  local function chain_reg(bs) for _, q in ipairs(bs) do reg(q[1], q[2], q[3], q[4], "chain") end end
-  local CHW = { steps = { real(12), real(3) }, pegs = { real(6), real(6) }, dots = { real(6), real(6) }, ladder = { real(15), real(4) } }
-  -- what joins two points: floating steps when nearly level, dots or pegs on a slant,
-  -- a ladder when steep (dots and pegs never go straight up)
-  -- by its angle: nearly level, floating steps; slanted, dots, pegs or a side-on
-  -- walkway (gangway stairs, a sisal ramp); steep, nothing (a jump between staggered
-  -- shelves), a pole with half-round steps or a ladder, both vertical, under the upper end
-  local function chain_kind(ax, ay, bx, by)
-    local a = math.deg(math.atan(abs(by - ay), abs(bx - ax)))
-    if a < 22 then return "steps" end
-    if a < 50 then return rng.pick({ "dots", "pegs", "stairs", "ramp", "stairs", "ramp" }) end
-    if abs(by - ay) < real(50) and rng.chance(0.6) then return nil end
-    return rng.chance(0.65) and "climb" or "ladder"
-  end
-  CHW.stairs, CHW.ramp, CHW.climb = { real(9), real(9) }, { real(9), real(9) }, { real(16), real(4) }
-  -- a chain as a plan: its kind, its boxes, and how to draw it
-  local function plan_chain(ax, ay, bx, by, kind)
-    kind = kind or chain_kind(ax, ay, bx, by)
-    local p = { kind = kind, boxes = {} }
-    if not kind then return p end
-    if kind == "climb" or kind == "ladder" then
-      local lx, ly, hx, hy = ax, ay, bx, by
-      if ay > by then lx, ly, hx, hy = bx, by, ax, ay end
-      p.x, p.y0, p.y1 = hx, ly - real(4), hy + 0.35          -- up to the piece it climbs to
-      p.side = lx < hx and -1 or 1
-      p.boxes = chain_boxes(p.x, p.y0, p.x, p.y1, CHW[kind][1], CHW[kind][2])
-    else
-      p.ax, p.ay, p.bx, p.by = ax, ay, bx, by
-      p.boxes = chain_boxes(ax, ay, bx, by, CHW[kind][1], CHW[kind][2])
-    end
-    return p
-  end
-  local function draw_chain(p)
-    if not p.kind then return end
-    if p.kind == "climb" then
-      draw(5, function(r) C.climb(r, p.x, p.y0, p.y1, { side = p.side }) end)
-    elseif p.kind == "ladder" then
-      draw(1, function(r) C.ladder(r, p.x, p.y0, p.x, p.y1) end)
-    else
-      local k = p.kind
-      draw(5, function(r) C[k](r, p.ax, p.ay, p.bx, p.by, { d = real(10) }) end)
-    end
-    chain_reg(p.boxes)
-  end
-
   -- a reference cat: pose sizes (page cm) for the overlap test
   local CAT = { loaf = { 2.2, 1.0 }, sit = { 1.2, 1.9 }, curl = { 1.9, 0.85 }, walk = { 2.4, 1.45 },
     meow = { 1.4, 2.0 }, stretch = { 2.6, 1.3 }, bat = { 1.4, 2.0 }, drape = { 2.2, 1.0 }, sprawl = { 2.6, 1.0 } }
@@ -1410,15 +1341,15 @@ function M.compose(C, ink, seed, col, o)
   -- ---------------------------------------------------------------- 1. the floor tower
   local fy = y0
   local top = fy + real(C.DIM.base_t)
-  local cw = x1 - x0
+  local colw = x1 - x0
   local DD = o.D or 1                                  -- density: less of everything; at 0.1 and below, the tower alone
-  local wide = cw > 9                                  -- a whole page or a panorama, not a margin column
-  local n = wide and floor(cw / rng.range(1.5, 1.9)) or max(3, min(5, floor(cw / 1.8) + (rng.chance(0.5) and 1 or 0)))
+  local wide = colw > 9                                  -- a whole page or a panorama, not a margin column
+  local n = wide and floor(colw / rng.range(1.5, 1.9)) or max(3, min(5, floor(colw / 1.8) + (rng.chance(0.5) and 1 or 0)))
   if DD < 0.5 then n = max(2, n - 1) end
   local xs = {}
-  local a, b = x0 + 0.5 + rng.range(0, 0.2), x1 - 0.55 - rng.range(0, 0.25)
+  local xa_, xb_ = x0 + 0.5 + rng.range(0, 0.2), x1 - 0.55 - rng.range(0, 0.25)
   for i = 1, n do
-    xs[i] = a + (b - a) * (i - 1) / (n - 1) + ((i > 1 and i < n) and rng.sym(0.2) or 0)
+    xs[i] = xa_ + (xb_ - xa_) * (i - 1) / (n - 1) + ((i > 1 and i < n) and rng.sym(0.2) or 0)
   end
   local step = real(rng.range(48, 56))
   local ncol = n
@@ -1718,70 +1649,70 @@ function M.compose(C, ink, seed, col, o)
         local cx = min(bound[3] - w / 2 - 0.02, max(x0 + w / 2 + 0.02, xs[i]))
         return abs(cx - xs[i]) <= w / 2 - pr - 0.05 and cx or nil
       end
-      local function topper(c, y)
+      local function topper(c, ty)
         if c == "pompoms" then
-          if free(xs[i] - 0.8, y, xs[i] + 0.8, y + 1.3) then
-            draw(4, at(xs[i], y, function(r) C.pompoms(r, {}) end))
-            reg(xs[i] - 0.8, y, xs[i] + 0.8, y + 1.3, "toy")
-            tops[#tops + 1] = { xs[i], y + 0.05, noroute = true } return true
+          if free(xs[i] - 0.8, ty, xs[i] + 0.8, ty + 1.3) then
+            draw(4, at(xs[i], ty, function(r) C.pompoms(r, {}) end))
+            reg(xs[i] - 0.8, ty, xs[i] + 0.8, ty + 1.3, "toy")
+            tops[#tops + 1] = { xs[i], ty + 0.05, noroute = true } return true
           end
         elseif c == "hex" then
           -- a hexagon resting on the post's top, on a short bracket shelf
           local R = real(C.DIM.hex_w) / 2
           local cx = inward(2 * R)
-          if cx and free(cx - R, y, cx + R, y + st + 1.732 * R) then
-            draw(4, at(cx, y, function(r) C.shelf(r, { kind = "bracket", w = 1.3 * R }) end))
-            draw(4, at(cx, y + st + 0.866 * R, function(r) C.hex(r, {}) end))
-            reg(cx - R, y, cx + R, y + st + 1.732 * R, "hex")
-            spot(cx, y + st + real(3.5) + 0.05, { "sit" }, true)
-            tops[#tops + 1] = { cx, y + st + 1.732 * R } return true
+          if cx and free(cx - R, ty, cx + R, ty + st + 1.732 * R) then
+            draw(4, at(cx, ty, function(r) C.shelf(r, { kind = "bracket", w = 1.3 * R }) end))
+            draw(4, at(cx, ty + st + 0.866 * R, function(r) C.hex(r, {}) end))
+            reg(cx - R, ty, cx + R, ty + st + 1.732 * R, "hex")
+            spot(cx, ty + st + real(3.5) + 0.05, { "sit" }, true)
+            tops[#tops + 1] = { cx, ty + st + 1.732 * R } return true
           end
         elseif c == "ring" then
           local d = real(42)
-          if nrings < 2 and free(xs[i] - d / 2, y, xs[i] + d / 2, y + d) then
+          if nrings < 2 and free(xs[i] - d / 2, ty, xs[i] + d / 2, ty + d) then
             rings_, nrings = true, nrings + 1
-            draw(4, at(xs[i], y, function(r) C.ring(r, { d = d }) end))
-            reg(xs[i] - d / 2, y, xs[i] + d / 2, y + d, "ring")
-            spot(xs[i], y + real(3), { "curl" }, true)
-            tops[#tops + 1] = { xs[i], y + d } return true
+            draw(4, at(xs[i], ty, function(r) C.ring(r, { d = d }) end))
+            reg(xs[i] - d / 2, ty, xs[i] + d / 2, ty + d, "ring")
+            spot(xs[i], ty + real(3), { "curl" }, true)
+            tops[#tops + 1] = { xs[i], ty + d } return true
           end
         elseif c == "bowl" then
           -- a basket or a plush bowl on the post's top: low, so it fits under what's above
           local cx = inward(1.8)
-          if cx and free(cx - 0.9, y, cx + 0.9, y + 0.9) then
-            draw(4, at(cx, y, function(r) C.bowl(r, { kind = rng.pick({ "basket", "plush" }), scallop = rng.chance(0.5), r = real(17) }) end))
-            reg(cx - 0.9, y, cx + 0.9, y + 0.85, "bowl")
-            spot(cx, y + real(9), { "curl" }, true)
-            tops[#tops + 1] = { cx, y + 0.85 } return true
+          if cx and free(cx - 0.9, ty, cx + 0.9, ty + 0.9) then
+            draw(4, at(cx, ty, function(r) C.bowl(r, { kind = rng.pick({ "basket", "plush" }), scallop = rng.chance(0.5), r = real(17) }) end))
+            reg(cx - 0.9, ty, cx + 0.9, ty + 0.85, "bowl")
+            spot(cx, ty + real(9), { "curl" }, true)
+            tops[#tops + 1] = { cx, ty + 0.85 } return true
           end
         elseif c == "condo" then
           local cw, ch = real(C.DIM.condo_w), real(C.DIM.condo_h) + 0.2
           local cx = inward(cw)
-          if cx and free(cx - cw / 2, y, cx + cw / 2, y + ch) then
+          if cx and free(cx - cw / 2, ty, cx + cw / 2, ty + ch) then
             local holes = ({ { "round" }, { "arch" }, { "oval" } })[rng.int(1, 3)]
-            draw(4, at(cx, y, function(r) C.condo(r, { holes = holes }) end))
-            reg(cx - cw / 2, y, cx + cw / 2, y + ch, "condo")
-            spot(cx, y + ch, { "loaf", "sit", "meow" })
-            spot(cx, y + ch * 0.5, { "peek" }, true)
-            tops[#tops + 1] = { cx, y + ch } return true
+            draw(4, at(cx, ty, function(r) C.condo(r, { holes = holes }) end))
+            reg(cx - cw / 2, ty, cx + cw / 2, ty + ch, "condo")
+            spot(cx, ty + ch, { "loaf", "sit", "meow" })
+            spot(cx, ty + ch * 0.5, { "peek" }, true)
+            tops[#tops + 1] = { cx, ty + ch } return true
           end
         elseif c == "tube" then
           local w = real(30)
-          if free(xs[i] - w / 2 - 0.15, y, xs[i] + w / 2 + 0.15, y + real(22)) then
-            draw(4, at(xs[i], y, function(r) C.tube(r, { w = w }) end))
-            reg(xs[i] - w / 2 - 0.15, y, xs[i] + w / 2 + 0.15, y + real(22), "tube")
-            spot(xs[i], y + real(22), { "sit", "loaf", "meow" })
-            tops[#tops + 1] = { xs[i], y + real(22) } return true
+          if free(xs[i] - w / 2 - 0.15, ty, xs[i] + w / 2 + 0.15, ty + real(22)) then
+            draw(4, at(xs[i], ty, function(r) C.tube(r, { w = w }) end))
+            reg(xs[i] - w / 2 - 0.15, ty, xs[i] + w / 2 + 0.15, ty + real(22), "tube")
+            spot(xs[i], ty + real(22), { "sit", "loaf", "meow" })
+            tops[#tops + 1] = { xs[i], ty + real(22) } return true
           end
         else
           local w = real(c == "pad" and 34 or 42)
           local cx = min(bound[3] - w / 2, max(x0 + w / 2, xs[i] + rng.sym(0.3)))
-          if free(cx - w / 2, y, cx + w / 2, y + 0.45) then
-            if c == "pad" then draw(4, at(cx, y, function(r) C.pad(r, { w = w }) end))
-            else draw(4, at(cx, y, function(r) C.shelf(r, { kind = "cushion", w = w }) end)) end
-            reg(cx - w / 2, y, cx + w / 2, y + 0.45, c)
-            spot(cx, y + (c == "pad" and real(4) or real(10)), { "loaf", "curl", "sit" })
-            tops[#tops + 1] = { cx, y + 0.45 } return true
+          if free(cx - w / 2, ty, cx + w / 2, ty + 0.45) then
+            if c == "pad" then draw(4, at(cx, ty, function(r) C.pad(r, { w = w }) end))
+            else draw(4, at(cx, ty, function(r) C.shelf(r, { kind = "cushion", w = w }) end)) end
+            reg(cx - w / 2, ty, cx + w / 2, ty + 0.45, c)
+            spot(cx, ty + (c == "pad" and real(4) or real(10)), { "loaf", "curl", "sit" })
+            tops[#tops + 1] = { cx, ty + 0.45 } return true
           end
         end
         return false
@@ -1820,11 +1751,11 @@ function M.compose(C, ink, seed, col, o)
         for _, c in ipairs(flats) do if topper(c, y) then break end end
       end
       if #tops == before then                         -- nothing fitted: a small pad, if that fits
-        local y = top + lv[i] * step
+        local py = top + lv[i] * step
         local w = real(26)
-        if free(xs[i] - w / 2, y, xs[i] + w / 2, y + 0.4) then
-          draw(4, at(xs[i], y, function(r) C.pad(r, { w = w }) end))
-          reg(xs[i] - w / 2, y, xs[i] + w / 2, y + 0.4, "pad")
+        if free(xs[i] - w / 2, py, xs[i] + w / 2, py + 0.4) then
+          draw(4, at(xs[i], py, function(r) C.pad(r, { w = w }) end))
+          reg(xs[i] - w / 2, py, xs[i] + w / 2, py + 0.4, "pad")
         end
       end
     end
@@ -2050,7 +1981,7 @@ function M.compose(C, ink, seed, col, o)
         -- the column, or below the last line of text the whole width
         local xmax = (Lmode and q[4] <= SP[4]) and SP[3] or x1
         if q[1] < x0 + 0.02 or q[3] > xmax - 0.02 or q[4] > y1 + 0.05 then return why(m.kind .. ":bounds") end
-        if not free(q[1], q[2], q[3], q[4], 0.02) then return why(m.kind .. (isclear and ":clear-vs-" or ":hits-") .. tostring(LASTHIT)) end
+        if not free(q[1], q[2], q[3], q[4], 0.02) then return why(m.kind .. (isclear and ":clear-vs-" or ":hits-") .. tostring(M.LASTHIT)) end
         if not isclear and hits_clear(q, ex) then return why(m.kind .. ":in-clear") end
         return true
       end
@@ -2146,20 +2077,20 @@ function M.compose(C, ink, seed, col, o)
         draw = function() draw(2, function(r) C.climb(r, px, cur.y, y1_, { side = -s }) end) end }
     end
     function M_.run(cur, s, ex)                          -- zigzag: identical shelves, one rise, two columns
-      local n = rng.int(3, 4)
+      local nrun = rng.int(3, 4)
       local w = R(rng.pick({ 35, 40 }))
       local rise = R(rng.pick({ 25, 30 }))
       local ca = ex + s * (w / 2 + R(4))
       local cb = ca - s * (w + R(10))
-      local land, ys = {}, {}
-      for k = 1, n do
+      local land = {}
+      for k = 1, nrun do
         local cx = (k % 2 == 1) and ca or cb
         if not inside_col(cx, w) then return nil end
         land[k] = landing("shelf", cx, cur.y + k * rise, w)
         land[k].series = true
       end
       local lo, hi = min(ca, cb) - w / 2, max(ca, cb) + w / 2
-      return { kind = "run", land = land, solids = {}, up = { lo, cur.y, hi, cur.y + n * rise }, draw = function() end }
+      return { kind = "run", land = land, solids = {}, up = { lo, cur.y, hi, cur.y + nrun * rise }, draw = function() end }
     end
     local DIAG = { steps = { { 18, 20, 22 }, 30, 48, 11, 1.2 }, dots = { { 22 }, 30, 48, 6, 6 }, pegs = { { 30 }, 22, 40, 5, 5 } }
     local function diag(kind)
@@ -2169,15 +2100,15 @@ function M.compose(C, ink, seed, col, o)
         local a = math.rad(rng.range(P[2], P[3]))
         local dx, dy = s * stride * cos(a), stride * sin(a)
         local w = R(rng.pick({ 35, 40, 45 }))
-        local n
+        local nfit
         for nn = rng.int(4, 6), 3, -1 do
           local cx = ex + (nn + 1) * dx + s * w / 2
-          if inside_col(cx, w) then n = nn break end
+          if inside_col(cx, w) then nfit = nn break end
         end
-        if not n then return nil end
-        local A = landing("moon", ex + (n + 1) * dx + s * w / 2, cur.y + (n + 1) * dy, w)
+        if not nfit then return nil end
+        local A = landing("moon", ex + (nfit + 1) * dx + s * w / 2, cur.y + (nfit + 1) * dy, w)
         local solids, pts = {}, {}
-        for k = 1, n do
+        for k = 1, nfit do
           local x, y = ex + k * dx, cur.y + k * dy
           pts[k] = { x, y }
           solids[#solids + 1] = { x - R(P[4]), y - R(P[5] + 2), x + R(P[4]), y + R(1.5) }
@@ -2185,7 +2116,7 @@ function M.compose(C, ink, seed, col, o)
         local lo, hi = min(ex, A.x0, A.x1), max(ex, A.x0, A.x1)
         return { kind = kind, from_ = cur, land = { A }, solids = solids, up = { lo, cur.y, hi, A.y },
           draw = function()
-            local f, l = pts[1], pts[n]
+            local f, l = pts[1], pts[nfit]
             if kind == "steps" then draw(5, function(r) C.steps(r, f[1], f[2], l[1], l[2], { stride = stride }) end)
             elseif kind == "dots" then draw(5, function(r) C.dots(r, f[1], f[2] - R(6), l[1], l[2] - R(6), { stride = stride, d = R(12) }) end)
             else draw(5, function(r) C.pegs(r, f[1], f[2] - R(5), l[1], l[2] - R(5), { stride = stride }) end) end
@@ -2880,7 +2811,6 @@ function M.compose(C, ink, seed, col, o)
       end
     end
   end
-  local placed_hex = {}
   if DD > 0.1 then plan_wall() end
 
 
@@ -2910,23 +2840,23 @@ function M.compose(C, ink, seed, col, o)
           local span = rng.range(1.8, 2.8)
           local ny = y + rng.sym(0.35)
           local nx = x + span
-          local pw, ptop, box
+          local pw, ptop_, box
           if kind == "hex" then
             pw = 2 * R + 0.3
-            ptop = ny + st
+            ptop_ = ny + st
             box = { nx, ny - 0.3, nx + pw, ny + 1.732 * R + 0.2 }
           elseif kind == "moon" then
-            pw = real(rng.range(34, 44)) ptop = ny + real(7.5)
+            pw = real(rng.range(34, 44)) ptop_ = ny + real(7.5)
             box = { nx, ny - 0.3, nx + pw, ny + 0.45 }
           else
-            pw = real(rng.range(36, 50)) ptop = ny + st
+            pw = real(rng.range(36, 50)) ptop_ = ny + st
             box = { nx, ny - 0.3, nx + pw, ny + 0.45 }
           end
           if box[3] > sp[3] or not free(box[1], box[2], box[3], box[4], -GAP) then break end
           local bridge = span >= 2.2 and rng.chance(0.65)
-          local cb = { x + 0.3, min(ytop, ptop) - 0.5, nx - 0.3, max(ytop, ptop) + (bridge and real(28) or 0.3) }
+          local cb = { x + 0.3, min(ytop, ptop_) - 0.5, nx - 0.3, max(ytop, ptop_) + (bridge and real(28) or 0.3) }
           if not free(cb[1], cb[2], cb[3], cb[4]) then break end
-          local ax, ay, bx2, by2 = x, ytop, nx, ptop
+          local ax, ay, bx2, by2 = x, ytop, nx, ptop_
           if bridge then
             local sag = rng.range(0.15, 0.3)
             draw(5, function(r) C.bridge(r, ax, ay, bx2, by2, { sag = sag }) end)
@@ -2943,17 +2873,17 @@ function M.compose(C, ink, seed, col, o)
             spot(nx + 0.3 + R, ny + st + real(3.5) + 0.05, { "sit" }, true)
           elseif kind == "moon" then
             draw(3, at(nx + pw / 2, ny, function(r) C.moon(r, { w = pw, carpet = rng.chance(0.6) }) end))
-            spot(nx + pw / 2, ptop, { "loaf", "sit" })
+            spot(nx + pw / 2, ptop_, { "loaf", "sit" })
             if rng.chance(0.4) and free(nx + pw - 0.4, ny - 1.4, nx + pw - 0.1, ny - 0.1, -GAP) then
               draw(5, at(nx + pw - 0.25, ny, function(r) C.ball(r, { kind = rng.pick({ "pom", "sisal" }), L = real(22) }) end))
               reg(nx + pw - 0.4, ny - 1.4, nx + pw - 0.1, ny, "toy")
             end
           else
             draw(3, at(nx + pw / 2, ny, function(r) C.shelf(r, { kind = rng.pick({ "bracket", "cushion" }), w = pw }) end))
-            spot(nx + pw / 2, ptop + real(4), { "loaf", "sit", "curl" })
+            spot(nx + pw / 2, ptop_ + real(4), { "loaf", "sit", "curl" })
           end
           reg(box[1], box[2], box[3], box[4], kind)
-          x, y, ytop = box[3], ny, ptop
+          x, y, ytop = box[3], ny, ptop_
         end
       end
     end
@@ -3038,8 +2968,7 @@ function M.compose(C, ink, seed, col, o)
     for _, ko in ipairs(o.keepout or {}) do
       if s[1] + real(38) > ko[1] and s[1] - real(38) < ko[3] and s[2] + real(52) > ko[2] and s[2] - real(30) < ko[4] then pose = nil break end
     end
-    if pose == nil then
-    elseif pose == "peek" then
+    if pose == "peek" then                           -- (no pose: no cat where a keep-out is near)
       if rng.chance(0.6) then cats[#cats + 1] = { s[1], s[2] - real(10) + real(1), "peek" } end
     elseif pose == "drape" then
       -- the cat lies on the end with its paw and tail over the edge: the body back from the edge
@@ -3055,7 +2984,7 @@ function M.compose(C, ink, seed, col, o)
         reg(s[1] - w / 2, s[2], s[1] + w / 2, s[2] + h, "cat")
         cats[#cats + 1] = { s[1], s[2], "walk", 1, s[5] }
       end
-    else
+    elseif pose ~= nil then
       cat(s[1], s[2], pose, nil, nil, s[4])
     end
   end
@@ -3521,7 +3450,7 @@ end
         end
       elseif coat == "tux" then
         -- a white bib from the throat down the chest, a white line along a lying cat's belly
-        local function band(v0, v1, w)
+        local function bib(v0, v1, w)
           local outer, inner = {}, {}
           for k = 0, 16 do
             local v = lerp(v0, v1, k / 16)
@@ -3536,11 +3465,11 @@ end
           ink.smooth(outer, true) ink.fill(white)
         end
         if R.belly or R.sitting then                     -- standing or sitting: the bib down the chest
-          band(0.5, 1, function(q) return 0.95 * sin(pi * min(1, q * 1.15)) ^ 0.6 * (0.4 + 0.6 * q) end)
+          bib(0.5, 1, function(q) return 0.95 * sin(pi * min(1, q * 1.15)) ^ 0.6 * (0.4 + 0.6 * q) end)
         elseif R.bib then                                  -- lying: the chest under the chin
           ink.smooth(oval(R.bib[1], R.bib[2], R.bib[3], R.bib[4], 16), true) ink.fill(white)
         end
-        if R.belly then band(0.2, 0.6, function(q) return 0.18 * sin(pi * q) end) end
+        if R.belly then bib(0.2, 0.6, function(q) return 0.18 * sin(pi * q) end) end
       elseif coat == "calico" or coat == "tortie" then
         -- patches that follow the body: a saddle over the back from the top edge down an uneven depth
         local function saddle(v0, v1, depth, c, op)
@@ -3862,7 +3791,7 @@ function M.page(g, grow)
   local rng = ink.rng(g.seed * 7919 + 61)
   ink.set_transform(ink.page_transform(g.mirror and g.pw))
   local layout = rng.fork()
-  local regions, col, foot, spill = grow.regions(g, layout)
+  local _, col, foot, spill = grow.regions(g, layout)
   local fld = grow.field({ col, foot, spill })
   local anim = g.anim
   if anim then ink.record(true) end
@@ -4005,9 +3934,9 @@ function M.initial(c)
   end
   -- a small scratching post in the widest gap along the bottom, beside the letter
   local px, pw = nil, 0
-  for _, q in ipairs(cols) do
-    local cl = c.clearance(q[1], m + 0.2 * S)
-    if cl > pw and not c.inside(q[1], m + 0.05 * S) then px, pw = q[1], cl end
+  for _, cq in ipairs(cols) do
+    local cl = c.clearance(cq[1], m + 0.2 * S)
+    if cl > pw and not c.inside(cq[1], m + 0.05 * S) then px, pw = cq[1], cl end
   end
   if px and pw > 0.05 * S then
     local h = min(0.42 * S, 0.2 * S + pw * 2)
@@ -4054,7 +3983,6 @@ function M.initial(c)
   ink.push() ink.translate(cx, cy) ink.scale(k)
   if pose == "loaf" and rng.chance(0.6) then
     -- the tail, hanging down behind it, drawn first
-    local tx0 = -facing * 0.9 * M.SCALE * 18
     local hang = 0.22 * S / k
     ink.push() ink.scale(facing, 1)
     ink.taper(-0.9, 0.2, -1.05, -hang * 0.3, -0.95, -hang * 0.7, -0.75, -hang, 0.16, 0.09)
