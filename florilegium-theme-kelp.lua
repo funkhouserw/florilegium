@@ -314,38 +314,47 @@ function M.otter(rng, L)
   fill(ellipse(L * 0.22, L * 0.11, L * 0.022, L * 0.03, 10, -0.4), dark)
 end
 
--- a crab from above, facing +y; s = carapace width
+-- a crab seen head on, standing at the origin: a wide shell, eyes on stalks, both claws raised, four jointed
+-- legs a side splayed out and down to the ground; s = shell width
 function M.crab(rng, s)
-  local c = tone(0.3)
+  local W, H = s * 0.5, s * 0.26
+  local by = s * 0.28                                  -- the shell's lower rim, above the ground
   for _, sd in ipairs({ -1, 1 }) do
-    for k = 1, 4 do                                    -- walking legs, jointed
-      local y0 = s * lerp(0.12, -0.22, (k - 1) / 3)
-      local a = lerp(30, -40, (k - 1) / 3) * rad
-      local kx, ky = sd * (s * 0.45 + s * 0.35 * cos(a)), y0 + s * 0.35 * sin(a)
-      local ex, ey = kx + sd * s * 0.12, ky - s * 0.3
-      ink.moveto(sd * s * 0.35, y0) ink.lineto(kx, ky) ink.lineto(ex, ey)
+    for k = 1, 4 do                                    -- the legs: out from under the rim to a knee, then down
+      local u = (k - 1) / 3
+      local x0 = sd * W * lerp(0.45, 0.8, u)
+      local kx, ky = sd * W * lerp(1.0, 1.75, u), by + H * lerp(0.9, 0.3, u)
+      local fx = sd * W * lerp(1.15, 2.25, u)
+      local c = tone(lerp(0.3, 0.2, u))
+      ink.smooth(ink.ribbon({ { x0, by + H * 0.2 }, { kx, ky } }, function(t) return s * lerp(0.08, 0.065, t) end), true) ink.fill(c)
+      ink.smooth(ink.ribbon({ { kx, ky }, { lerp(kx, fx, 0.7), ky * 0.45 }, { fx, 0 } }, function(t) return s * lerp(0.065, 0.02, t) end), true) ink.fill(c)
     end
-    ink.stroke(tone(0.24), max(0.4, s * 2.2))
-    -- the claw on its arm
-    local ax, ay = sd * s * 0.55, s * 0.4
-    ink.moveto(sd * s * 0.3, s * 0.2) ink.lineto(ax, ay) ink.stroke(tone(0.24), max(0.5, s * 3))
-    fill({ { ax - s * 0.1, ay - s * 0.05 }, { ax - sd * s * 0.02, ay + s * 0.32 }, { ax + s * 0.1, ay + s * 0.2 }, { ax + s * 0.08, ay - s * 0.06 } }, tone(0.26))
-    ink.moveto(ax, ay + s * 0.12) ink.lineto(ax + sd * s * 0.1, ay + s * 0.3) ink.stroke(tone(0.26), max(0.4, s * 2))
+    -- the claw: an arm up and out from the shell's front, a broad palm, two fingers opening
+    local ax, ay = sd * W * 0.55, by + H * 0.5
+    local px, py = sd * W * 1.1, by + H * 2.3
+    ink.smooth(ink.ribbon({ { ax, ay }, { sd * W * 0.95, by + H * 1.2 }, { px, py - H * 0.4 } }, function(t) return s * lerp(0.1, 0.12, t) end), true) ink.fill(tone(0.28))
+    fill(ellipse(px, py, s * 0.17, s * 0.12, 14, sd * 0.5), tone(0.3))
+    fill({ { px + sd * s * 0.02, py + s * 0.08 }, { px + sd * s * 0.06, py + s * 0.32 }, { px + sd * s * 0.12, py + s * 0.3 }, { px + sd * s * 0.12, py + s * 0.08 } }, tone(0.3))
+    fill({ { px - sd * s * 0.08, py + s * 0.06 }, { px - sd * s * 0.1, py + s * 0.26 }, { px - sd * s * 0.03, py + s * 0.26 }, { px, py + s * 0.08 } }, tone(0.25))
+    if fine() then ink.moveto(px - sd * s * 0.08, py - s * 0.03) ink.lineto(px + sd * s * 0.05, py + s * 0.03) ink.stroke(white, 0.4, 0.6) end
   end
+  -- the shell: wide, its front edge toothed
   local shell = {}
-  for k = 0, 20 do
-    local a = 2 * pi * k / 20
-    local r = 1 + 0.08 * cos(2 * a) - (sin(a) > 0.7 and 0.05 or 0)
-    shell[#shell + 1] = { s * 0.42 * r * cos(a), s * 0.34 * r * sin(a) - s * 0.02 }
+  for k = 0, 18 do
+    local a = pi * k / 18
+    local r = 1 + (k % 2 == 0 and 0.04 or 0) * (abs(cos(a)) > 0.3 and 1 or 0)
+    shell[#shell + 1] = { W * r * cos(a), by + H * r * sin(a) ^ 0.9 }
   end
-  fill(shell, c)
+  shell[#shell + 1] = { -W * 0.8, by - H * 0.3 } shell[#shell + 1] = { W * 0.8, by - H * 0.3 }
+  ink.poly(shell, true) ink.fill(tone(0.3))
   if fine() then
-    fill(ellipse(-s * 0.08, s * 0.08, s * 0.22, s * 0.14, 12), tone(0.48), 0.6)
-    ink.moveto(-s * 0.18, 0) ink.curveto(-s * 0.05, -s * 0.08, s * 0.05, -s * 0.08, s * 0.18, 0) ink.stroke(tone(0.18), 0.35, 0.8)
-    for _, sd in ipairs({ -1, 1 }) do
-      ink.moveto(sd * s * 0.07, s * 0.28) ink.lineto(sd * s * 0.1, s * 0.4) ink.stroke(tone(0.18), 0.45)
-      ink.circle(sd * s * 0.1, s * 0.41, s * 0.03) ink.fill(tone(0.04))
-    end
+    fill(ellipse(-W * 0.15, by + H * 0.6, W * 0.5, H * 0.3, 14), tone(0.48), 0.6)        -- light on its back
+    ink.moveto(-W * 0.3, by - H * 0.05) ink.curveto(-W * 0.1, by - H * 0.2, W * 0.1, by - H * 0.2, W * 0.3, by - H * 0.05) ink.stroke(tone(0.15), 0.45)   -- the mouth's edge
+  end
+  for _, sd in ipairs({ -1, 1 }) do                   -- eyes on stalks
+    ink.moveto(sd * W * 0.18, by + H * 0.85) ink.lineto(sd * W * 0.24, by + H * 1.45) ink.stroke(tone(0.2), max(0.45, s * 2.2))
+    ink.circle(sd * W * 0.24, by + H * 1.5, s * 0.045) ink.fill(tone(0.04))
+    if fine() then ink.circle(sd * W * 0.24 - s * 0.012, by + H * 1.52, s * 0.013) ink.fill(white) end
   end
 end
 
@@ -465,25 +474,51 @@ function M.jelly(rng, s, cur)
   end
 end
 
--- a shrimp, side on, facing +x; s = length
+-- a shrimp side on, facing +x: a smooth body curving down from the head to the tail fan, segment lines,
+-- a rostrum, legs and swimmerets below, two long antennae; s = length
 function M.shrimp(rng, s)
-  local seg = {}
-  for k = 0, 6 do                                      -- the abdomen arching back from the carapace
-    local t = k / 6
-    local a = lerp(0.2, -2.3, t)
-    seg[#seg + 1] = { -s * 0.18 + s * 0.28 * cos(a) - s * 0.28, s * 0.25 * sin(a) + s * 0.05 }
+  -- the spine: from the rostrum's base, back along the carapace, then curling down into the tail
+  local spine = function(v)
+    local a = lerp(0.1, -2.1, v ^ 1.3)
+    return s * 0.1 + s * 0.42 * (cos(a) - 1) + s * 0.02, s * 0.32 * sin(a) + s * 0.12
   end
-  fill({ { s * 0.1, s * 0.12 }, { s * 0.42, s * 0.05 }, { s * 0.1, -s * 0.06 }, { -s * 0.2, -s * 0.02 }, { -s * 0.2, s * 0.14 } }, tone(0.5))
-  for k = 1, #seg do ink.circle(seg[k][1], seg[k][2], s * lerp(0.1, 0.05, (k - 1) / 6)) ink.fill(tone(lerp(0.52, 0.45, (k - 1) / 6))) end
-  local e = seg[#seg]
-  fill({ { e[1], e[2] }, { e[1] + s * 0.14, e[2] - s * 0.1 }, { e[1] - s * 0.05, e[2] - s * 0.14 } }, tone(0.42))
+  local hw = function(v) return s * (0.11 * (1 - v) ^ 0.6 + 0.025) end
+  local body, c = ink.blade(spine, 24, hw, hw)
+  fill(body, tone(0.5))
+  -- the tail fan at the end
+  local ex, ey = c[#c][1], c[#c][2]
+  local px, py = c[#c - 1][1], c[#c - 1][2]
+  local dx, dy = ex - px, ey - py
+  local l = math.sqrt(dx * dx + dy * dy)
+  dx, dy = dx / l, dy / l
+  for _, sd in ipairs({ -1, 0, 1 }) do
+    local ax, ay = dx * 0.25 * s + sd * -dy * 0.1 * s, dy * 0.25 * s + sd * dx * 0.1 * s
+    fill({ { ex, ey }, { ex + ax - dy * s * 0.04, ey + ay + dx * s * 0.04 }, { ex + ax * 1.05, ey + ay * 1.05 }, { ex + ax + dy * s * 0.04, ey + ay - dx * s * 0.04 } }, tone(0.44))
+  end
+  -- the rostrum, toothed, and the head's eye
+  fill({ { s * 0.08, s * 0.2 }, { s * 0.42, s * 0.2 }, { s * 0.1, s * 0.14 } }, tone(0.42))
   if fine() then
-    for k = 1, 5 do local x = lerp(s * 0.05, -s * 0.35, k / 5) ink.moveto(x, -s * 0.02) ink.lineto(x + s * 0.05, -s * 0.16) end
-    ink.stroke(tone(0.3), 0.3)
-    ink.moveto(s * 0.4, s * 0.08) ink.curveto(s * 0.7, s * 0.25, s * 0.85, s * 0.1, s * 1.0, -s * 0.05)
-    ink.moveto(s * 0.38, s * 0.1) ink.curveto(s * 0.55, s * 0.35, s * 0.7, s * 0.4, s * 0.85, s * 0.35)
+    for k = 1, 6 do                                    -- segment lines across the body
+      local v = 0.3 + 0.1 * k
+      local x, y = spine(v)
+      local x2, y2 = spine(v + 0.01)
+      local nx, ny = -(y2 - y), x2 - x
+      local L = math.sqrt(nx * nx + ny * ny) nx, ny = nx / L, ny / L
+      local w = hw(v)
+      ink.moveto(x + nx * w, y + ny * w) ink.lineto(x - nx * w * 0.7, y - ny * w * 0.7)
+    end
+    ink.stroke(tone(0.32), 0.35, 0.8)
+    fill(ellipse(-s * 0.05, s * 0.17, s * 0.12, s * 0.05, 12), tone(0.7), 0.6)    -- light on the carapace
+    for k = 1, 5 do                                    -- walking legs under the carapace, swimmerets behind
+      local x = lerp(s * 0.05, -s * 0.18, k / 5)
+      ink.moveto(x, s * 0.04) ink.lineto(x + s * 0.03, -s * 0.06) ink.lineto(x + s * 0.07, -s * 0.1)
+    end
+    for k = 1, 4 do local x, y = spine(0.35 + 0.1 * k) ink.moveto(x, y - hw(0.35 + 0.1 * k) * 0.8) ink.lineto(x + s * 0.02, y - hw(0.35) * 1.4) end
+    ink.stroke(tone(0.34), 0.35)
+    ink.moveto(s * 0.12, s * 0.16) ink.curveto(s * 0.5, s * 0.45, s * 0.8, s * 0.35, s * 1.05, s * 0.05)
+    ink.moveto(s * 0.13, s * 0.18) ink.curveto(s * 0.4, s * 0.55, s * 0.7, s * 0.6, s * 0.95, s * 0.5)
     ink.stroke(tone(0.35), 0.25)
-    ink.circle(s * 0.3, s * 0.1, s * 0.03) ink.fill(tone(0.04))
+    ink.circle(s * 0.08, s * 0.2, s * 0.032) ink.fill(tone(0.04))
   end
 end
 
@@ -632,7 +667,7 @@ function M.forest(rng, o)
   -- a bunch on a rock: stipes, then their blades; far ones paler and smaller
   local function bunch(x, y, w, n, far, brng)
     local t0 = far and 0.55 or brng.range(0.32, 0.42)
-    local old = far and ink.set_lift(0.45) or nil
+    local old = far and ink.set_lift(0.55) or nil
     ink.layer(far and L_FAR or L_KELP)
     local stipes = {}
     local hw = max(0.45, min(1.1, w * 0.45))           -- the holdfast's spread on the rock
@@ -658,7 +693,7 @@ function M.forest(rng, o)
         local ex, ey = p[1] + L * sin(ang * rad), p[2] + L * cos(ang * rad)
         local mx, my = lerp(p[1], ex, 0.5), lerp(p[2], ey, 0.5)
         local c0, c1 = cell(p[1], p[2]), cell(mx, my)
-        local cap = canopy and 3 or 2
+        local cap = canopy and 2 or 1
         if not blocked(ex, ey, 0.05) and not blocked(mx, my, 0.05) and (crowd[c0] or 0) < cap and (crowd[c1] or 0) < cap then
           crowd[c0], crowd[c1] = (crowd[c0] or 0) + 1, (crowd[c1] or 0) + 1
           plan[#plan + 1] = { brng.fork(), p[1], p[2], ang, L, brng.range(0.16, 0.26) * (far and 0.8 or 1), t0 + brng.range(-0.06, 0.1) }
@@ -680,7 +715,7 @@ function M.forest(rng, o)
   end
 
   -- 1. the far bunches, between and behind the near rocks
-  for _ = 1, floor(W / 3.2) + 1 do
+  for _ = 1, floor(W / 4.5) + 1 do
     local x = rng.range(0, W)
     if not blocked(x, sandtop + 1) then bunch(x, sandtop + 0.2, 0.6, rng.int(1, 3), true, rng.fork()) end
   end
