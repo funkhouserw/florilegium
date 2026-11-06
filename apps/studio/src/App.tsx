@@ -80,7 +80,9 @@ export function App() {
   const [drawn, setDrawn] = useState<Box[][]>(initial.drawn)
   const S = SIZES[sizeKey]
   const W = S.w * CM, H = S.h * CM
-  const [dragging, setDragging] = useState(false)
+  // a drag in progress holds off saving; a flag, not state, so picking up a box doesn't redraw every page
+  const dragging = useRef(false)
+  const setDragging = (b: boolean) => { dragging.current = b }
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [noted, setNoted] = useState<{ text: string; doc: unknown } | null>(null)
@@ -180,12 +182,12 @@ export function App() {
   docNow.current = doc
   const note = noted && noted.doc === doc ? noted.text : ''      // a note lasts until the work changes
   useEffect(() => {
-    if (dragging) return
     const timer = setTimeout(() => {
+      if (dragging.current) return                                   // the drop changes the work, and saves it
       try { saveDoc(doc); setUnsaved(false) } catch { setUnsaved(true) }
     }, 300)
     return () => clearTimeout(timer)
-  }, [doc, dragging])
+  }, [doc])
   function applyDoc(d: Doc) {
     setStories(storiesOf(d)); setSizeKey(d.sizeKey); setFamily(d.family); setFontSize(d.fontSize); setSeed(d.seed); setCats(d.cats); setPieces(d.pieces)
     setGrows(d.grows); setInkName(d.inkName); setCrown(d.crown); setSeason(d.season); setSpanishmoss(d.spanishmoss); setPerPage(d.perPage); setTextColor(d.textColor); setMargins(d.margins); setDrawn(d.drawn)
@@ -1062,7 +1064,7 @@ export function App() {
               svgRef={(el) => { svgs.current[i] = el }} caretRef={caretEl} caret={focused ? m?.caret : undefined} composition={coarse ? null : composition} rects={m?.rects ?? []}
               linking={linking !== null} activeStory={activeId} selectedId={selected?.page === i ? selected.id : null}
               chainLabel={(b) => { const ch = chainOf(b.story); return ch.length > 1 ? `${ch.findIndex((c) => c.page === i && c.id === b.id) + 1}/${ch.length}` : '' }}
-              setDragging={setDragging} editPage={editPage} drawBox={drawBox} afterDraw={afterDraw} startText={startText} removeBox={removeBox} removePage={drawn.length > 1 && i < drawn.length ? () => removePage(i) : undefined} select={(id) => setSelected({ page: i, id })}
+              setDragging={setDragging} editPage={editPage} drawBox={drawBox} afterDraw={afterDraw} startText={startText} removeBox={removeBox} removePage={drawn.length > 1 && i < drawn.length ? () => removePage(i) : undefined} select={(id) => setSelected((s) => (s?.page === i && s.id === id ? s : { page: i, id }))}
               unlink={(b) => unlink(i, b)} touch={coarse} armed={drawArm} disarm={() => setDrawArm(false)} count={pages.length}
               save={savingPage === i ? <span className="hint">Making page {i + 1}…</span>
                 : readyPage?.index === i ? (

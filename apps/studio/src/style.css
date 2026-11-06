@@ -124,7 +124,7 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
   .panel input, .panel select, .panel textarea { font-size: 16px; }    /* iOS zooms into anything smaller */
 }
 @media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
-  .sheethead { position: sticky; top: -16px; z-index: 3; display: flex; align-items: center; gap: 10px; margin: -16px -16px -4px; padding: 10px 16px 6px;
+  .sheethead { position: sticky; top: -16px; z-index: 3; display: flex; align-items: center; gap: 10px; margin: -16px -16px 0; padding: 8px 16px 6px; min-height: 50px;
     background: #fff; border-radius: 14px 14px 0 0; }
   .panel.down .sheethead { box-shadow: 0 6px 10px -6px rgba(27, 42, 107, .25); }
   .sheethead .mini { flex: 1; min-height: 36px; padding: 4px 10px; }
