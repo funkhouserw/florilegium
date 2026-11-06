@@ -1,56 +1,170 @@
-# florilegium
+# florilegium, with cats
 
-[![build](https://github.com/kevinraymond/florilegium/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/kevinraymond/florilegium/actions/workflows/build.yml)
-[![playground](https://github.com/kevinraymond/florilegium/actions/workflows/pages.yml/badge.svg?branch=main)](https://kevinraymond.github.io/florilegium/)
-[![release](https://img.shields.io/github/v/release/kevinraymond/florilegium?color=2456c4)](https://github.com/kevinraymond/florilegium/releases/latest)
-[![license](https://img.shields.io/github/license/kevinraymond/florilegium?color=2456c4)](LICENSE)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kevinraymond/florilegium/badge)](https://scorecard.dev/viewer/?uri=github.com/kevinraymond/florilegium)
+Pages that grow their own pictures. This is Ilse Funkhouser's fork of Kevin Raymond's
+[florilegium](https://github.com/kevinraymond/florilegium), the LuaLaTeX package that grows
+Delft-blue flowers in the margin of a page. The fork adds cats: a cat gym that builds itself
+around the text, one huge oak that turns with the seasons, and Felilegium, a web app that turns a
+post into pages with a cat gym, an oak or Kevin's flowers growing around the words. None of it is
+an image file or a stock drawing. Every post, petal, leaf and whisker is a curve computed while
+the page is made, so every seed grows a different page.
 
-Procedurally generated Delft-blue floral page margins for LaTeX. No images, no imported paths,
-no external assets: every petal, leaf and stem is a curve computed while the page is being
-written, painted like a watercolor, and written straight into the PDF. Every page grows a
-garden of its own, and every document its own plants, each sampled from a genome.
+![one post three ways: a cat gym, an oak and Kevin's flowers](gallery/felilegium-posts.png)
 
-![six seeds](gallery/seeds.gif)
+*One post, three ways: the same words with a cat gym, an oak and Kevin's flowers, each exported
+from Felilegium as a 1080 px Instagram page.*
 
-*Six seeds of the grown margin. Same code, different seed, and the garden fills whatever space
-the text leaves free.*
+**[Make a post in Felilegium](https://felilegium.corporateshill.com)** ·
+[the cat gym](#the-cat-gym) · [the oak](#one-huge-oak) · [Kevin's flowers](#kevins-flowers) ·
+[Kevin's original repository](https://github.com/kevinraymond/florilegium)
 
-**[Try it in your browser](https://kevinraymond.github.io/florilegium/)** ·
-[download the package and the PDFs](https://github.com/kevinraymond/florilegium/releases/latest) ·
-[documentation](#documentation)
+## Felilegium
 
-## Origin
+<img src="gallery/felilegium.png" alt="Felilegium: the panel on the left, pages with text and an oak on the right" width="880">
 
-The [Reddit post](https://www.reddit.com/r/LaTeX/comments/1xixznw/how_do_you_make_these_flowers_in_latex/)
-asked how to make flowers like these in LaTeX. I don't know how the original was made. This
-project is one possible way. The way I did it first, in 1.3, uses hand-authored primitives with
-randomized parameters, painted in Lua and placed by a procedural layout whose "fill the unused
-space" part borrows a 1998 idea from the ornament literature. In 2.0 the plants and animals of
-the grown margin are sampled from genomes of botanical traits, so what grows is procedural too,
-not only where it grows. It gets a similar look, but I explicitly tried to not replicate the
-original.
+Felilegium is for posts, carousels and printed pages. Draw a box on a page, type in it, and pick
+what grows around your words:
 
-This project was made with the assistance of AI (Claude), and I'm sharing the
-[process I used](PROCESS.md) to bring it to life.
+- **A cat gym**, **one huge oak** (lush or open crown, any season, Spanish moss if you like),
+  **Kevin's flowers** (spring, summer or autumn), or the first, chunkier cats.
+- Text flows from box to box and onto new pages as you type. A new box carries on the text
+  you're in; "Unlink" on its label gives it text of its own.
+- Headings, bold, italic, lists and alignment, with Markdown shortcuts as you type
+  (`# `, `- `, `**bold**`, `*italic*`). Accents and emoji work too.
+- Each box keeps the drawing clear of it, or sets its text over or behind the drawing.
+- Instagram 4:5, square, story 9:16, A4 and US Letter pages; margins on all four sides; the
+  pages zoom without the panel changing size.
+- Export PNGs (1080 px wide for social media), a PDF with real text you can select, or one
+  self-contained HTML file. Your work is kept in the browser and can be saved as a file.
+
+The drawing only changes when you ask: "Generate" catches it up with your changes, and "Grow a
+different one" tries a new seed. It grows in your browser: the same Lua that draws the LaTeX
+pages, run in [wasmoon](https://github.com/ceifa/wasmoon) (Lua compiled to WebAssembly), so
+there is no server. Growing needs the network, since wasmoon loads from jsDelivr. Felilegium is
+tested in Chrome.
+
+To run it yourself:
+
+```sh
+cd apps/studio
+npm install
+npm run dev          # http://localhost:5173/
+npm run build        # a static site in apps/studio/dist (about 3.3 MB)
+```
+
+The built site has to sit at the root of a domain, as it does at felilegium.corporateshill.com,
+because its fonts load from `/fonts/`.
+
+## The cat gym
+
+![three finished cat gym pages, seeds 4, 7 and 12](gallery/cattree-pages.png)
+
+*Three seeds of the cat gym in a LuaLaTeX margin (4, 7 and 12), each the last frame of its
+animation.*
+
+<img src="gallery/cattree-grow.gif" alt="a cat gym building itself in the margin" width="300" align="right">
+
+`theme=cattree` turns the margin into a cat gym, drawn at one twentieth of real size (a hexagon
+is 60 cm across, a post 9 cm thick), so a cat fits every hexagon and basket. It is heavy at the
+floor and lighter as it rises:
+
+- **The tower**: posts in whole levels, the shorter ones holding up platforms the taller ones
+  run through, with crossbeams, hammocks, condos, baskets on arms, rings and sisal tubes.
+- **The wall**: a route of boards, a rope bridge never steeper than 15 degrees, hexagons and a
+  clear bubble.
+- **The top**: a few half-moon shelves joined by floating steps, pegs and dots.
+
+Every new piece joins the gym by a way a cat could climb: floating steps when it's level, a sisal
+ramp or gangway stairs on a slant, a ladder or a pole with half-round steps going up, or nothing
+at all where a cat would just jump. On a last page with room under the text, the gym turns along
+the floor into an L, often a U with a bridge back to the tower. `density` thins it down to the
+tower alone.
+
+<img src="gallery/cats.png" alt="cats in four coats and four poses, then meowing, batting a toy, stretching and scratching a post" width="720">
+
+*The cats: solid, tabby, tuxedo and pale coats, sitting, walking, loafing and curled asleep, and a
+few things cats do: meowing at a heading, batting a toy, stretching, scratching a post.*
+
+One or two cats settle wherever they fit: on a shelf, draped over an edge, peeking out of a
+condo, walking across the bridge. `\florilegiuminitial` puts a cat on the first letter, or curls
+one up inside it. `cattree.tex` is a document in the theme, and
+`python3 tools/animate.py --seed 4 --theme cattree` films a gym building itself (it needs
+LuaLaTeX, `pdftoppm` and `ffmpeg`).
+
+## One huge oak
+
+![one oak in spring, summer, autumn, winter and dead](gallery/oak-seasons.png)
+
+*One oak (seed 3) through the year, as Felilegium grows it: spring and summer, pumpkins and
+falling leaves in autumn, a snowman in winter, and bats around it once it has died. The cat stays
+put.*
+
+`theme=oak` grows one huge oak on every page, around the text block, the head rule and the page
+number. Its limbs reach into whatever room the text leaves, and long near-level limbs sweep out
+where there is space beside the trunk. Cats lie along the branches; there are nests, acorns,
+butterflies, mushrooms in the grass, a heart carved in the trunk, and a swing on a last page.
+Roots run along the ground from behind the trunk.
+
+<img src="gallery/oak-detail.png" alt="close-up of the oak: a tabby cat lying on a branch among leaves and acorns" width="600">
+
+*Close up: the bark, the leaves and the acorns are drawn too, so the oak holds up when you zoom in.*
+
+![four LaTeX pages with the oak theme](gallery/oak-pages.png)
+
+*In LuaLaTeX: the first letter becomes a tree; the last page's oak spreads where the text stops,
+with a swing; the oak in the document's own ink; and a short page in winter.*
+
+`\florilegiumage` sets the season: 0 is spring, 0.5 summer, 1 autumn, 1.5 winter and 2 a dead
+tree. The oak comes in its own greens and browns, takes the document's ink if you set one, and
+`theme=oakblue` draws it in the ink even at the default Delft blue. `oak.tex` describes it all,
+on pages grown by the theme.
+
+## Kevin's flowers
+
+| six seeds | watch it grow |
+|---|---|
+| <img src="gallery/seeds.gif" alt="six seeds of the grown margin" width="400"> | <img src="gallery/growth.gif" alt="seed 6 growing" width="400"> |
+
+*Kevin's grown margin. Same code, different seed, and the garden fills whatever space the text
+leaves free; on the right, seed 6 grows from an empty margin to its finished page.*
+
+Under the cats is Kevin Raymond's florilegium 2.0, and it's still all here. Each plant in a grown
+margin is a species: 62 traits sampled from one of fifteen body plans that keep botany's rules,
+so a lily has its parts in threes and a pea flower is two-sided with a pod. A document gets
+eight species and each page grows four. Visitors come with them, from their own genomes:
+butterflies, bees, dragonflies, ladybirds, caterpillars, snails and birds, each plant bringing
+the one its flowers are for.
+
+<img src="gallery/species-visitors.png" alt="butterflies, moths, bees, a hoverfly, dragonflies, beetles, caterpillars, a snail and a bird" width="600">
+
+In Felilegium, choose "Kevin's flowers": the garden treats your text boxes as the text block,
+grows on the wider side of the page and fills the space under where the text ends, as it does on
+the last page of a document. Each seed is a new set of plants.
+
+Kevin's [README](https://github.com/kevinraymond/florilegium#readme) tells the rest, with
+pictures: how the growth loop works, the margin that reads the text (flowers at headings,
+seasons through a document), the TikZ library that draws the same plants in pure TikZ, the
+geometric and math themes, the playground, the PostScript port, and the ports others have made.
 
 ## Quick start
 
-With LuaLaTeX, put `florilegium.sty` and the `florilegium*.lua` files beside your document (or
-upload them to an [Overleaf](https://www.overleaf.com) project set to LuaLaTeX). They are all in
-[`florilegium.zip`](https://github.com/kevinraymond/florilegium/releases/latest/download/florilegium.zip),
-with the TikZ library and the manual:
+With LuaLaTeX, put `florilegium.sty` and the `florilegium*.lua` files from this repository beside
+your document (or upload them to an [Overleaf](https://www.overleaf.com) project set to LuaLaTeX).
+[Kevin's releases](https://github.com/kevinraymond/florilegium/releases/latest) have the flowers,
+the TikZ library and the manual, but not the cats or the oak.
 
 ```latex
 \usepackage[a4paper,left=68mm,right=22mm]{geometry}   % a wide margin for the garden
-\usepackage[grown,sections]{florilegium}              % flowers at the headings, too
+\usepackage[grown,sections]{florilegium}              % Kevin's flowers, at the headings too
+% \usepackage[grown,theme=cattree]{florilegium}       % or a cat gym
+% \usepackage[grown,theme=oak]{florilegium}           % or one huge oak (theme=oakblue: in the ink)
 \definecolor{ink}{HTML}{5B2A1F}                       % optional: any hue (this is sepia)
 ...
+\florilegiumage{1}                                    % optional: autumn
 \florilegiuminitial[4]{T}his paragraph starts with a decorated T.
 \florilegiumtextend                                   % at the very end: fill the space below
 ```
 
-With pdfLaTeX, or in any TikZ picture, the TikZ library draws the same species in pure TikZ
+With pdfLaTeX, or in any TikZ picture, the TikZ library draws Kevin's species in pure TikZ
 (it needs only its two `tikzlibraryflorilegium*.code.tex` files):
 
 ```latex
@@ -63,250 +177,52 @@ With pdfLaTeX, or in any TikZ picture, the TikZ library draws the same species i
 
 [Using the package](docs/usage.md) lists every option and command.
 
-## The documents
+## Origin
 
-| | `florilegium-grow.tex` | `florilegium.tex` |
-|---|---|---|
-| composition | **grown**: plants grown to fit the page by a greedy space-filling loop | **authored**: stems, leaves and flowers placed by hand, every parameter sampled |
-| adapts to | the page layout, and the free space below the text on the last page | nothing (tuned for A4, 68 mm margin) |
-| preview | <img src="gallery/preview-grown.png" alt="grown" width="300"> | <img src="gallery/preview-authored.png" alt="authored" width="300"> |
-| PDF | [florilegium-grow.pdf](https://github.com/kevinraymond/florilegium/releases/latest/download/florilegium-grow.pdf) | [florilegium.pdf](https://github.com/kevinraymond/florilegium/releases/latest/download/florilegium.pdf) |
+Kevin Raymond made florilegium to answer a
+[Reddit post](https://www.reddit.com/r/LaTeX/comments/1xixznw/how_do_you_make_these_flowers_in_latex/)
+asking how to make flowers like these in LaTeX. Its first way, in 1.3, paints hand-designed
+flowers with randomized parameters in Lua and places them with a procedural layout whose "fill
+the unused space" part borrows a 1998 idea from the ornament literature. In 2.0 the plants and
+animals are sampled from genomes of botanical traits, so what grows is procedural too, not only
+where it grows. It gets a similar look to the original without replicating it. Kevin made it with
+the assistance of AI (Claude) and shares [the process he used](PROCESS.md).
 
-Both are self-describing: their body text is the write-up of how the margin is drawn.
-[`showcase.tex`](https://github.com/kevinraymond/florilegium/releases/latest/download/showcase.pdf)
-shows what the margin does with a document's text, and
-[`spread.tex`](https://github.com/kevinraymond/florilegium/releases/latest/download/spread.pdf)
-two-sided pages.
-
-## Watch it grow
-
-| as it grows | with the free space it fills |
-|---|---|
-| <img src="gallery/growth.gif" alt="seed 6 growing" width="400"> | <img src="gallery/growth-explain.gif" alt="seed 6 growing, with the free discs marked" width="400"> |
-
-*Seed 6, from an empty margin to the finished page. The stems rise first, leaves open as the
-tips pass their nodes, and each stem ends in a flower. Then the greedy loop takes over: on the
-right, each dashed circle is the largest free disc it found, just before a branch grows to it.
-Big holes come first, small ones last. The visitors fly in at the end, and the last frame is
-exactly the page this seed always gives.*
-
-[How it works](docs/how-it-works.md) follows the loop step by step.
-
-## Plants from genomes
-
-| three plants on one root, twice | every flower form, as its plant holds it |
-|---|---|
-| <img src="gallery/species-strips.png" alt="two strips of three species plants" width="400"> | <img src="gallery/species-forms.png" alt="the flower forms of the species" width="400"> |
-
-Each plant in a grown margin is a species, 62 traits sampled in a fixed order from one of
-fifteen body plans, from the visitor its flowers are for to its flower, its cluster, its leaf
-and its fruit. A body plan keeps botany's rules, so a lily has its parts in threes and a pea
-flower is two-sided with a pod. A document gets eight species and each page grows four, so
-they recur through the document the way plants recur through a garden. Each species can
-describe itself:
-
-> A blue wheel of five lobes in a coiled cyme that uncurls, for bees; hairy, smooth-edged, oval
-> leaves; then nutlets.
->
-> A blue pea flower along a raceme, for bees; leaves of five pairs of smooth-edged leaflets,
-> climbing by tendrils; then pods.
-
-[The species garden](docs/species.md) describes the genome and how a page chooses its plants.
-Any of its traits can be fixed and the rest sampled, so a TikZ pic can grow a seven-leaflet
-palmate leaf or a white rose ([your own genome](docs/tikz.md#a-genome-of-your-own),
-[the traits](docs/traits.md)).
-
-## Visitors
-
-<img src="gallery/species-visitors.png" alt="butterflies, moths, bees, a hoverfly, dragonflies, beetles, caterpillars, a snail and a bird" width="600">
-
-Visitors are sampled from genomes of their own, fifteen kinds from butterflies and hawkmoths to
-ladybirds, caterpillars, snails and birds. Each plant brings the visitor its flowers are for, so
-a bee flies in near a bee flower and a hummingbird near a red tube, while a snail climbs a stem
-and a caterpillar eats a leaf of its own. About three come to a page; `novisitors` leaves them
-out and the page exactly as it was.
-
-## The margin reads the text
-
-![the three pages of showcase.tex](gallery/preview-showcase.png)
-
-*`showcase.tex`, "A year in the margin": spring on the first page, summer, autumn on the last.*
-
-A paragraph can open with a decorated initial, the letter's outline read from a font and wound
-with a vine that passes over and under its strokes. Every numbered heading can get a flower
-beside it in copper, the way headings were once picked out in red, and `\florilegiumbloom`
-puts one beside any line. With the option `aging`, the garden ages from buds on the first page
-to fruit and seed heads on the last. [Using the package](docs/usage.md#the-margin-reads-the-text)
-has the details.
-
-## In pure TikZ
-
-The species don't need Lua. Under pdfLaTeX, `\usetikzlibrary{florilegium}` samples each plant
-and visitor from its genome, grows it and paints it with pgfmath and TikZ alone, and each of
-the strips above is one `\pic`. It takes a minute and a half for a strip of three plants 21 cm
-tall, and pdfTeX needs more memory than it has by default. Under LuaLaTeX, the same pics are drawn by
-florilegium's Lua in under a second, within a fraction of a point of pure TikZ's drawing. Only
-the margin itself, laid out around a page's text, is the package's and needs LuaLaTeX.
-
-```latex
-\pic {florilegium flower={seed=7, role=hero, size=2.6cm}};
-\pic {florilegium inflorescence={seed=20, role=heath, scale=1.3, season=0.3}};   % in spring
-\pic {florilegium visitor={seed=3, role=butterfly, size=3cm}};
-```
-
-[The TikZ library](docs/tikz.md) lists every pic and key.
-
-## Themes
-
-![seed 6 as the species garden, geometric and math](gallery/themes.png)
-
-*Seed 6 three times: the species garden, with `theme=geometric`, and with `theme=math`.*
-
-The growth loop never knew what it was drawing, so a theme can redraw it. `theme=geometric`
-cuts v1.3's plant from flat, straight-edged shapes, with crystals among the flowers.
-`theme=math` grows no plant at all, but figures, families of figures and equations that cascade
-down the margin and across the foot of the page. [Themes](docs/themes.md) shows both, and how
-to write one.
-
-**`theme=cattree`** is a cat gym (`florilegium-theme-cattree.lua`), drawn at one twentieth of real size
-(a hexagon is 60 cm across, a post 9 cm thick), so a cat fits every hexagon and basket. It is
-heavy at the floor and lighter as it rises: a tower of posts in whole levels, the shorter ones
-holding up platforms the taller ones run through, with crossbeams, hammocks, condos, baskets
-on arms, rings and sisal tubes; then the wall (a route of boards, a rope bridge never steeper
-than 15 degrees, hexagons, a clear bubble); then a few half-moon shelves joined by floating
-steps, pegs and dots. Connectors follow the slope: floating steps when level, dots, pegs,
-gangway stairs or a sisal ramp on a slant, and going up a ladder hung flat on the wall, a pole
-with half-round steps, or nothing at all (staggered shelves a cat jumps). On a last page with room under the text it turns into an L along the
-floor, often a U with a bridge back to the tower. The free-space loop fills what is left,
-each new piece joined by a way a cat could climb, and one or two cats settle where they
-fit: lying, sitting, curled, meowing at a heading, stretching, scratching a post, draped over
-an edge, peeking out of a condo, walking across a bridge. `density` thins it all, down to the
-tower alone. `\florilegiuminitial` puts a cat on (or in) the letter.
-
-<img src="gallery/cattree-grow.gif" alt="a cat gym building itself in the margin" width="420">
-
-**`theme=oak`** is one huge oak on every page (`florilegium-theme-oak.lua`), grown around the text block, with cats on its perches. `\florilegiumage` sets the season (past autumn, 1.5 is winter and 2 a dead tree), and `\florilegiuminitial` makes the letter a tree. It comes in its own greens and browns, or in the document's ink with `theme=oakblue`. `oak.tex` describes it.
-
-## More in the margin
-
-| | |
-|---|---|
-| <img src="gallery/inks.png" alt="one seed in six inks" width="400"> | <img src="gallery/dials.png" alt="seed 6 at four densities and a lower intensity" width="400"> |
-| *[Any ink](docs/usage.md#colors).* The whole palette comes from one color, computed in OKLCH so the pale end never turns gray. | *[Less in the margin](docs/usage.md#less-in-the-margin).* `density` grows less, down to a single vine; `intensity` paints paler. |
-| <img src="gallery/spread.png" alt="pages 2 and 3 of spread.tex" width="400"> | <img src="gallery/ornaments.png" alt="ornaments set in the text" width="400"> |
-| *[Both sides of the page](docs/usage.md#both-sides-of-the-page).* The garden grows in the wider margin, mirrored on a right-hand page. | *[One ornament in the text](docs/usage.md#one-ornament-in-the-text).* `\florilegiumornament{leaf}` sets one shape in the line. |
-
-## Without TeX
-
-| SVG and the browser | PostScript |
-|---|---|
-| <img src="gallery/playground.png" alt="the playground, a proof of the page and its colophon" width="400"> | <img src="gallery/printed.jpg" alt="two prints of florilegium.ps, two different gardens" width="400"> |
-| `florilegium-svg.lua` runs the package's own Lua under any Lua 5.3 or 5.4 and writes the page as SVG, byte for byte the drawing LuaLaTeX would make, for Typst or any page background. The [playground](https://kevinraymond.github.io/florilegium/) runs it in the browser, set as a printer's proof whose colophon is the set of controls. | `postscript/florilegium.ps` grows v1.3's garden in PostScript, one self-contained file. Ghostscript or a printer computes every petal while it reads the page; sent twice to a printer with no seed, it prints two different gardens. |
-
-[SVG, Typst and the browser](docs/svg-and-web.md) and [the PostScript port](postscript/README.md)
-have the details.
-
-## Ports and adaptations
-
-Other people have taken the garden further. Each of these is its author's own project, kept in
-its own repository, and follows the release named beside it; questions about one belong there.
-
-| project | what it does | follows |
-|---|---|---|
-| [groeneveld/florilegiumTypst](https://github.com/groeneveld/florilegiumTypst) | a Typst package, the drawing code translated to Rust and run as a WebAssembly plugin, with a sumi-e plum style of its own | 1.1 |
-| [Baldomo/florilegium-typst](https://github.com/Baldomo/florilegium-typst) | a second Typst package, also a Rust port run as a WebAssembly plugin | 1.2 |
-| [wilsybubs/florilegium](https://github.com/wilsybubs/florilegium) | a fork that compiles with XeLaTeX as well | 1.1 |
-| [jfoboss/florilegium](https://github.com/jfoboss/florilegium) | a JavaScript port that regrows the garden on an e-book's part-title pages, and a Claude skill (in Russian) that builds ePub, FB2 and MOBI books with it | 1.3 |
-| [amberwhitehead/florilegium](https://github.com/amberwhitehead/florilegium) | a single web page, in plain JavaScript and SVG, that grows a garden around a poem you write | 1.1 |
-
-[tikz-flora](https://github.com/wn-mitch/tikz-flora) by wn-mitch is a LuaLaTeX package of its
-own that grows watercolor flora in the margin, drawn through PGF, and names florilegium among
-the projects it started from.
-
-To build on florilegium from another tool, call `florilegium-svg.lua`. Its command line and the
-options of its `page` function are what stays put from one release to the next, and they draw
-the garden LuaLaTeX draws ([SVG, Typst and the browser](docs/svg-and-web.md)). The other files,
-and the functions inside them, may be renamed or rewritten in any release, as 1.3 renamed every
-module; each release's notes list the files it renamed or removed. Pin a port to a release tag.
-
-## 1.3 and 2.0
-
-Nothing in either release is an image: every shape is computed from a seed. What the code
-decides is another matter. In 1.3 the margin is grown, but what grows in it comes from a fixed
-set of *hand-designed kinds*, shapes written by hand (a flower, a lily, a leaf, a butterfly ...)
-whose sizes and details are random. In 2.0 the grown margin's plants and animals are *species*
-sampled from genomes, so each document's seed grows plants of its own, and the TikZ library
-draws the same species on their own.
-
-| page 2 of the grown document, 1.3 and 2.0 | up close at 600 dpi, 1.3 left and 2.0 right |
-|---|---|
-| <img src="gallery/compare-pages.png" alt="the margin of the same page in 1.3 and in 2.0" width="300"> | <img src="gallery/compare-600dpi.png" alt="the top flower and the middle of the column of each, at 600 dpi" width="500"> |
-
-*The same page and seed in both releases. 2.0 paints its species with 1.3's washes, streaks and
-veins, so what changes is what grows: daisies, star lilies, a fern at the root, and the visitors
-those plants bring.*
-
-| what | release | where things go | the plants and animals | drawn by |
-|---|---|---|---|---|
-| grown margin | 1.3 | **procedural**, grown into the free space | hand-designed kinds | Lua (LuaLaTeX) |
-| grown margin | 2.0 | **procedural**, grown into the free space | **procedural** species from genomes | Lua (LuaLaTeX) |
-| authored page | both | placed by hand | hand-designed kinds | Lua (LuaLaTeX) |
-| geometric theme | both | **procedural**, grown | hand-designed kinds, cut flat | Lua (LuaLaTeX) |
-| math theme | both | **procedural**, packed into the free space | figures computed from their mathematics, and TeX's equations | Lua and TeX (LuaLaTeX) |
-| ornaments and initials | both | set in the text; an initial's vine grown round its letter | hand-designed kinds | Lua (LuaLaTeX) |
-| TikZ pics (`\usetikzlibrary{florilegium}`) | 2.0 | **procedural**, each pic grows its own plants | **procedural** species from genomes | pure TikZ (pdfLaTeX or LuaLaTeX), or Lua (LuaLaTeX's default) |
-| SVG without TeX, and the playground | both | as that release's margin | as that release's margin | any Lua 5.3 or 5.4, a browser |
-| PostScript (`postscript/florilegium.ps`) | both | **procedural**, grown | hand-designed kinds (1.3's garden) | PostScript |
-
-A species page draws about 1.7 times as much as a 1.3 page, and takes a little under twice as
-long:
-
-| | 1.3 | 2.0 |
-|---|---|---|
-| ten pages of text, no margin (LuaLaTeX) | 0.4 s, 33 KB | 0.4 s, 33 KB |
-| the same ten pages with the grown margin (LuaLaTeX) | 7.1 s, 6.3 MB | 12.3 s, 10.5 MB |
-| what the margin adds to a page | 0.68 s, 0.63 MB | 1.19 s, 1.0 MB |
-| one TikZ strip of three plants, pdfLaTeX, pure TikZ | not in 1.3 | 91 s, 1.3 MB (6.3 million words of TeX's memory) |
-| the same strip, LuaLaTeX, pure TikZ (`engine=tikz`) | not in 1.3 | 96 s, 1.3 MB |
-| the same strip, LuaLaTeX, Lua engine (the default) | not in 1.3 | 0.8 s, 0.5 MB |
-
-*`tools/bench.tex` (seed 7, the last page short) and `tools/bench-tikz.tex`, timed on
-2026-11-03 on an Intel Core i9-13900K with LuaHBTeX 1.17.0 (TeX Live 2023), each time the
-median of three runs (pure TikZ: one run). What the margin adds is the difference from the same
-text without one (option `nomargin`), per page. `make bench` measures every row again.*
+Ilse Funkhouser forked it to grow cats. The cat gym came first, as a theme for the margin, then
+the oak, then Felilegium, so the same drawings could go on a blog post or a carousel. The fork
+was also written with Claude (Claude Code). The pictures are procedural code throughout, with no
+generative image models.
 
 ## Documentation
 
-- [Using the package](docs/usage.md) has the options and commands, seeds, colors, initials,
-  headings, seasons, density, two-sided pages and ornaments.
-- [The species garden](docs/species.md) describes the genomes, the body plans, how a document
-  chooses its plants, and the visitors.
-- [The TikZ library](docs/tikz.md) lists the pics and their keys, and explains the two engines
-  and pdfLaTeX's memory; [the traits](docs/traits.md) lists every trait a pic can fix.
-- [Themes](docs/themes.md) shows geometric and math, and how to write a theme.
-- [How it works](docs/how-it-works.md) follows the painting, the growth loop, the reading of the
-  page, the initials and the animation.
-- [SVG, Typst and the browser](docs/svg-and-web.md) and [the PostScript port](postscript/README.md)
-  draw the garden without TeX.
-- [Building and checking](docs/building.md) lists every `make` target and check.
-- [CLAUDE.md](CLAUDE.md) is a handoff-style map of the code, its conventions and traps, and ideas
-  not yet done.
-
-These pages, with this README's origin, quick start and credits, are also typeset as one PDF,
-the manual [`florilegium-doc.pdf`](https://github.com/kevinraymond/florilegium/releases/latest/download/florilegium-doc.pdf),
-which is in `florilegium.zip` too.
+- [Using the package](docs/usage.md): options and commands, seeds, colors, initials, headings,
+  seasons, density, two-sided pages and ornaments.
+- [The species garden](docs/species.md): Kevin's genomes, body plans and visitors.
+- [The TikZ library](docs/tikz.md) and [the traits](docs/traits.md): the pics, their keys and
+  every trait a pic can fix.
+- [Themes](docs/themes.md): geometric and math, and how to write a theme. The cat gym and the
+  oak are described above.
+- [How it works](docs/how-it-works.md): the painting, the growth loop, the initials and the
+  animation.
+- [SVG, Typst and the browser](docs/svg-and-web.md) and [the PostScript port](postscript/README.md):
+  the garden without TeX.
+- [Building and checking](docs/building.md): every `make` target and check.
+- [CLAUDE.md](CLAUDE.md): a map of the code, its conventions and traps.
 
 ## Build
 
 ```sh
-make                        # the four PDFs and the manual (LuaLaTeX)
-make zip                    # build/florilegium.zip, the package as one folder, for CTAN and the release
+make                        # Kevin's four PDFs and the manual (LuaLaTeX)
+make cattree.pdf oak.pdf    # the cat gym and oak documents
 make RUN=tools/in-docker    # the same in a TeX Live image, after: docker build -t florilegium-tex tools
-make playground             # the browser playground at http://localhost:8000/web/
+make playground             # Kevin's browser playground at http://localhost:8000/web/
+cd apps/studio && npm install && npm run dev   # Felilegium
 ```
 
 ## Credits
 
+- [florilegium](https://github.com/kevinraymond/florilegium) is Kevin Raymond's, and so is
+  everything in this repository that isn't about cats, oaks or Felilegium.
 - The [Reddit post](https://www.reddit.com/r/LaTeX/comments/1xixznw/how_do_you_make_these_flowers_in_latex/)
   that asked the question (see [Origin](#origin)).
 - The growth loop follows Wong, Zongker & Salesin,
@@ -335,7 +251,7 @@ make playground             # the browser playground at http://localhost:8000/we
   pow). It is not part of pgf; its header says how it differs and where pgf is, as the LPPL
   asks of a derived work, and like pgf it is under the LPPL 1.3c.
 - `--bleed` in `florilegium-svg.lua` comes from jfoboss's e-book port, whose unclip step it
-  does. jfoboss proposed it for this repository in
+  does. jfoboss proposed it for Kevin's repository in
   [#27](https://github.com/kevinraymond/florilegium/pull/27), whose test page and part-title
   example are in 2.0.
 - The repository's social image writes "florilegium" along the strokes of the Hershey Script
@@ -344,12 +260,16 @@ make playground             # the browser playground at http://localhost:8000/we
   source and terms.
 - `\florilegiumornament`, its `ink` and `seed=random` keys, and the `density` option answer
   [issue #4](https://github.com/kevinraymond/florilegium/issues/4) from rubyFeedback.
-- The playground runs the Lua in the browser with [wasmoon](https://github.com/ceifa/wasmoon)
-  (MIT) and typesets the math theme's equations with [MathJax](https://www.mathjax.org) (Apache 2.0),
-  both loaded from jsDelivr. It is set in Igino Marini's IM FELL DW Pica (SIL OFL) and Latin Modern
-  (GUST e-foundry, GUST Font License); see `web/fonts/README.md`. Its color-blindness views use
+- The playground and Felilegium run the Lua in the browser with [wasmoon](https://github.com/ceifa/wasmoon)
+  (MIT); the playground typesets the math theme's equations with [MathJax](https://www.mathjax.org) (Apache 2.0),
+  both loaded from jsDelivr. The playground and Felilegium are set in Igino Marini's IM FELL DW Pica (SIL OFL) and Latin Modern
+  (GUST e-foundry, GUST Font License); see `web/fonts/README.md`. The playground's color-blindness views use
   the model of Machado, Oliveira & Fernandes, *A Physiologically-based Model for Simulation of
   Color Vision Deficiency* (IEEE TVCG, 2009).
+- Felilegium lays out its text with Cheng Lou's [Pretext](https://github.com/chenglou/pretext),
+  edits it with Marijn Haverbeke's [ProseMirror](https://prosemirror.net), writes PDFs with
+  Andrew Dillon's [pdf-lib](https://pdf-lib.js.org) and fontkit, and is built with
+  [React](https://react.dev) and [Vite](https://vite.dev), all under the MIT license.
 - The math theme's figures keep the names of the people they come from: Maurer's roses, Vogel's
   model of the sunflower, Temple Fay's butterfly curve, the Petersen graph, Koch's snowflake,
   Hilbert's curve, Lissajous figures, the gasket of Apollonius.
@@ -358,4 +278,7 @@ make playground             # the browser playground at http://localhost:8000/we
 
 MIT, see [LICENSE](LICENSE), except `florilegium-pgfmath.lua`, which reimplements part of pgf in
 Lua and is distributed under the [LaTeX Project Public License 1.3c](https://www.latex-project.org/lppl/lppl-1-3c/),
-as its header says. Copyright (c) 2026 Kevin Raymond.
+as its header says. Copyright (c) 2026 Kevin Raymond. The cat gym, the oak, the old cats and the scene files
+(`florilegium-theme-cattree.lua`, `florilegium-theme-oak.lua`, `florilegium-theme-oakblue.lua`,
+`florilegium-theme-oldcats.lua`, `florilegium-scene.lua`) are Copyright (c) 2026 Ilse Funkhouser,
+under the same MIT license, as their headers say.
