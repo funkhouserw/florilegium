@@ -2209,16 +2209,28 @@ function M.forest(rng, o)
     return pts
   end
   -- a bunch on a rock: stipes, then their blades; far ones paler and smaller
-  local function bunch(x, y, w, n, far, brng)
+  local function bunch(x, y, w, n, far, brng, layer)
     local t0 = far and 0.55 or brng.range(0.32, 0.42)
     local old = far and ink.set_lift(0.55) or nil
-    ink.layer(far and L_FAR or L_KELP)
+    ink.layer(layer or (far and L_FAR or L_KELP))
     local stipes = {}
     local hw = max(0.45, min(1.1, w * 0.45))           -- the holdfast's spread on the rock
     for k = 1, n do
       local u = n > 1 and (k - 1) / (n - 1) - 0.5 or 0      -- a bunch fans out from its holdfast as it rises
       local sx = x + u * min(0.3, w * 0.25) + brng.sym(0.05)
-      stipes[#stipes + 1] = stipe(sx, y + hw * 0.42, brng.fork(), u * brng.range(0.08, 0.2))
+      local st = stipe(sx, y + hw * 0.42, brng.fork(), u * brng.range(0.08, 0.2))
+      stipes[#stipes + 1] = st
+      -- giant kelp forks near its foot: now and then a second stipe leaves this one, leaning the other way
+      if #st > 12 and brng.chance(far and 0.2 or 0.45) then
+        local j = brng.int(4, min(#st - 4, 14))
+        local b = stipe(st[j][1], st[j][2], brng.fork(), (u >= 0 and -1 or 1) * brng.range(0.06, 0.14))
+        if #b > 6 then
+          local joined = {}
+          for q = 1, j - 1 do joined[q] = st[q] end
+          for q = 1, #b do joined[#joined + 1] = b[q] end
+          stipes[#stipes + 1] = joined
+        end
+      end
     end
     -- the blades are planned first, so each stipe is drawn only a little past its last blade (a bare stipe
     -- running on round a text box would trace its outline)
@@ -2288,10 +2300,31 @@ function M.forest(rng, o)
       ink.fill(tone(0.82), rng.range(0.1, 0.18))
     end
   end
+  -- 0b. fish far off in the blue, small and pale, behind the kelp (they don't need to keep clear of much)
+  do
+    local old = ink.set_lift(0.62)
+    for _ = 1, rng.int(3, 6) do
+      local L = rng.range(0.5, 0.9)
+      local x, y = rng.range(1, W - 1), rng.range(H * 0.3, H * 0.9)
+      if not blocked(x, y, 0.4) then
+        ink.push() ink.translate(x, y) ink.scale(cur, 1) ink.rotate(rng.sym(8)) M.fish(rng.fork(), rng.pick({ "senorita", "rockfish", "bass" }), L) ink.pop()
+      end
+    end
+    ink.set_lift(old)
+  end
   -- 1. the far bunches, between and behind the near rocks
   for _ = 1, floor(W / 4.5) + 1 do
     local x = rng.range(0, W)
     if not blocked(x, sandtop + 1) then bunch(x, sandtop + 0.2, 0.6, rng.int(1, 3), true, rng.fork()) end
+  end
+  -- 1b. a middle row of kelp, nearer than the far one, behind the near rocks: fuller and less regular
+  for _ = 1, floor(W / 3.0) + 1 do
+    local x = rng.range(0.5, W - 0.5)
+    if not blocked(x, sandtop + 1.5) then
+      local old = ink.set_lift(0.28)
+      bunch(x, sandtop + 0.1, rng.range(0.7, 1.4), rng.int(1, 3), false, rng.fork(), L_FAR)
+      ink.set_lift(old)
+    end
   end
   -- 2. the floor and the rocks
   ink.layer(L_FLOOR)
