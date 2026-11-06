@@ -1892,6 +1892,35 @@ function M.compose(C, ink, seed, col, o)
       end
     end
   end
+  -- a house the post runs through: a condo in a post's bare stretch, the post going in at its floor and on
+  -- out of its roof (drawn over the post, so the post is hidden inside it), one on a page, two on a wide one
+  do
+    local cw, ch = real(C.DIM.condo_w), real(C.DIM.condo_h) + 0.2
+    local nthru, maxthru = 0, wide and 2 or 1
+    local order = {}
+    for i = 1, n do order[i] = i end
+    shuffle(order)
+    for _, i in ipairs(order) do
+      if nthru >= maxthru or DD < 0.4 then break end
+      local ph = posth[i]
+      if ph > ch + 1.4 and rng.chance(0.75) then
+        -- the heights the condo could take along the post, a quarter level apart, low ones first
+        local ys = {}
+        for y = top + 0.5, top + ph - ch - 0.5, step / 4 do ys[#ys + 1] = y end
+        for _, y in ipairs(ys) do
+          if free(xs[i] - cw / 2, y, xs[i] + cw / 2, y + ch, 0.05, "post") then
+            local holes = ({ { "round" }, { "arch" }, { "oval" }, { "round", "round" } })[rng.int(1, 4)]
+            local skin = rng.chance(0.3) and "sisal" or nil
+            draw(4, at(xs[i], y, function(r) C.condo(r, { holes = holes, skin = skin }) end))
+            reg(xs[i] - cw / 2, y, xs[i] + cw / 2, y + ch, "condo")
+            spot(xs[i], y + ch * 0.5, { "peek" }, true)
+            nthru = nthru + 1
+            break
+          end
+        end
+      end
+    end
+  end
   -- side perches on the posts at the in-between levels: a short shelf, a basket on
   -- an arm or a round pad, reaching out on whichever side has room (after the tops and stubs, so a house
   -- on a post's top gets the room first), below each post's top
