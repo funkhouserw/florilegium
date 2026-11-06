@@ -11,6 +11,6 @@ for (const f of ['fell.woff2', 'fell-italic.woff2', 'lmroman.woff2', 'lmroman-it
 for (const f of ['fell.ttf', 'fell-italic.ttf', 'lmroman.ttf', 'lmroman-italic.ttf', 'lmroman-bold.ttf']) copyFileSync(new URL(`../fonts/${f}`, import.meta.url), new URL(f, fonts))
 const dir = new URL('../public/lua/', import.meta.url)
 mkdirSync(dir, { recursive: true })
-for (const m of ['florilegium-ink', 'florilegium-pgfmath', 'florilegium-flora', 'florilegium-svg', 'florilegium-theme-cattree', 'florilegium-theme-oak', 'florilegium-theme-oldcats', 'florilegium-grow', 'florilegium-scene']) {
+for (const m of ['florilegium', 'florilegium-ink', 'florilegium-pgfmath', 'florilegium-flora', 'florilegium-grow', 'florilegium-authored', 'florilegium-figures', 'florilegium-theme-geometric', 'florilegium-theme-math', 'florilegium-species', 'florilegium-native', 'florilegium-svg', 'florilegium-theme-cattree', 'florilegium-theme-oak', 'florilegium-theme-oldcats', 'florilegium-scene']) {
   copyFileSync(new URL(`../../../${m}.lua`, import.meta.url), new URL(`${m}.lua`, dir))
 }

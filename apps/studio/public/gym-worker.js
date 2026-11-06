@@ -1,8 +1,8 @@
-// gym-worker.js -- grows a cat gym off the main thread: the package's Lua (scene.lua and what it
+// gym-worker.js -- grows a cat gym, an oak or florilegium's flowers off the main thread: the package's Lua (scene.lua and what it
 // requires) in wasmoon, Lua 5.4 compiled to WebAssembly, as web/worker.js does for the playground.
 const WASMOON = 'https://cdn.jsdelivr.net/npm/wasmoon@1.16.0/dist/'
 importScripts(WASMOON + 'index.js')
-const MODULES = ['florilegium-ink', 'florilegium-pgfmath', 'florilegium-flora', 'florilegium-svg', 'florilegium-theme-cattree', 'florilegium-theme-oak', 'florilegium-theme-oldcats', 'florilegium-grow', 'florilegium-scene']
+const MODULES = ['florilegium', 'florilegium-ink', 'florilegium-pgfmath', 'florilegium-flora', 'florilegium-grow', 'florilegium-authored', 'florilegium-figures', 'florilegium-theme-geometric', 'florilegium-theme-math', 'florilegium-species', 'florilegium-native', 'florilegium-svg', 'florilegium-theme-cattree', 'florilegium-theme-oak', 'florilegium-theme-oldcats', 'florilegium-scene']
 
 const ready = (async () => {
   const factory = new self.wasmoon.LuaFactory(WASMOON + 'glue.wasm')
@@ -24,7 +24,7 @@ function literal(o) {
   const keep = (o.keepouts || []).map((q) => '{ ' + q.map(num).join(', ') + ' }').join(', ')
   return `{ w = ${num(o.w)}, h = ${num(o.h)}, seed = ${num(Math.round(o.seed))}, cats = ${num(Math.round(o.cats))},
     size = ${num(o.size)}, density = ${num(o.density)}, id = "p${num(Math.round(o.index))}-",
-    grows = "${o.grows === 'oak' ? 'oak' : o.grows === 'cats' ? 'cats' : 'gym'}", ink = "${o.ink === 'blue' ? 'blue' : 'green'}",
+    grows = "${['oak', 'cats', 'flowers'].includes(o.grows) ? o.grows : 'gym'}", ink = "${o.ink === 'blue' ? 'blue' : 'green'}",
     crown = "${o.crown === 'open' ? 'open' : 'lush'}", season = "${SEASONS.includes(o.season) ? o.season : 'summer'}", spanishmoss = ${o.spanishmoss === true}, keepouts = { ${keep} } }`
 }
 

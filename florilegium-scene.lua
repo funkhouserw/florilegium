@@ -8,12 +8,56 @@
 -- w, h: the page in cm; keepouts: boxes the gym stays out of, in page cm, y up; size: how
 -- large the pieces are (the gym is planned in a frame 1/size as large and scaled up, so
 -- larger pieces also mean fewer of them); density 0..1; background "rrggbb", or none;
--- grows: "gym" (default), "oak" (one huge oak) or "cats" (old cats, filling it); ink: "green" or "blue" (oak: green by default); crown: "lush" (default) or "open" (oak: limbs show); season: "spring", "summer", "autumn", "winter" or "dead"; spanishmoss; swing, heart = false to leave out; stumps: how many cut limbs.
+-- grows: "gym" (default), "oak" (one huge oak), "flowers" (florilegium's species garden) or "cats" (old cats, filling it); ink: "green" or "blue" (oak: green by default); crown: "lush" (default) or "open" (oak: limbs show); season: "spring", "summer", "autumn", "winter" or "dead"; spanishmoss; swing, heart = false to leave out; stumps: how many cut limbs.
 local M = {}
 M.version = "2.0.0"
 
+-- grows "flowers": florilegium's own species garden (florilegium-svg.lua's page), the keep-outs
+-- standing in for the text block. The box round them is the text block, so the garden takes the
+-- wider side of the page and, as on a document's last page, the space under the text; with no
+-- keep-outs it takes nearly the whole page. Planned in a frame 1/k as large, then scaled by k.
+-- o.seed is the work's seed (its plants), o.index the page (the garden). The SVG's paths are
+-- in the small frame; the streams are scaled by a `cm` of their own.
+local function flowers(o, w, h, k)
+  local fw, fh = w / k, h / k
+  local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
+  for _, q in ipairs(o.keepouts or {}) do
+    x0, y0 = math.min(x0, q[1] / k), math.min(y0, q[2] / k)
+    x1, y1 = math.max(x1, q[3] / k), math.max(y1, q[4] / k)
+  end
+  if x0 > x1 then x0, y0, x1, y1 = fw * 0.55, fh - 1.2, fw - 1, fh - 1 end
+  local L, R = math.max(0.2, x0), math.max(0.2, fw - x1)
+  if fw - L - R < 0.5 then L = math.max(0.2, fw - R - 0.5) R = fw - L - 0.5 end   -- a box at the paper's edge
+  local T = math.min(fh - 1.5, math.max(0.2, fh - y1))
+  local B = 0.5                                      -- the text block reaches the foot: no footer band, the
+  local cm = function(v) return string.format("%.3fcm", v) end   -- spill runs under the text to the paper
+  local SEASON = { spring = "spring", summer = "summer", autumn = "autumn", winter = "autumn", dead = "autumn" }
+  local INK = { green = "2F6B4F", blue = "2456C4" }
+  local svg = require("florilegium-svg")
+  local _, _, extra = svg.page{ paper = { cm(fw), cm(fh) }, left = cm(L), right = cm(R), top = cm(T), bottom = cm(B),
+    headheight = "0pt", headsep = "0pt", footskip = "0pt", head = false,
+    seed = math.max(1, math.floor(o.seed or 1)), page = math.floor(o.index or 0) + 1,
+    textend = cm(math.max(0, (fh - T) - math.max(B, y0))), season = SEASON[o.season] or "summer",
+    density = o.density or 1, ink = INK[o.ink] or INK.blue }
+  local streams = {}
+  for i, st in ipairs(extra.streams) do streams[i] = k == 1 and st or string.format("q %.4f 0 0 %.4f 0 0 cm\n%s\nQ", k, k, st) end
+  return extra.streams, streams
+end
+
 function M.page(o)
   local w, h, k = o.w, o.h, o.size or 1
+  if o.grows == "flowers" then
+    local drawn, scaled = flowers(o, w, h, k)
+    M.last_streams = scaled
+    local svg = require("florilegium-svg")
+    local CM = 72 / 2.54
+    local out = { string.format('<svg xmlns="http://www.w3.org/2000/svg" width="%.2f" height="%.2f" viewBox="0 0 %.2f %.2f">', w * CM, h * CM, w * CM, h * CM) }
+    if o.background then out[#out + 1] = string.format('<rect width="100%%" height="100%%" fill="#%s"/>', o.background) end
+    out[#out + 1] = string.format('<g transform="matrix(%.4f 0 0 %.4f 0 %.2f)" stroke-linecap="round" stroke-linejoin="round">', k, -k, h * CM)
+    for i, st in ipairs(drawn) do svg.translate(st, out, (o.id or "s-") .. i) end
+    out[#out + 1] = "</g></svg>"
+    return table.concat(out, "\n")
+  end
   local streams = {}
   local saved = { tex = tex, node = node, luatexbase = luatexbase }
   tex = { sprint = function() end }

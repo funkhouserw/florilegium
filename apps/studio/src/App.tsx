@@ -12,6 +12,7 @@ import { familyOf, FAMILIES } from './fonts'
 import { fromMarkdown, sliceFromHtml, sliceFromMarkdown, sliceToHtml, sliceToText, toMarkdown, type Align } from './schema'
 
 const PAPER = '#fefdfb'
+const FLOWER_SEASONS: Season[] = ['spring', 'summer', 'autumn']   // the flowers have no winter: it shows as autumn
 type Story = { id: number; state: EditorState; auto: boolean }
 const storiesOf = (d: Doc): Story[] => d.stories.map((s) => ({ id: s.id, state: newState(s.doc), auto: s.auto }))
 const initial = loadDoc()
@@ -542,7 +543,9 @@ export function App() {
 
   // ---- the drawing: it changes only when you ask ----
   const requests = useMemo(() => pages.map((p, index) => ({
-    grows, ink: inkName, crown, season, spanishmoss, w: S.w, h: S.h, seed: seed + index * 101, cats, size: grows === 'gym' ? pieces : 1, density: 1, index,
+    // flowers: the work's seed picks its plants, the page's index its garden
+    grows, ink: inkName, crown, season, spanishmoss, w: S.w, h: S.h, seed: grows === 'flowers' ? seed : seed + index * 101, cats,
+    size: grows === 'gym' || grows === 'flowers' ? pieces : 1, density: 1, index,
     keepouts: p.boxes.filter((b) => b.layer === 'clear').map((b) => {
       const empty = !texts.find((t) => t.id === b.story)?.doc.textContent.trim()
       const h = empty ? b.h : p.used.get(b.id) ?? 0
@@ -689,6 +692,7 @@ export function App() {
             <select value={grows} onChange={(e) => { const g = e.target.value as Grows; setGrows(g); setInkName(g === 'oak' ? 'green' : 'blue') }}>
               <option value="gym">Cat gym</option>
               <option value="oak">One huge oak</option>
+              <option value="flowers">Kevin's flowers</option>
               <option value="cats">Old cats</option>
             </select>
           </label>
@@ -713,6 +717,16 @@ export function App() {
               </select>
             </label>
             <label className="check"><input type="checkbox" checked={spanishmoss} onChange={(e) => setSpanishmoss(e.target.checked)} /> Spanish moss</label>
+          </>
+        )}
+        {grows === 'flowers' && (
+          <>
+            <label>Season
+              <select value={FLOWER_SEASONS.includes(season) ? season : 'autumn'} onChange={(e) => setSeason(e.target.value as Season)}>
+                {FLOWER_SEASONS.map((v) => <option key={v} value={v}>{v[0].toUpperCase() + v.slice(1)}</option>)}
+              </select>
+            </label>
+            <p className="hint">Kevin Raymond's florilegium garden: plants sampled from genomes, with the insects, snails and birds they bring. It grows beside your text, on the wider side, and under where the text ends. Each seed is a different set of plants. A full page can take a few seconds.</p>
           </>
         )}
         <label>Size
@@ -741,8 +755,8 @@ export function App() {
         </label>
         <div className="row">
           <NumberField label="Type size" min={10} max={90} value={fontSize} onChange={setFontSize} />
-          <NumberField label="Cats a page" min={0} max={6} value={cats} onChange={setCats} />
-          <NumberField label="Piece size" min={0.8} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
+          {grows !== 'flowers' && <NumberField label="Cats a page" min={0} max={6} value={cats} onChange={setCats} />}
+          <NumberField label={grows === 'flowers' ? 'Flower size' : 'Piece size'} min={0.8} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
           <NumberField label="Seed" min={1} max={1e9} value={seed} onChange={setSeed} />
         </div>
         <button onClick={() => setDrawn((d) => [...d, []])}>Add a page</button>
@@ -805,7 +819,7 @@ export function App() {
         onCopy={(e) => onCopy(e, false)} onCut={(e) => onCopy(e, true)} onPaste={onPaste} />
     </div>
     <footer className="bottom">
-      <span>© 2026 Ilse Funkhouser. All rights reserved.</span>
+      <span>© 2026 Ilse Funkhouser.</span>
       <span>Grown with love from Kevin Raymond's <a href="https://github.com/kevinraymond/florilegium" target="_blank" rel="noreferrer">florilegium</a> (<a href="https://github.com/kevinraymond/florilegium/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT License</a>). Fonts: IM Fell (SIL Open Font License), Latin Modern (GUST Font License).</span>
     </footer>
     </div>
