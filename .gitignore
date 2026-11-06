@@ -11,6 +11,7 @@ scratch/
 *.png
 !gallery/*.png
 !process/**/*.png
+!apps/studio/public/*.png
 tools/playcheck/node_modules/
 apps/*/node_modules/
 apps/*/dist/

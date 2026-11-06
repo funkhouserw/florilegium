@@ -1,0 +1,22 @@
+%% tools/cattree/favicon-glyph.tex -- writes the outline of F in Latin Modern Roman Bold to build/favicon/glyphF.lua, for favicon.lua
+
+\directlua{
+  local path = kpse.find_file("lmroman10-bold.otf", "opentype fonts")
+  local shapes = fonts.handlers.otf.readers.loadshapes(path)
+  local out = { "return { units = " .. (shapes.units or 1000) .. ", glyphs = {" }
+  for _, g in pairs(shapes.glyphs) do
+    if g.unicode == 70 then
+      local segs = {}
+      for _, s in ipairs(g.segments or {}) do
+        local t = {}
+        for i, v in ipairs(s) do t[i] = type(v) == "string" and ("'" .. v .. "'") or string.format("\csstring\%g", v) end
+        segs[\csstring\#segs + 1] = "{" .. table.concat(t, ", ") .. "}"
+      end
+      local bb = g.boundingbox
+      out[\csstring\#out + 1] = string.format("  { unicode = 70, boundingbox = { \csstring\%g, \csstring\%g, \csstring\%g, \csstring\%g }, segments = { ", bb[1], bb[2], bb[3], bb[4]) .. table.concat(segs, ", ") .. " } },"
+    end
+  end
+  out[\csstring\#out + 1] = "} }"
+  local f = io.open("build/favicon/glyphF.lua", "w") f:write(table.concat(out, "\string\n")) f:close()
+}
+\csname bye\endcsname
