@@ -22,6 +22,11 @@ max_line_length = false
 local stubs = { "tex", "texio", "node", "luatexbase" }
 files["florilegium-svg.lua"] = { globals = stubs }
 files["tools/*.lua"] = { globals = stubs }
+-- florilegium-scene.lua does the same for the studio, and puts them back
+files["florilegium-scene.lua"] = { globals = stubs }
+-- the kelp theme carries the otter, fish and seafloor modules as embedded chunks, each with the
+-- same local helpers as the file around it (shadowing), and a few locals those modules keep unused
+files["florilegium-theme-kelp.lua"] = { ignore = { "211", "311", "421", "431" } }
 
 -- l3build reads its settings from the globals build.lua sets, which nothing in it reads
 files["build.lua"] = { allow_defined_top = true, ignore = { "131" } }
