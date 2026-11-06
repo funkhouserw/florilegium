@@ -1064,7 +1064,8 @@ function M.forest(rng, o)
       local L = srng.range(1.0, 3.0)
       local droop = srng.range(0.02, 0.07)
       for k = 1, floor(L / 0.2) do
-        local nx, ny = x + cur * 0.2, y + 0.04 - droop * k ^ 0.7
+        local t = min(1, k / 6)                          -- it turns over gradually, not at a corner
+        local nx, ny = x + cur * 0.2 * t, y + 0.2 * (1 - t) + 0.04 * t - droop * t * k ^ 0.7
         if blocked(nx, ny, 0.1) then break end
         x, y = nx, ny
         pts[#pts + 1] = { x, y }
