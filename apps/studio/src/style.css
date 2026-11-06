@@ -93,7 +93,8 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
   .canvas { grid-row: 1; }
   .zoombar { padding: 4px 8px; }
   .zoombar .hint { display: none; }
-  .pages { padding: 12px; gap: 16px; justify-content: center; }
+  .pages { padding: 12px; gap: 16px; }
+  .pagewrap { margin-inline: auto; }   /* centered, and still scrollable to its left edge when zoomed past the screen */
   .panel { display: none; }
   .panel.open { display: flex; position: absolute; z-index: 20; left: 0; right: 0; bottom: calc(48px + env(safe-area-inset-bottom)); max-height: 58%;
     border-right: 0; border-top: 1px solid #d5d9e6; border-radius: 14px 14px 0 0; box-shadow: 0 -4px 18px rgba(27, 42, 107, .18);

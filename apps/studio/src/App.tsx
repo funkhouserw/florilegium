@@ -1346,20 +1346,29 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
                 {controls && <>
                 <rect className="edge ctl" x={b.x - (touch ? 13 : 3) / scale} y={b.y - (touch ? 13 : 3) / scale} width={b.w + (touch ? 26 : 6) / scale} height={b.h + (touch ? 26 : 6) / scale}
                   onPointerDown={(e) => { const p = at(e); select(b.id); begin(e, { kind: 'move', page: index, id: b.id, dx: p.x - b.x, dy: p.y - b.y }) }} />
-                {touch && (
-                  // a finger moves a box by its grip, a pill above the top edge (inside, a drag scrolls)
-                  <g className="ctl grip" role="button" aria-label="Move this box"
-                    onPointerDown={(e) => { const p = at(e); select(b.id); begin(e, { kind: 'move', page: index, id: b.id, dx: p.x - b.x, dy: p.y - b.y }) }}>
-                    <circle className="hit" cx={b.x + b.w / 2} cy={b.y - 18 / scale} r={hit} />
-                    <rect x={b.x + b.w / 2 - 22 / scale} y={b.y - 32 / scale} width={44 / scale} height={28 / scale} rx={14 / scale} />
-                    <path className="hand" d={(() => {             // an open hand: grab here and drag
-                      const X = (x: number) => b.x + b.w / 2 + x / scale, Y = (y: number) => b.y + (y - 18) / scale
-                      return `M${X(-4.5)} ${Y(1)}V${Y(-4)}M${X(-1.5)} ${Y(-1)}V${Y(-7)}M${X(1.5)} ${Y(-1)}V${Y(-7)}M${X(4.5)} ${Y(0)}V${Y(-5)}` +   // fingers
+                {touch && (() => {
+                  // a finger moves a box by its grip, where none of its other controls are (the label is above it, ⊗ →
+                  // and the handle on its right edge): left of the box at its middle; else right of it, past ⊗ and →;
+                  // else below it; else (a box filling the page's foot) just inside its foot
+                  const left = b.x * scale >= 40, right = !left && (W - b.x - b.w) * scale >= 64
+                  const below = !left && !right && (H - b.y - b.h) * scale >= 64
+                  const side = left || right
+                  const cx = left ? b.x - 20 / scale : right ? b.x + b.w + 42 / scale : b.x + b.w / 2
+                  const cy = side ? b.y + Math.max(b.h / 2, 14 / scale) : below ? b.y + b.h + 38 / scale : b.y + b.h - 20 / scale
+                  const pw = (side ? 28 : 44) / scale, ph = (side ? 44 : 28) / scale
+                  const X = (x: number) => cx + x / scale, Y = (y: number) => cy + y / scale
+                  return (
+                    <g className="ctl grip" role="button" aria-label="Move this box"
+                      onPointerDown={(e) => { const p = at(e); select(b.id); begin(e, { kind: 'move', page: index, id: b.id, dx: p.x - b.x, dy: p.y - b.y }) }}>
+                      <circle className="hit" cx={cx} cy={cy} r={hit} />
+                      <rect x={cx - pw / 2} y={cy - ph / 2} width={pw} height={ph} rx={Math.min(pw, ph) / 2} />
+                      <path className="hand" d={                     // an open hand: grab here and drag
+                        `M${X(-4.5)} ${Y(1)}V${Y(-4)}M${X(-1.5)} ${Y(-1)}V${Y(-7)}M${X(1.5)} ${Y(-1)}V${Y(-7)}M${X(4.5)} ${Y(0)}V${Y(-5)}` +   // fingers
                         `M${X(-4.5)} ${Y(1)}V${Y(3)}Q${X(-4.5)} ${Y(8)} ${X(0)} ${Y(8)}Q${X(5)} ${Y(8)} ${X(5.5)} ${Y(3)}L${X(4.5)} ${Y(0)}` +   // palm
-                        `M${X(-4.5)} ${Y(3)}L${X(-7.5)} ${Y(-0.5)}`                                                                   // thumb
-                    })()} />
-                  </g>
-                )}
+                        `M${X(-4.5)} ${Y(3)}L${X(-7.5)} ${Y(-0.5)}`} />                                                                // thumb
+                    </g>
+                  )
+                })()}
                 <g className="ctl" onPointerDown={(e) => { select(b.id); begin(e, { kind: 'size', page: index, id: b.id, dx: 0, dy: 0 }) }}>
                   {touch && <circle className="hit" cx={b.x + b.w} cy={b.y + b.h} r={hit} />}
                   <rect className="handle" x={b.x + b.w - handle / 2} y={b.y + b.h - handle / 2} width={handle} height={handle} />
@@ -1376,7 +1385,7 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
                   <path d={`M${b.x + b.w - dr * 0.5} ${b.y + b.h / 2}h${dr}m${-dr * 0.4} ${-dr * 0.4}l${dr * 0.4} ${dr * 0.4}l${-dr * 0.4} ${dr * 0.4}`} />
                 </g>
                 </>}
-                {label && <text className="chain" x={b.x} y={b.y - (touch ? 8 : 5) / scale} fontSize={(touch ? 15 : 11) / scale}>{label}
+                {label && <text className="chain" x={b.x} y={b.y - (touch ? 16 : 5) / scale} fontSize={(touch ? 15 : 11) / scale}>{label}
                   {controls && <>{' · '}<tspan className="unlink" role="button" aria-label="Unlink this box, so it holds its own text" {...tapOrPress(() => unlink(b))}>Unlink</tspan></>}
                 </text>}
               </g>
