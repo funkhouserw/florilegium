@@ -1279,6 +1279,15 @@ function M.forest(rng, o)
       end
     end
   end
+  -- now and then an otter diving through the open water, head down, a trail of bubbles from its nose
+  if (o.otters or 1) > 0 and rng.chance(0.4) then
+    local L = rng.range(3.4, 4.2)
+    place(L * 0.95, L * 0.55, sandtop + 3, surface - 3, 40, function(x, y)
+      local face = rng.chance(0.5) and 1 or -1
+      ink.push() ink.translate(x - face * L * 0.1, y + L * 0.12) ink.scale(face, 1) M.otter(rng.fork(), L, { pose = "dive", water = false, age = rng.range(0, 0.6) }) ink.pop()
+      bubbles(rng, x - face * L * 0.25, y + L * 0.3, 0.05, 5)
+    end)
+  end
   -- bubbles rising from the rocks
   for _ = 1, rng.int(2, 5) do
     local r = rocks[rng.int(1, max(1, #rocks))]
