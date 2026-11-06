@@ -77,3 +77,58 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
 .handle { fill: #fff; stroke: #2456c4; stroke-width: 1.5; cursor: nwse-resize; vector-effect: non-scaling-stroke; }
 .del { fill: #2456c4; cursor: pointer; }
 .delx { stroke: #fff; stroke-width: 1.5; pointer-events: none; vector-effect: non-scaling-stroke; }
+
+/* ---- the panel's sections: one column on a desktop, one tab at a time on a phone ---- */
+.sec { display: contents; }
+.tabs { display: none; }
+@media (max-width: 760px) {
+  .shell { height: 100dvh; grid-template-rows: auto 1fr; }
+  .top { padding: 6px 12px; align-items: center; }
+  .top h1 { font-size: 18px; }
+  .top .long { display: none; }
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; position: relative; }
+  .canvas { grid-row: 1; }
+  .zoombar { padding: 4px 8px; }
+  .zoombar .hint { display: none; }
+  .pages { padding: 12px; gap: 16px; justify-content: center; }
+  .panel { display: none; }
+  .panel.open { display: flex; position: absolute; z-index: 20; left: 0; right: 0; bottom: 0; max-height: 58%;
+    border-right: 0; border-top: 1px solid #d5d9e6; border-radius: 14px 14px 0 0; box-shadow: 0 -4px 18px rgba(27, 42, 107, .18);
+    overscroll-behavior: contain; padding-bottom: 20px; }
+  .panel .sec { display: none; }
+  .panel.tab-text .sec-text, .panel.tab-drawing .sec-drawing, .panel.tab-page .sec-page, .panel.tab-export .sec-export { display: contents; }
+  .tabs { display: grid; grid-template-columns: repeat(4, 1fr); grid-row: 2; background: #fff; border-top: 1px solid #d5d9e6;
+    padding-bottom: env(safe-area-inset-bottom); position: relative; z-index: 21; }
+  .tabs button { height: 48px; border: 0; background: none; color: #4a5688; font: 600 13px -apple-system, Helvetica, Arial, sans-serif; cursor: pointer; }
+  .tabs button.on { color: #2456c4; box-shadow: inset 0 3px 0 #2456c4; }
+  .credits { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #6a7396; margin: 8px 0 0; }
+  .credits a { color: inherit; }
+  .panel button, .panel select, .panel input[type=number] { min-height: 40px; font-size: 16px; }
+  .panel button.tool { width: 40px; height: 40px; }
+  .banner { top: 40px; left: 8px; right: 8px; }
+}
+
+/* ---- touch: one finger scrolls the pages, two zoom them (ours, not the browser's) ---- */
+.hit, .linker circle.hit { fill: transparent; stroke: none; }
+.panel .close { display: none; }
+.strip { display: none; }
+@media (pointer: coarse) {
+  .pages { touch-action: pan-x pan-y pinch-zoom; }
+  .stage.touch { touch-action: pan-x pan-y pinch-zoom; -webkit-touch-callout: none; cursor: default; }
+  .stage.touch.armed { touch-action: none; cursor: crosshair; }
+  .stage.touch .edge { stroke-width: 26px; }
+  .panel input, .panel select, .panel textarea { font-size: 16px; }    /* iOS zooms into anything smaller */
+}
+@media (max-width: 760px) {
+  .panel .close { display: block; align-self: flex-end; margin-bottom: -6px; border: 0; padding: 4px 2px; font-size: 14px; min-height: 0; }
+  .panel.tab-text .toolbar, .panel.tab-text .sec-text > .hint:first-of-type { display: none; }
+  .strip { display: flex; grid-row: 2; gap: 6px; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); background: #fff;
+    border-top: 1px solid #d5d9e6; position: relative; z-index: 22; }
+  .strip .tools { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
+  .strip button { flex: none; min-width: 44px; height: 40px; padding: 0 10px; border: 1px solid #c3c9dc; border-radius: 6px; background: #fff; color: #1b2a6b; font: 15px -apple-system, Helvetica, Arial, sans-serif; }
+  .strip button.on { background: #2456c4; color: #fff; border-color: #2456c4; }
+  .strip button.done { background: #2456c4; color: #fff; border-color: #2456c4; font-weight: 600; }
+  .panel.open { max-height: 42%; }
+  .panel button.share { background: #c8591b; border-color: #c8591b; }
+}
+@media (prefers-reduced-motion: reduce) { .caret { animation: none; } }

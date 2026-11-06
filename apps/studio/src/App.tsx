@@ -19,8 +19,8 @@ const initial = loadDoc()
 const mac = /Mac|iPhone|iPad/.test(navigator.platform)
 
 type Drag =
-  | { kind: 'draw'; page: number; x0: number; y0: number; id: number }
-  | { kind: 'move' | 'size'; page: number; id: number; dx: number; dy: number }
+  | { kind: 'draw'; page: number; x0: number; y0: number; id: number; pid?: number }
+  | { kind: 'move' | 'size'; page: number; id: number; dx: number; dy: number; pid?: number }
 type Caret = { x: number; y0: number; y1: number; base: number; size: number }
 type TextDrag = { story: number; anchor: number; unit: 'char' | 'word' | 'block'; lo: number; hi: number }
 
@@ -29,6 +29,18 @@ const ZOOMS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4]
 const ZOOM_KEY = 'felilegium-zoom'
 const clampZoom = (z: number) => Math.max(ZOOMS[0], Math.min(ZOOMS[ZOOMS.length - 1], +z.toFixed(3)))
 const PAGE_PX = 420             // a page's width on screen at 100%
+const NARROW = '(max-width: 760px)'
+type Tab = 'text' | 'drawing' | 'page' | 'export'
+const TABS: [Tab, string][] = [['text', 'Text'], ['drawing', 'Drawing'], ['page', 'Page'], ['export', 'Export']]
+function useMedia(query: string) {
+  const [on, setOn] = useState(() => window.matchMedia(query).matches)
+  useEffect(() => {
+    const m = window.matchMedia(query), f = () => setOn(m.matches)
+    m.addEventListener('change', f)
+    return () => m.removeEventListener('change', f)
+  }, [query])
+  return on
+}
 
 export function App() {
   const [stories, setStories] = useState<Story[]>(() => storiesOf(initial))
@@ -44,6 +56,12 @@ export function App() {
   const [season, setSeason] = useState<Season>(initial.season)
   const [spanishmoss, setSpanishmoss] = useState(initial.spanishmoss)
   const [perPage, setPerPage] = useState<PerPage>(initial.perPage)
+  // phones: the panel is a sheet over the pages, one tab at a time (null: closed)
+  const narrow = useMedia(NARROW)
+  const coarse = useMedia('(pointer: coarse)')          // a finger: taps type, a drag scrolls, a box is drawn in draw mode
+  const [tab, setTab] = useState<Tab | null>(null)
+  const [drawArm, setDrawArm] = useState(false)
+  const [shareFiles, setShareFiles] = useState<File[] | null>(null)
   const [textColor, setTextColor] = useState(initial.textColor)
   const [margins, setMargins] = useState<Margins>(initial.margins)
   const [drawn, setDrawn] = useState<Box[][]>(initial.drawn)
@@ -174,6 +192,66 @@ export function App() {
     }))
   }
   const edit = (fn: (s: EditorState) => Transaction | null) => { if (activeId !== null) update(activeId, fn) }
+  // the strip shows while typing; a tap on it blurs the field for a moment, so it outlasts the blur a little
+  const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    if (focused) { setEditing(true); return }
+    const t = setTimeout(() => setEditing(false), 300)
+    return () => clearTimeout(t)
+  }, [focused])
+  // how far the keyboard covers the page (iOS leaves the layout its full height under it)
+  const [kb, setKb] = useState(0)
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const f = () => setKb(Math.max(0, window.innerHeight - vv.height - vv.offsetTop))
+    vv.addEventListener('resize', f)
+    vv.addEventListener('scroll', f)
+    return () => { vv.removeEventListener('resize', f); vv.removeEventListener('scroll', f) }
+  }, [])
+  // a phone fits a page to the screen's width, again whenever the width changes (not the height: the keyboard)
+  useEffect(() => {
+    const el = pagesEl.current
+    if (!narrow || !el) return
+    let w = 0
+    const ro = new ResizeObserver(() => {
+      if (Math.abs(el.clientWidth - w) < 2) return
+      w = el.clientWidth
+      setZoom(clampZoom((w - 24) / PAGE_PX))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [narrow])
+  // two fingers zoom the pages about the point between them (the browser's own pinch is off, so one finger scrolls)
+  const zoomAt = useRef(zoomTo)
+  zoomAt.current = zoomTo
+  const zoomNow = useRef(zoom)
+  zoomNow.current = zoom
+  useEffect(() => {
+    const el = pagesEl.current
+    if (!el) return
+    let start: { d: number; z: number } | null = null
+    const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+    const down = (e: TouchEvent) => { if (e.touches.length === 2) { start = { d: dist(e.touches), z: zoomNow.current }; e.preventDefault() } }
+    const move = (e: TouchEvent) => {
+      if (!start || e.touches.length !== 2) return
+      e.preventDefault()
+      const [a, b] = [e.touches[0], e.touches[1]]
+      zoomAt.current(start.z * dist(e.touches) / start.d, (a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2)
+    }
+    const up = (e: TouchEvent) => { if (e.touches.length < 2) start = null }
+    el.addEventListener('touchstart', down, { passive: false })
+    el.addEventListener('touchmove', move, { passive: false })
+    el.addEventListener('touchend', up)
+    el.addEventListener('touchcancel', up)
+    return () => { el.removeEventListener('touchstart', down); el.removeEventListener('touchmove', move); el.removeEventListener('touchend', up); el.removeEventListener('touchcancel', up) }
+  }, [])
+  useEffect(() => {
+    if (!tab) return
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setTab(null) }
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [tab])
   function focusTyping() { typing.current?.focus({ preventScroll: true }) }
   const textDrag = useRef<TextDrag | null>(null)
   const lastClick = useRef({ t: -1e9, x: 0, y: 0, n: 0 })
@@ -213,7 +291,7 @@ export function App() {
     return bestPage < 0 ? null : { page: bestPage, ...pagePoint(bestPage, cx, cy) }
   }
 
-  function startText(e: React.PointerEvent, page: number, box: Box) {
+  function startText(e: React.PointerEvent | React.MouseEvent, page: number, box: Box, drag = true) {
     e.preventDefault()
     e.stopPropagation()
     if (linking !== null) { linkTo(box); return }
@@ -239,8 +317,10 @@ export function App() {
       if (e.shiftKey && activeId === box.story) { textDrag.current.anchor = st.selection.anchor; return selectTo(st, pos, true) }
       return selectTo(st, pos, false)
     })
+    if (!drag) return
     window.addEventListener('pointermove', dragText)
     window.addEventListener('pointerup', endText, { once: true })
+    window.addEventListener('pointercancel', endText, { once: true })
   }
   // read fresh on every move: a listener added once outlives the render that made it
   const latest = useRef({ byStory, style, stories })
@@ -340,7 +420,9 @@ export function App() {
   }
   // The invisible field keeps the last few characters typed, because the Mac's accent picker (hold a
   // key) replaces the letter before the cursor in it: what changed there is what changes in the story.
-  function syncTyping() {
+  // composing: a phone's keyboard keeps the word in progress open, and may reopen one the story already has, so the
+  // story follows the field as it changes; the field itself is left alone until the word is done
+  function syncTyping(composing = false) {
     const ta = typing.current
     if (!ta) return
     const old = lastTyped.current, now = ta.value
@@ -349,12 +431,50 @@ export function App() {
     while (i < old.length && i < now.length && old[i] === now[i]) i++
     if (i > 0 && /[\uD800-\uDBFF]/.test(old[i - 1])) i--          // never halfway through an emoji
     const removed = old.length - i, added = now.slice(i)
-    const kept = now.slice(-8)
-    ta.value = kept
-    lastTyped.current = kept
+    if (composing) lastTyped.current = now
+    else {
+      const kept = now.slice(-8)
+      ta.value = kept
+      lastTyped.current = kept
+    }
     goalX.current = null
-    edit((s) => replaceBefore(s, removed, added))
+    // a selection seeded into the field (touch) is what `removed` takes away
+    edit((s) => (s.selection.empty ? replaceBefore(s, removed, added) : added ? s.tr.insertText(added) : s.tr.deleteSelection()))
   }
+  // on a touch screen the field holds the text just before the cursor (and the selection, selected), so a keyboard's
+  // backspace, autocorrect and predictions work on real text; never while a word is being composed
+  useLayoutEffect(() => {
+    const ta = typing.current
+    if (!coarse || !ta || !active || composition !== null) return
+    const { $from, $to, empty } = active.state.selection
+    const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 16), $from.parentOffset)
+    const v = before + (!empty && $from.sameParent($to) ? $from.parent.textBetween($from.parentOffset, $to.parentOffset) : '')
+    if (ta.value !== v || ta.selectionStart !== before.length || ta.selectionEnd !== v.length) {
+      ta.value = v
+      ta.setSelectionRange(before.length, v.length)
+      lastTyped.current = v
+    }
+  })
+  // what a keyboard asks for without a key code (Android sends 229): a backspace with nothing in the field to take,
+  // or one across paragraphs, and a new paragraph
+  const beforeInput = useRef<(e: InputEvent) => void>(() => {})
+  beforeInput.current = (e: InputEvent) => {
+    const ta = typing.current
+    if (e.isComposing || !ta || !active) return
+    const sel = active.state.selection
+    if (e.inputType === 'deleteContentBackward' && ((ta.selectionStart === 0 && ta.selectionEnd === 0) || (!sel.empty && !sel.$from.sameParent(sel.$to)))) {
+      e.preventDefault(); forgetTyped(); edit((s) => deleteBack(s, false, null))
+    } else if (e.inputType === 'insertParagraph' || e.inputType === 'insertLineBreak') {
+      e.preventDefault(); forgetTyped(); edit(enter)
+    }
+  }
+  useEffect(() => {
+    const ta = typing.current
+    if (!ta) return
+    const f = (e: Event) => beforeInput.current(e as InputEvent)
+    ta.addEventListener('beforeinput', f)
+    return () => ta.removeEventListener('beforeinput', f)
+  }, [])
   const forgetTyped = () => {
     if (typing.current) typing.current.value = ''
     lastTyped.current = ''
@@ -404,11 +524,23 @@ export function App() {
     const t = typing.current
     if (!c || !t) return
     const r = c.getBoundingClientRect()
+    const key = `${activeId}:${active?.state.selection.head}:${active?.state.doc.content.size}`
+    const follow = focused && key !== followed.current                                    // not when you scroll away yourself
+    followed.current = key
+    if (coarse) {
+      // a field near the keyboard makes iOS scroll the whole window to it, so it stays at the top
+      t.style.left = '0px'
+      t.style.top = '0px'
+      const el = pagesEl.current, vv = window.visualViewport
+      if (!follow || !el) return
+      const bottom = (vv ? vv.offsetTop + vv.height : window.innerHeight) - 64, top = el.getBoundingClientRect().top + 8
+      if (r.bottom > bottom) el.scrollTop += r.bottom - bottom
+      else if (r.top < top) el.scrollTop -= top - r.top
+      return
+    }
     t.style.left = `${r.left}px`
     t.style.top = `${r.top}px`
-    const key = `${activeId}:${active?.state.selection.head}:${active?.state.doc.content.size}`
-    if (focused && key !== followed.current) c.scrollIntoView({ block: 'nearest', inline: 'nearest' })   // not when you scroll away yourself
-    followed.current = key
+    if (follow) c.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   })
 
   // ---- the boxes ----
@@ -591,10 +723,16 @@ export function App() {
     setNote('')
     catchUp()
     try {
+      const files: File[] = []
+      const sharing = coarse && typeof navigator.canShare === 'function'
       for (let i = 0; i < pages.length; i++) {
         setBusy(`Page ${i + 1} of ${pages.length}`)
-        download(await pagePng(await growGym(requests[i]), pages[i], style, S.px, W, H, PAPER), `${fileBase}-${i + 1}.png`)
+        const png = await pagePng(await growGym(requests[i]), pages[i], style, S.px, W, H, PAPER)
+        if (sharing) files.push(new File([png], `${fileBase}-${i + 1}.png`, { type: 'image/png' }))
+        else download(png, `${fileBase}-${i + 1}.png`)
       }
+      if (sharing && navigator.canShare({ files })) setShareFiles(files)
+      else files.forEach((f) => download(f, f.name))
     } catch (e) { setError('Export failed: ' + String(e)) } finally { setBusy('') }
   }
   async function grownPages(ops: boolean) {
@@ -639,14 +777,40 @@ export function App() {
     <button key={t} className={'tool' + (pressed ? ' on' : '')} title={t} aria-label={t} aria-pressed={pressed} disabled={!active} onMouseDown={keep} onClick={act}>{label}</button>
   )
 
+  // the strip above a phone's keyboard: each tap acts and gives the keyboard straight back (still inside the tap)
+  const stripTool = (label: React.ReactNode, t: string, pressed: boolean, fn: (s: EditorState) => Transaction | null) => (
+    <button key={t} className={pressed ? 'on' : ''} title={t} aria-label={t} aria-pressed={pressed} onMouseDown={keep} onClick={() => { edit(fn); focusTyping() }}>{label}</button>
+  )
+  function copyText() {
+    if (!active || active.state.selection.empty) return
+    void navigator.clipboard?.writeText(sliceToText(active.state.selection.content())).catch(() => {})
+  }
+  async function pasteText() {
+    try {
+      const text = await navigator.clipboard.readText()
+      forgetTyped()
+      if (text) edit((s) => s.tr.replaceSelection(sliceFromMarkdown(text)))
+    } catch { setNote('Paste was not allowed: long-press in the box, or allow pasting.') }
+  }
+
+  // the copyright and credits: the page's footer, or on a phone the foot of the Export tab
+  const credits = (
+    <>
+      <span>© 2026 Ilse Funkhouser.</span>
+      <span>Grown with love from Kevin Raymond's <a href="https://github.com/kevinraymond/florilegium" target="_blank" rel="noreferrer">florilegium</a> (<a href="https://github.com/kevinraymond/florilegium/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT License</a>). Fonts: IM Fell (SIL Open Font License), Latin Modern (GUST Font License).</span>
+    </>
+  )
+
   return (
-    <div className="shell">
+    <div className={'shell' + (narrow ? ' narrow' : '')}>
     <header className="top">
       <h1>Felilegium</h1>
-      <a className="repo" href="https://github.com/funkhouserw/florilegium" target="_blank" rel="noreferrer">funkhouserw/florilegium on GitHub</a>
+      <a className="repo" href="https://github.com/funkhouserw/florilegium" target="_blank" rel="noreferrer"><span className="long">funkhouserw/florilegium on </span>GitHub</a>
     </header>
     <div className="app">
-      <aside className="panel">
+      <aside id="sheet" className={'panel' + (tab ? ' open tab-' + tab : '')} aria-label="Settings" role={narrow ? 'tabpanel' : undefined}>
+        {narrow && tab && <button className="close" aria-label="Close" onClick={() => setTab(null)}>Close</button>}
+        <section className="sec sec-text" aria-label="Text">
         <div className="toolbar" role="toolbar" aria-label="Text formatting">
           {tool('H1', 'Large heading', kind === 1, () => edit((s) => setBlock(s, 1)))}
           {tool('H2', 'Heading', kind === 2, () => edit((s) => setBlock(s, 2)))}
@@ -660,6 +824,7 @@ export function App() {
         </div>
         <p className="hint">{active ? 'Markdown works as you type: # heading, - list, **bold**, *italic*.' : 'Click into a box to type. Drag on an empty part of a page to draw a new box: it carries on your text, or click Unlink on it to give it its own.'}</p>
 
+        {coarse && !narrow && <button className={drawArm ? 'on' : ''} onClick={() => setDrawArm(!drawArm)}>{drawArm ? 'Cancel drawing' : 'Draw a box'}</button>}
         {selectedBox && active && (
           <div className="boxpanel">
             <label>This box and the drawing
@@ -687,6 +852,8 @@ export function App() {
           </label>
         )}
 
+        </section>
+        <section className="sec sec-drawing" aria-label="Drawing">
         <button className={'primary generate' + (stale ? ' stale' : '')} onClick={() => setGrown(requests)}>{growing ? 'Generating…' : stale ? 'Generate' : 'Up to date'}</button>
         <p className="hint">{stale ? 'The drawing is behind your changes. It only changes when you click.' : 'The drawing stays put until you ask for a new one.'}</p>
         <button onClick={() => { setSeed((s) => s + 1); setGrowTick((t) => t + 1) }}>Grow a different one</button>
@@ -737,6 +904,13 @@ export function App() {
             <p className="hint">Kevin Raymond's florilegium garden: plants sampled from genomes, with the insects, snails and birds they bring. It grows beside your text, on the wider side, and under where the text ends. Each seed is a different set of plants. A full page can take a few seconds.</p>
           </>
         )}
+        <div className="row">
+          {grows !== 'flowers' && <NumberField label="Cats a page" min={0} max={6} value={cats} onChange={setCats} />}
+          <NumberField label={grows === 'flowers' ? 'Flower size' : 'Piece size'} min={0.8} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
+          <NumberField label="Seed" min={1} max={1e9} value={seed} onChange={setSeed} />
+        </div>
+        </section>
+        <section className="sec sec-page" aria-label="Page">
         <label>Size
           <select value={sizeKey} onChange={(e) => changeSize(e.target.value as SizeKey)}>
             {Object.entries(SIZES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -761,13 +935,17 @@ export function App() {
         <label>Text color
           <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} />
         </label>
-        <div className="row">
-          <NumberField label="Type size" min={10} max={90} value={fontSize} onChange={setFontSize} />
-          {grows !== 'flowers' && <NumberField label="Cats a page" min={0} max={6} value={cats} onChange={setCats} />}
-          <NumberField label={grows === 'flowers' ? 'Flower size' : 'Piece size'} min={0.8} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
-          <NumberField label="Seed" min={1} max={1e9} value={seed} onChange={setSeed} />
-        </div>
+        <NumberField label="Type size" min={10} max={90} value={fontSize} onChange={setFontSize} />
         <button onClick={() => setDrawn((d) => [...d, []])}>Add a page</button>
+        </section>
+        <section className="sec sec-export" aria-label="Export and files">
+        {shareFiles && (
+          <button className="primary share" onClick={() => {
+            const files = shareFiles
+            setShareFiles(null)
+            navigator.share({ files }).catch((e: Error) => { if (e.name !== 'AbortError') { setError('Sharing failed: ' + e.message); files.forEach((f) => download(f, f.name)) } })
+          }}>Share {shareFiles.length} image{shareFiles.length === 1 ? '' : 's'} (Instagram, Photos…)</button>
+        )}
         <div className="row three">
           <button className="primary" disabled={!!busy} onClick={exportPngs}>PNGs</button>
           <button className="primary" disabled={!!busy || !face.files} onClick={exportPdf}>PDF</button>
@@ -783,6 +961,8 @@ export function App() {
         <input ref={opener} type="file" accept=".json,application/json" hidden aria-label="Open a studio file"
           onChange={(e) => { void openFile(e.target.files?.[0]); e.target.value = '' }} />
         <p className="hint">{unsaved ? 'This browser is out of room, so your latest changes are not kept here: save a file.' : 'Kept in this browser as you work. Save a file to keep it anywhere else.'}</p>
+        {narrow && <p className="credits">{credits}</p>}
+        </section>
         {error && <p className="error" role="alert">{error}</p>}
       </aside>
       <section className="canvas">
@@ -798,7 +978,13 @@ export function App() {
         }}>Fit a page</button>
         <span className="hint">⌘ and + or −, ⌘ and scroll, or pinch</span>
       </div>
-      <main className="pages" ref={pagesEl}>
+      <main className="pages" ref={pagesEl} onPointerDown={() => { if (narrow && tab) setTab(null) }}>
+        {drawArm && (
+          <div className="banner" role="status">
+            <span>Drag on a page to draw a box.</span>
+            <button onClick={() => setDrawArm(false)}>Cancel</button>
+          </div>
+        )}
         {linking !== null && (
           <div className="banner" role="status">
             <span>Click the box to link, or draw a new one. Text flows through linked boxes in page order.</span>
@@ -809,27 +995,51 @@ export function App() {
           const m = marks.get(i)
           return (
             <PageView key={i} index={i} page={p} W={W} H={H} zoom={zoom} margins={margins} style={style} gym={gyms[i]} growing={growing}
-              svgRef={(el) => { svgs.current[i] = el }} caretRef={caretEl} caret={focused ? m?.caret : undefined} composition={composition} rects={m?.rects ?? []}
+              svgRef={(el) => { svgs.current[i] = el }} caretRef={caretEl} caret={focused ? m?.caret : undefined} composition={coarse ? null : composition} rects={m?.rects ?? []}
               linking={linking !== null} activeStory={activeId} selectedId={selected?.page === i ? selected.id : null}
               chainLabel={(b) => { const ch = chainOf(b.story); return ch.length > 1 ? `${ch.findIndex((c) => c.page === i && c.id === b.id) + 1}/${ch.length}` : '' }}
               setDragging={setDragging} editPage={editPage} drawBox={drawBox} afterDraw={afterDraw} startText={startText} removeBox={removeBox} removePage={drawn.length > 1 && i < drawn.length ? () => removePage(i) : undefined} select={(id) => setSelected({ page: i, id })}
-              unlink={(b) => unlink(i, b)}
+              unlink={(b) => unlink(i, b)} touch={coarse} armed={drawArm} disarm={() => setDrawArm(false)}
               startLink={(b) => { setSelected({ page: i, id: b.id }); setActiveId(b.story); setLinking(linking === null ? b.story : null) }} />
           )
         })}
       </main>
       </section>
+      {narrow && (editing ? (
+        // while typing, the formatting sits above the keyboard (iOS keeps the page its full height under it)
+        <div className="strip" role="toolbar" aria-label="Text formatting" style={{ transform: `translateY(${-kb}px)` }}>
+          <div className="tools">
+            {stripTool(<b>B</b>, 'Bold', on.bold, (s) => toggle(s, 'bold'))}
+            {stripTool(<i>I</i>, 'Italic', on.italic, (s) => toggle(s, 'italic'))}
+            {stripTool('H1', 'Large heading', kind === 1, (s) => setBlock(s, 1))}
+            {stripTool('H2', 'Heading', kind === 2, (s) => setBlock(s, 2))}
+            {stripTool('¶', 'Plain paragraph', kind === 'p' && !here?.attrs.list, (s) => setBlock(s, 'p'))}
+            {stripTool('•', 'Bulleted list', here?.attrs.list === 'bullet', (s) => toggleList(s, 'bullet'))}
+            {stripTool('1.', 'Numbered list', here?.attrs.list === 'ordered', (s) => toggleList(s, 'ordered'))}
+            {stripTool('↶', 'Undo', false, (s) => run(s, undo))}
+            {stripTool('All', 'Select all', false, selectAll)}
+            <button onMouseDown={keep} onClick={() => { copyText(); focusTyping() }}>Copy</button>
+            <button onMouseDown={keep} onClick={() => { void pasteText(); focusTyping() }}>Paste</button>
+            <button onMouseDown={keep} onClick={() => { typing.current?.blur(); setTab('text') }}>Box…</button>
+          </div>
+          <button className="done" onMouseDown={keep} onClick={() => typing.current?.blur()}>Done</button>
+        </div>
+      ) : (
+        <nav className="tabs" role="tablist" aria-label="Settings">
+          <button className={drawArm ? 'on' : ''} aria-pressed={drawArm} onClick={() => { setTab(null); setDrawArm(!drawArm) }}>{drawArm ? 'Cancel' : 'Draw a box'}</button>
+          {TABS.filter(([t]) => t !== 'text').map(([t, label]) => (
+            <button key={t} role="tab" aria-selected={tab === t} aria-controls="sheet" className={tab === t ? 'on' : ''} onClick={() => { setDrawArm(false); setTab(tab === t ? null : t) }}>{label}</button>
+          ))}
+        </nav>
+      ))}
       <textarea ref={typing} className="typing" aria-label="Text of the box you are editing" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-        onKeyDown={onKey} onInput={() => { if (composition === null) syncTyping() }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        onKeyDown={onKey} onInput={() => { if (composition === null) syncTyping(); else if (coarse) syncTyping(true) }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         onCompositionStart={() => setComposition('')}
         onCompositionUpdate={(e) => setComposition(e.data)}
         onCompositionEnd={() => { setComposition(null); syncTyping() }}
         onCopy={(e) => onCopy(e, false)} onCut={(e) => onCopy(e, true)} onPaste={onPaste} />
     </div>
-    <footer className="bottom">
-      <span>© 2026 Ilse Funkhouser.</span>
-      <span>Grown with love from Kevin Raymond's <a href="https://github.com/kevinraymond/florilegium" target="_blank" rel="noreferrer">florilegium</a> (<a href="https://github.com/kevinraymond/florilegium/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT License</a>). Fonts: IM Fell (SIL Open Font License), Latin Modern (GUST Font License).</span>
-    </footer>
+    {!narrow && <footer className="bottom">{credits}</footer>}
     </div>
   )
 }
@@ -882,18 +1092,32 @@ function LinesOf({ lines, style }: { lines: Line[]; style: TextStyle }) {
   )
 }
 
-function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink, unlink }: {
+function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink, unlink, touch, armed, disarm }: {
   index: number; page: FlowPage; W: number; H: number; zoom: number; margins: Margins; style: TextStyle; gym?: string; growing: boolean
   svgRef: (el: SVGSVGElement | null) => void; caretRef: React.RefObject<SVGLineElement | null>
   caret?: Caret; composition: string | null; rects: { x: number; y: number; w: number; h: number }[]
   linking: boolean; activeStory: number | null; selectedId: number | null; chainLabel: (b: Box) => string
   setDragging: (b: boolean) => void; editPage: (page: number, fn: (b: Box[]) => Box[]) => void
   drawBox: (page: number, x: number, y: number) => number; afterDraw: (page: number, id: number, ok: boolean) => void
-  startText: (e: React.PointerEvent, page: number, box: Box) => void; removeBox: (page: number, box: Box) => void
+  startText: (e: React.PointerEvent | React.MouseEvent, page: number, box: Box, drag?: boolean) => void; removeBox: (page: number, box: Box) => void
   removePage?: () => void; select: (id: number) => void; startLink: (b: Box) => void; unlink: (b: Box) => void
+  touch: boolean; armed: boolean; disarm: () => void
 }) {
   const ref = useRef<SVGSVGElement | null>(null)
   const drag = useRef<Drag | null>(null)
+  // touch: a finger on a box's control or in draw mode mustn't scroll the pages (only a native listener can stop that)
+  const stageRef = useRef<HTMLDivElement | null>(null)
+  const armedNow = useRef(armed)
+  armedNow.current = armed
+  useEffect(() => {
+    const el = stageRef.current
+    if (!el) return
+    const f = (e: TouchEvent) => { if (e.touches.length === 1 && (armedNow.current || (e.target as Element).closest?.('.ctl'))) e.preventDefault() }
+    el.addEventListener('touchstart', f, { passive: false })
+    return () => el.removeEventListener('touchstart', f)
+  }, [])
+  const kind = useRef('mouse')             // the last pointer's kind: a mouse types on pointerdown, a finger on click
+  const downOn = useRef<number | null>(null)
   const scale = PAGE_PX * zoom / W
   const left = margins.left * CM, right = W - margins.right * CM, top = margins.top * CM, bottom = H - margins.bottom * CM
   const pull = 6 / scale      // how near a margin a dragged edge snaps to it
@@ -908,10 +1132,11 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
     e.preventDefault()
     e.stopPropagation()
     ref.current!.setPointerCapture(e.pointerId)
-    drag.current = d
+    drag.current = { ...d, pid: e.pointerId }
     setDragging(true)
   }
   const onDown = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'mouse' && !armed) return            // a finger scrolls, unless drawing is armed
     const p = at(e)
     const x0 = snap(p.x, left, right), y0 = snap(p.y, top, bottom)
     const id = drawBox(index, x0, y0)
@@ -919,7 +1144,7 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
   }
   const onMove = (e: React.PointerEvent) => {
     const d = drag.current
-    if (!d) return
+    if (!d || (d.pid !== undefined && e.pointerId !== d.pid)) return     // a second finger
     const p = at(e)
     const clampX = (v: number) => Math.max(0, Math.min(W, v)), clampY = (v: number) => Math.max(0, Math.min(H, v))
     editPage(d.page, (bs) => bs.map((b) => {
@@ -939,13 +1164,14 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
       return { ...b, w: Math.max(30, snap(clampX(p.x), right) - b.x), h: Math.max(20, snap(clampY(p.y), bottom) - b.y) }
     }))
   }
-  const onUp = () => {
+  const onUp = (e: React.PointerEvent) => {
     const d = drag.current
-    if (!d) return
+    if (!d || (d.pid !== undefined && e.pointerId !== d.pid)) return
     drag.current = null
     if (d.kind === 'draw') {
       const b = page.boxes.find((x) => x.id === d.id)
-      afterDraw(d.page, d.id, !!b && b.w > 30 && b.h > 20)
+      afterDraw(d.page, d.id, e.type !== 'pointercancel' && !!b && b.w > 30 && b.h > 20)    // a cancelled draw leaves no box
+      if (armed) disarm()
     }
     setDragging(false)
   }
@@ -954,16 +1180,18 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
       <div className="pagelabel"><span>Page {index + 1}{page.auto ? ' (text ran on)' : ''}</span>
         {removePage && <button className="link" onClick={removePage}>Delete page</button>}
       </div>
-      <div className={'stage' + (growing ? ' growing' : '')} data-page={index} style={{ width: W * scale, height: H * scale }}>
+      <div ref={stageRef} className={'stage' + (growing ? ' growing' : '') + (touch ? ' touch' : '') + (armed ? ' armed' : '')} data-page={index} style={{ width: W * scale, height: H * scale }}
+        onContextMenu={touch ? (e) => e.preventDefault() : undefined}>
         <svg className="under" viewBox={`0 0 ${W} ${H}`} aria-hidden="true"><LinesOf lines={page.lines.filter((l) => l.layer === 'behind')} style={style} /></svg>
         {url && <img src={url} alt="" />}
         <svg ref={(el) => { ref.current = el; svgRef(el) }} className={'ink' + (linking ? ' linking' : '')} viewBox={`0 0 ${W} ${H}`} role="application" aria-label={`Page ${index + 1}`}
-          onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+          onPointerDownCapture={(e) => { kind.current = e.pointerType }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           <rect className="guide" x={left} y={top} width={right - left} height={bottom - top} />
           {rects.map((r, i) => <rect key={i} className="selection" x={r.x} y={r.y} width={r.w} height={r.h} />)}
           <LinesOf lines={page.lines.filter((l) => l.layer !== 'behind')} style={style} />
           {page.boxes.map((b) => {
-            const handle = 10 / scale, dr = 9 / scale
+            const handle = (touch ? 18 : 10) / scale, dr = (touch ? 12 : 9) / scale, hit = 22 / scale
+            const controls = !touch || b.id === selectedId           // a finger gets a box's controls once it's chosen
             const label = chainLabel(b)
             const over = page.over.has(b.id)
             const shown = over ? Math.max(b.h, page.used.get(b.id) ?? 0) : b.h
@@ -971,21 +1199,29 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
             return (
               <g key={b.id}>
                 <rect className={cls} x={b.x} y={b.y} width={b.w} height={shown}
-                  onPointerDown={(e) => startText(e, index, b)} />
-                <rect className="edge" x={b.x - 3 / scale} y={b.y - 3 / scale} width={b.w + 6 / scale} height={b.h + 6 / scale}
+                  onPointerDown={(e) => { downOn.current = b.id; if (e.pointerType === 'mouse') startText(e, index, b) }}
+                  onClick={(e) => { if (kind.current !== 'mouse' && !armed && downOn.current === b.id) startText(e, index, b, false) }} />
+                {controls && <>
+                <rect className="edge ctl" x={b.x - 3 / scale} y={b.y - 3 / scale} width={b.w + 6 / scale} height={b.h + 6 / scale}
                   onPointerDown={(e) => { const p = at(e); select(b.id); begin(e, { kind: 'move', page: index, id: b.id, dx: p.x - b.x, dy: p.y - b.y }) }} />
-                <rect className="handle" x={b.x + b.w - handle / 2} y={b.y + b.h - handle / 2} width={handle} height={handle}
-                  onPointerDown={(e) => { select(b.id); begin(e, { kind: 'size', page: index, id: b.id, dx: 0, dy: 0 }) }} />
-                <circle className="del" cx={b.x + b.w} cy={b.y} r={dr} role="button" aria-label="Delete this text box"
-                  onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); removeBox(index, b) }} />
-                <path className="delx" d={`M${b.x + b.w - dr / 2} ${b.y - dr / 2}l${dr} ${dr}m0 ${-dr}l${-dr} ${dr}`} />
-                <g className="linker" role="button" aria-label="Link this box to another" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); startLink(b) }}>
+                <g className="ctl" onPointerDown={(e) => { select(b.id); begin(e, { kind: 'size', page: index, id: b.id, dx: 0, dy: 0 }) }}>
+                  {touch && <circle className="hit" cx={b.x + b.w} cy={b.y + b.h} r={hit} />}
+                  <rect className="handle" x={b.x + b.w - handle / 2} y={b.y + b.h - handle / 2} width={handle} height={handle} />
+                </g>
+                <g className="ctl" role="button" aria-label="Delete this text box" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); removeBox(index, b) }}>
+                  {touch && <circle className="hit" cx={b.x + b.w} cy={b.y} r={hit} />}
+                  <circle className="del" cx={b.x + b.w} cy={b.y} r={dr} />
+                  <path className="delx" d={`M${b.x + b.w - dr / 2} ${b.y - dr / 2}l${dr} ${dr}m0 ${-dr}l${-dr} ${dr}`} />
+                </g>
+                <g className="linker ctl" role="button" aria-label="Link this box to another" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); startLink(b) }}>
                   <title>Link this box to another, so text flows between them</title>
+                  {touch && <circle className="hit" cx={b.x + b.w} cy={b.y + b.h / 2} r={hit} />}
                   <circle cx={b.x + b.w} cy={b.y + b.h / 2} r={dr} />
                   <path d={`M${b.x + b.w - dr * 0.5} ${b.y + b.h / 2}h${dr}m${-dr * 0.4} ${-dr * 0.4}l${dr * 0.4} ${dr * 0.4}l${-dr * 0.4} ${dr * 0.4}`} />
                 </g>
-                {label && <text className="chain" x={b.x} y={b.y - 5 / scale} fontSize={11 / scale}>{label}{' · '}
-                  <tspan className="unlink" role="button" aria-label="Unlink this box, so it holds its own text"
+                </>}
+                {label && <text className="chain" x={b.x} y={b.y - (touch ? 8 : 5) / scale} fontSize={(touch ? 15 : 11) / scale}>{label}{' · '}
+                  <tspan className="unlink ctl" role="button" aria-label="Unlink this box, so it holds its own text"
                     onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); unlink(b) }}>Unlink</tspan>
                 </text>}
               </g>
