@@ -1189,14 +1189,13 @@ function M.halimeda(rng, h)
     if r < h * 0.02 or depth > 9 then return end
     local cx, cy = x + r * 0.8 * sin(a), y + r * 0.8 * cos(a)
     fill(ellipse(cx, cy, r, r * 0.78, 12), tone(0.3 + 0.025 * depth))
-    if fine() then ink.circle(cx, cy - r * 0.55, r * 0.14) ink.fill(tone(0.2)) end
     local tx, ty = x + r * 1.35 * sin(a), y + r * 1.35 * cos(a)
-    if rng.chance(depth < 4 and 0.5 or 0.2) then
+    if rng.chance(depth < 3 and 0.3 or 0.06) then
       seg(tx, ty, a - rng.range(20, 40) * rad, r * rng.range(0.82, 0.94), depth + 1)
       seg(tx, ty, a + rng.range(20, 40) * rad, r * rng.range(0.82, 0.94), depth + 1)
     else seg(tx, ty, a + rng.sym(15) * rad, r * rng.range(0.85, 0.96), depth + 1) end
   end
-  seg(0, 0, rng.sym(10) * rad, h * 0.055, 0)
+  for i = 1, rng.int(2, 3) do seg(rng.sym(h * 0.03), 0, (lerp(-35, 35, rng.range(0, 1)) + rng.sym(8)) * rad, h * rng.range(0.045, 0.06), 0) end
 end
 
 -- sea grapes (Caulerpa racemosa): a runner on the sand, upright stalks crowded with little spheres
