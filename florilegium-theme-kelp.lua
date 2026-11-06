@@ -2234,8 +2234,15 @@ function M.forest(rng, o)
         -- swing round with the rest, a little higher
         local ang = (canopy and cur * 98 or FL.blade) + 16 * turb(p[1], p[2]) + eddy(p[1], p[2]) + brng.sym(7) + ((side > 0) == (cur > 0) and 0 or -cur * 18)
         local L = (canopy and brng.range(2.0, 3.4) or brng.range(1.5, 3.0)) * (far and 0.8 or 1)
-        local ex, ey = p[1] + L * sin(ang * rad), p[2] + L * cos(ang * rad)
-        local mx, my = lerp(p[1], ex, 0.5), lerp(p[2], ey, 0.5)
+        -- a blade that would reach into text swings up toward the stipe first (beside a text box, the
+        -- current would push every blade into it)
+        local ex, ey, mx, my
+        for _, swing in ipairs({ 0, -35, -65 }) do
+          local a2 = ang + cur * swing
+          ex, ey = p[1] + L * sin(a2 * rad), p[2] + L * cos(a2 * rad)
+          mx, my = lerp(p[1], ex, 0.5), lerp(p[2], ey, 0.5)
+          if not blocked(ex, ey, 0.05) and not blocked(mx, my, 0.05) then ang = a2 break end
+        end
         local c0, c1 = cell(p[1], p[2]), cell(mx, my)
         local cap = canopy and 2 or 1
         if not blocked(ex, ey, 0.05) and not blocked(mx, my, 0.05) and (crowd[c0] or 0) < cap and (crowd[c1] or 0) < cap then
@@ -2299,13 +2306,13 @@ function M.forest(rng, o)
       local brng = rng.fork()
       local clear = true
       for yy = r.top, H, 0.5 do if blocked(r.x, yy, 0.8) then clear = false break end end
-      if clear and rng.chance(0.3) then
+      if clear and rng.chance(0.2) then
         -- bull kelp: one long whip to a float, a fountain of blades streaming from it
         ink.layer(L_KELP)
         local pts = stipe(r.x, r.top - 0.05, brng.fork())
         if #pts > 10 then
           local fpt = pts[#pts]
-          ink.smooth(ink.ribbon(pts, function(t) return lerp(0.06, 0.03, t) end), true) ink.fill(tone(0.2))
+          ink.smooth(ink.ribbon(pts, function(t) return lerp(0.1, 0.065, t) end), true) ink.fill(tone(0.2))   -- a bull kelp's whip, hollow and thick
           for _ = 1, brng.int(6, 10) do M.blade(brng, fpt[1], fpt[2], cur * brng.range(40, 110), brng.range(1.6, 2.8), 0.09, cur * 1.3, brng.range(0.3, 0.42)) end
           ink.circle(fpt[1], fpt[2], 0.2) ink.fill(tone(0.16))
           if fine() then ink.circle(fpt[1] - 0.06, fpt[2] + 0.06, 0.06) ink.fill(white, 0.5) end
