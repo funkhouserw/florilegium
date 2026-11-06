@@ -1893,31 +1893,54 @@ function M.compose(C, ink, seed, col, o)
     end
   end
   -- a house the post runs through: a condo in a post's bare stretch, the post going in at its floor and on
-  -- out of its roof (drawn over the post, so the post is hidden inside it), one on a page, two on a wide one
+  -- out of its roof (drawn over the post, so the post is hidden inside it). Not on every page: only where it
+  -- breaks up a run of bare posts side by side (three or more at the same height), on the middle one, never
+  -- with another house within a level above or below it, and at most one a page
   do
     local cw, ch = real(C.DIM.condo_w), real(C.DIM.condo_h) + 0.2
-    local nthru, maxthru = 0, wide and 2 or 1
-    local order = {}
-    for i = 1, n do order[i] = i end
-    shuffle(order)
-    for _, i in ipairs(order) do
-      if nthru >= maxthru or DD < 0.4 then break end
-      local ph = posth[i]
-      if ph > ch + 1.4 and rng.chance(0.75) then
-        -- the heights the condo could take along the post, a quarter level apart, low ones first
-        local ys = {}
-        for y = top + 0.5, top + ph - ch - 0.5, step / 4 do ys[#ys + 1] = y end
-        for _, y in ipairs(ys) do
-          if free(xs[i] - cw / 2, y, xs[i] + cw / 2, y + ch, 0.05, "post") then
-            local holes = ({ { "round" }, { "arch" }, { "oval" }, { "round", "round" } })[rng.int(1, 4)]
-            local skin = rng.chance(0.3) and "sisal" or nil
-            draw(4, at(xs[i], y, function(r) C.condo(r, { holes = holes, skin = skin }) end))
-            reg(xs[i] - cw / 2, y, xs[i] + cw / 2, y + ch, "condo")
-            spot(xs[i], y + ch * 0.5, { "peek" }, true)
-            nthru = nthru + 1
-            break
-          end
+    local HOUSES = { condo = true, hex = true, bowl = true, ring = true, tube = true }
+    -- is post k bare from y to y + h (nothing on it but itself)?
+    local function bare(k, y, h)
+      if not xs[k] or top + posth[k] < y + h then return false end
+      for _, q in ipairs(boxes) do
+        if q ~= postbox[k] and q[1] < xs[k] + pr + 0.05 and q[3] > xs[k] - pr - 0.05 and q[2] < y + h and q[4] > y then return false end
+      end
+      return true
+    end
+    -- a house near it on the same post, above or below (a step's clearance), or right above it on top?
+    local function stacked(i, y)
+      if y + ch > top + posth[i] - step then return true end
+      for _, q in ipairs(boxes) do
+        if HOUSES[q[5]] and q[1] < xs[i] + cw and q[3] > xs[i] - cw and q[2] < y + ch + step and q[4] > y - step then return true end
+      end
+      return false
+    end
+    local cands = {}
+    for i = 2, n - 1 do
+      for y = top + 0.5, top + posth[i] - ch - 0.5, step / 4 do
+        if bare(i - 1, y, ch) and bare(i, y, ch) and bare(i + 1, y, ch) and not stacked(i, y)
+          and free(xs[i] - cw / 2, y, xs[i] + cw / 2, y + ch, 0.05, "post") then
+          local run = 3                               -- how long the row of bare posts is
+          for k = i - 2, 1, -1 do if bare(k, y, ch) then run = run + 1 else break end end
+          for k = i + 2, n do if bare(k, y, ch) then run = run + 1 else break end end
+          cands[#cands + 1] = { i = i, y = y, run = run }
         end
+      end
+    end
+    table.sort(cands, function(a_, b_) if a_.run ~= b_.run then return a_.run > b_.run end if a_.i ~= b_.i then return a_.i < b_.i end return a_.y < b_.y end)
+    local nthru, maxthru = 0, DD >= 0.4 and 1 or 0
+    if not rng.chance(0.6) then maxthru = 0 end
+    local used = {}
+    for _, c in ipairs(cands) do
+      if nthru >= maxthru then break end
+      local i, y = c.i, c.y
+      if not used[i] and not used[i - 1] and not used[i + 1] and not stacked(i, y) and free(xs[i] - cw / 2, y, xs[i] + cw / 2, y + ch, 0.05, "post") then
+        local holes = ({ { "round" }, { "arch" }, { "oval" }, { "round", "round" } })[rng.int(1, 4)]
+        local skin = rng.chance(0.3) and "sisal" or nil
+        draw(4, at(xs[i], y, function(r) C.condo(r, { holes = holes, skin = skin }) end))
+        reg(xs[i] - cw / 2, y, xs[i] + cw / 2, y + ch, "condo")
+        spot(xs[i], y + ch * 0.5, { "peek" }, true)
+        used[i], nthru = true, nthru + 1
       end
     end
   end
