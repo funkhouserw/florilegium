@@ -749,6 +749,19 @@ function M.forest(rng, o)
     if far then ink.set_lift(old) end
   end
 
+  -- 0. light coming down from the surface: a few faint shafts, slanting with the sun, behind everything
+  ink.layer(L_FAR)
+  do
+    local slant = rng.sym(0.25)
+    for _ = 1, rng.int(3, 5) do
+      local x = rng.range(-0.1 * W, W * 1.0)
+      local w0, w1 = rng.range(0.4, 1.1), rng.range(1.2, 2.6)
+      local yb = rng.range(H * 0.15, H * 0.45)
+      local dx = slant * (H - yb)
+      ink.poly({ { x - w0 / 2, H }, { x + w0 / 2, H }, { x + dx + w1 / 2, yb }, { x + dx - w1 / 2, yb } }, true)
+      ink.fill(tone(0.82), rng.range(0.1, 0.18))
+    end
+  end
   -- 1. the far bunches, between and behind the near rocks
   for _ = 1, floor(W / 4.5) + 1 do
     local x = rng.range(0, W)
@@ -873,11 +886,22 @@ function M.forest(rng, o)
   -- otters at the surface, on their backs in the canopy
   ink.layer(L_TOP)
   for _ = 1, o.otters or 1 do
+    -- an otter floats at the surface itself, its back just under it, so it may break the top of the page a
+    -- little; it only needs the water to be clear of text and of other otters
     local L = rng.range(4.0, 5.0)
-    place(L * 1.1, L * 0.45, surface - 0.8, surface + 0.2, 60, function(x, y)
-      ink.push() ink.translate(x, y - L * 0.05) ink.scale(rng.chance(0.5) and 1 or -1, 1) M.otter(rng.fork(), L) ink.pop()
-      bubbles(rng, x + rng.sym(L * 0.3), y + L * 0.2, 0.05, 3)
-    end)
+    for _ = 1, 60 do
+      local x, y = rng.range(L * 0.55, W - L * 0.55), surface - rng.range(0.1, 0.5)
+      local a, b, c, d = x - L * 0.55, y - L * 0.1, x + L * 0.55, y + L * 0.2
+      local ok = true
+      for _, q in ipairs(keeps) do if a < q[3] and c > q[1] and b < q[4] and d > q[2] then ok = false end end
+      for _, q in ipairs(boxes) do if q[5] == "otter" and a < q[3] and c > q[1] then ok = false end end
+      if ok then
+        reg(a, b, c, d, "otter")
+        ink.push() ink.translate(x, y) ink.scale(rng.chance(0.5) and 1 or -1, 1) M.otter(rng.fork(), L) ink.pop()
+        bubbles(rng, x + rng.sym(L * 0.3), y - L * 0.15, 0.05, 3)
+        break
+      end
+    end
   end
   -- bubbles rising from the rocks
   for _ = 1, rng.int(2, 5) do
