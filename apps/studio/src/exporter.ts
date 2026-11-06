@@ -7,14 +7,17 @@ import { faceOf, type Family } from './fonts'
 
 // The gym as an image, the text on the canvas: an SVG in an <img> can't see the page's web fonts.
 export async function pagePng(gym: string, page: FlowPage, style: TextStyle, pixelWidth: number, W: number, H: number, paper: string): Promise<Blob> {
-  const url = URL.createObjectURL(new Blob([gym], { type: 'image/svg+xml' }))
+  const width = pixelWidth, height = Math.round(pixelWidth * H / W)
+  // the drawing's own size set to the canvas's: Safari rasterizes an SVG image at its stated size, then scales it
+  const sized = gym.replace(/<svg\b[^>]*>/, (tag) => tag.replace(/\swidth="[^"]*"/, ` width="${width}"`).replace(/\sheight="[^"]*"/, ` height="${height}"`))
+  const url = URL.createObjectURL(new Blob([sized], { type: 'image/svg+xml' }))
   try {
-    const img = new Image()
+    const img = new Image(width, height)
     img.src = url
     await img.decode()
     const canvas = document.createElement('canvas')
-    canvas.width = pixelWidth
-    canvas.height = Math.round(pixelWidth * H / W)
+    canvas.width = width
+    canvas.height = height
     const c = canvas.getContext('2d')!
     c.fillStyle = paper
     c.fillRect(0, 0, canvas.width, canvas.height)

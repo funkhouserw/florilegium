@@ -124,7 +124,15 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
   .panel input, .panel select, .panel textarea { font-size: 16px; }    /* iOS zooms into anything smaller */
 }
 @media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
-  .panel .close { display: block; align-self: flex-end; margin-bottom: -6px; border: 0; padding: 4px 2px; font-size: 14px; min-height: 0; }
+  .sheethead { position: sticky; top: -16px; z-index: 3; display: flex; align-items: center; gap: 10px; margin: -16px -16px -4px; padding: 10px 16px 6px;
+    background: #fff; border-radius: 14px 14px 0 0; }
+  .panel.down .sheethead { box-shadow: 0 6px 10px -6px rgba(27, 42, 107, .25); }
+  .sheethead .mini { flex: 1; min-height: 36px; padding: 4px 10px; }
+  .sheethead .mini.stale { background: #c8591b; border-color: #c8591b; }
+  .sheethead .mini:not(.stale) { background: #fff; color: #2456c4; }
+  .panel .close { display: block; margin-left: auto; border: 0; padding: 4px 2px; font-size: 14px; min-height: 0; }
+  .fade { position: sticky; bottom: -20px; z-index: 3; flex-shrink: 0; margin: -44px -16px -20px; height: 44px; padding-bottom: 8px; display: flex; align-items: flex-end;
+    justify-content: center; background: linear-gradient(rgba(255, 255, 255, 0), #fff 70%); color: #6a7396; font-size: 11px; pointer-events: none; }
   .panel.tab-text .toolbar, .panel.tab-text .sec-text > .hint:first-of-type { display: none; }
   .strip { display: flex; grid-row: 2; gap: 6px; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); background: #fff;
     border-top: 1px solid #d5d9e6; position: relative; z-index: 22; }
@@ -139,3 +147,11 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
 
 .grip rect { fill: #fff; stroke: #2456c4; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .grip .hand { fill: none; stroke: #2456c4; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+
+.num { display: flex; align-items: center; gap: 6px; }
+.num input { flex: 1; min-width: 0; }
+.num .unit { color: #6a7396; font-size: 12px; }
+.pagesave { display: flex; gap: 14px; justify-content: flex-end; min-height: 18px; font-size: 12px; }
+.pagesave .link { border: 0; background: none; color: #2456c4; font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
+.pagesave .link:disabled { color: #9aa2c0; cursor: default; }
+@media (pointer: coarse) { .pagesave { font-size: 14px; gap: 18px; } .pagesave .link { padding: 6px 0; } }

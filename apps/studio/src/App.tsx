@@ -1,7 +1,7 @@
 // Felilegium: draw boxes on a page and type in them. A new box carries on the text you were writing, or
 // is unlinked to hold a story of its own; the text flows as you type, and the drawing grows around the boxes
 // when you ask. Your work is kept in this browser as you go, and in a file when you ask.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { EditorState, type Transaction } from 'prosemirror-state'
 import { blockAt, deleteBack, deleteForward, enter, marksHere, newState, redo, replaceBefore, replaceDoc, run, selectAll, selectRange, selectTo, setAlign, setBlock, step, toggle, toggleList, undo, wordAt } from './editor'
 import { flow, fontOf, lineOfPos, posOfX, remeasure, xOfPos, type Box, type FlowPage, type Layer, type Line, type TextStyle } from './flow'
@@ -61,7 +61,20 @@ export function App() {
   const coarse = useMedia('(pointer: coarse)')          // a finger: taps type, a drag scrolls, a box is drawn in draw mode
   const [tab, setTab] = useState<Tab | null>(null)
   const [drawArm, setDrawArm] = useState(false)
+  // a sheet shows when there's more below (a fade) and, scrolled down the Drawing sheet, keeps Generate at its top
+  const sheet = useRef<HTMLElement | null>(null)
+  const [sheetScroll, setSheetScroll] = useState({ down: false, more: false })
+  const readSheet = () => {
+    const el = sheet.current
+    if (!el) return
+    const next = { down: el.scrollTop > 70, more: el.scrollTop + el.clientHeight < el.scrollHeight - 4 }
+    setSheetScroll((o) => (o.down === next.down && o.more === next.more ? o : next))
+  }
+  useLayoutEffect(readSheet)
   const [shareFiles, setShareFiles] = useState<File[] | null>(null)
+  const [readyPage, setReadyPage] = useState<{ index: number; file: File } | null>(null)
+  const [savingPage, setSavingPage] = useState<number | null>(null)
+  const [scale2x, setScale2x] = useState(2)                  // PNGs at 1, 2 or 3 times the size's pixels
   const [textColor, setTextColor] = useState(initial.textColor)
   const [margins, setMargins] = useState<Margins>(initial.margins)
   const [drawn, setDrawn] = useState<Box[][]>(initial.drawn)
@@ -162,6 +175,8 @@ export function App() {
   // kept in this browser as you work; a full disk must not stop the work
   const doc: Doc = useMemo(() => ({ stories: texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, perPage, textColor, margins, drawn }),
     [texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, perPage, textColor, margins, drawn])
+  // PNGs made ready to save or share are of the work as it was: a change puts them away
+  useEffect(() => { setShareFiles(null); setReadyPage(null) }, [doc, scale2x])
   docNow.current = doc
   const note = noted && noted.doc === doc ? noted.text : ''      // a note lasts until the work changes
   useEffect(() => {
@@ -738,6 +753,22 @@ export function App() {
 
   // an export is of the page as it stands: if the drawing is behind, it catches up on screen too
   const catchUp = () => { if (stale) setGrown(requests) }
+  // a PNG's width: the size's pixels times 1, 2 or 3, within what a phone's canvas holds (about 16 million pixels)
+  const pngWidth = Math.round(Math.min(S.px * scale2x, Math.sqrt(16e6 * W / H)))
+  const shareOut = (files: File[]) => {
+    navigator.share({ files }).catch((e: Error) => { if (e.name !== 'AbortError') { setError('Sharing failed: ' + e.message); files.forEach((f) => download(f, f.name)) } })
+  }
+  async function savePage(i: number) {
+    setError('')
+    catchUp()
+    setSavingPage(i)
+    try {
+      const png = await pagePng(await growGym(requests[i]), pages[i], style, pngWidth, W, H, PAPER)
+      const file = new File([png], `${fileBase}-${i + 1}.png`, { type: 'image/png' })
+      if (coarse && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) setReadyPage({ index: i, file })
+      else download(file, file.name)
+    } catch (e) { setError('Saving the page failed: ' + String(e)) } finally { setSavingPage(null) }
+  }
   async function exportPngs() {
     setNote('')
     catchUp()
@@ -746,11 +777,11 @@ export function App() {
       const sharing = coarse && typeof navigator.canShare === 'function'
       for (let i = 0; i < pages.length; i++) {
         setBusy(`Page ${i + 1} of ${pages.length}`)
-        const png = await pagePng(await growGym(requests[i]), pages[i], style, S.px, W, H, PAPER)
+        const png = await pagePng(await growGym(requests[i]), pages[i], style, pngWidth, W, H, PAPER)
         if (sharing) files.push(new File([png], `${fileBase}-${i + 1}.png`, { type: 'image/png' }))
         else download(png, `${fileBase}-${i + 1}.png`)
       }
-      if (sharing && navigator.canShare({ files })) setShareFiles(files)
+      if (sharing && navigator.canShare({ files })) setShareFiles(files)        // Save and Share, both a fresh tap away
       else files.forEach((f) => download(f, f.name))
     } catch (e) { setError('Export failed: ' + String(e)) } finally { setBusy('') }
   }
@@ -828,8 +859,15 @@ export function App() {
       <a className="repo" href="https://github.com/funkhouserw/florilegium" target="_blank" rel="noreferrer"><span className="long">funkhouserw/florilegium on </span>GitHub</a>
     </header>
     <div className="app">
-      <aside id="sheet" className={'panel' + (tab ? ' open tab-' + tab : '')} aria-label="Settings" role={narrow ? 'tabpanel' : undefined}>
-        {narrow && tab && <button className="close" aria-label="Close" onClick={() => setTab(null)}>Close</button>}
+      <aside id="sheet" ref={sheet} onScroll={readSheet} className={'panel' + (tab ? ' open tab-' + tab : '') + (sheetScroll.down ? ' down' : '')} aria-label="Settings" role={narrow ? 'tabpanel' : undefined}>
+        {narrow && tab && (
+          <div className="sheethead">
+            {tab === 'drawing' && sheetScroll.down && (
+              <button className={'primary mini' + (stale ? ' stale' : '')} onClick={() => setGrown(requests)}>{growing ? 'Generating…' : stale ? 'Generate' : 'Up to date'}</button>
+            )}
+            <button className="close" aria-label="Close" onClick={() => setTab(null)}>Close</button>
+          </div>
+        )}
         <section className="sec sec-text" aria-label="Text">
         <div className="toolbar" role="toolbar" aria-label="Text formatting">
           {tool('H1', 'Large heading', kind === 1, () => edit((s) => setBlock(s, 1)))}
@@ -926,7 +964,7 @@ export function App() {
         )}
         <div className="row">
           {grows !== 'flowers' && <NumberField label="Cats a page" min={0} max={6} value={cats} onChange={setCats} />}
-          <NumberField label={grows === 'flowers' ? 'Flower size' : 'Piece size'} min={0.8} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
+          <NumberField label={grows === 'flowers' ? 'Flower size' : 'Piece size'} unit="×" min={0.8} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
           <NumberField label="Seed" min={1} max={1e9} value={seed} onChange={setSeed} />
         </div>
         </section>
@@ -941,7 +979,7 @@ export function App() {
           <span>Margins, in cm</span>
           <div className="row">
             {(['top', 'bottom', 'left', 'right'] as const).map((side) => (
-              <NumberField key={side} label={side[0].toUpperCase() + side.slice(1)} min={0} max={marginLimit(margins, sizeKey, side)} step={0.1}
+              <NumberField key={side} label={side[0].toUpperCase() + side.slice(1)} unit="cm" min={0} max={marginLimit(margins, sizeKey, side)} step={0.1}
                 value={margins[side]} onChange={(v) => changeMargin(side, v)} />
             ))}
           </div>
@@ -955,16 +993,21 @@ export function App() {
         <label>Text color
           <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} />
         </label>
-        <NumberField label="Type size" min={10} max={90} value={fontSize} onChange={setFontSize} />
+        <NumberField label="Type size" unit="pt" min={10} max={90} value={fontSize} onChange={setFontSize} />
+        <p className="hint">Points on the page: {fontSize} pt is about {Math.round(fontSize * S.px / W)} px in a {S.px} px wide image.</p>
         <button onClick={() => setDrawn((d) => [...d, []])}>Add a page</button>
         </section>
         <section className="sec sec-export" aria-label="Export and files">
+        <label>PNG size
+          <select value={scale2x} onChange={(e) => setScale2x(+e.target.value)}>
+            {[1, 2, 3].map((k) => <option key={k} value={k}>{Math.round(Math.min(S.px * k, Math.sqrt(16e6 * W / H)))} px wide{k === 1 ? ` (${sizeKey === 'a4' || sizeKey === 'letter' ? 'about 200 dpi' : 'Instagram\'s own'})` : k === 2 ? ' (sharp on a phone)' : ''}</option>)}
+          </select>
+        </label>
         {shareFiles && (
-          <button className="primary share" onClick={() => {
-            const files = shareFiles
-            setShareFiles(null)
-            navigator.share({ files }).catch((e: Error) => { if (e.name !== 'AbortError') { setError('Sharing failed: ' + e.message); files.forEach((f) => download(f, f.name)) } })
-          }}>Share {shareFiles.length} image{shareFiles.length === 1 ? '' : 's'} (Instagram, Photos…)</button>
+          <div className="row">
+            <button className="primary share" onClick={() => shareFiles.forEach((f) => download(f, f.name))}>Save {shareFiles.length} image{shareFiles.length === 1 ? '' : 's'}</button>
+            <button className="primary share" onClick={() => shareOut(shareFiles)}>Share… (Instagram, Photos)</button>
+          </div>
         )}
         <div className="row three">
           <button className="primary" disabled={!!busy} onClick={exportPngs}>PNGs</button>
@@ -984,6 +1027,7 @@ export function App() {
         {narrow && <p className="credits">{credits}</p>}
         </section>
         {error && <p className="error" role="alert">{error}</p>}
+        {narrow && tab && sheetScroll.more && <div className="fade" aria-hidden="true">more below ▾</div>}
       </aside>
       <section className="canvas">
       <div className="zoombar" role="toolbar" aria-label="Zoom the pages">
@@ -1019,7 +1063,15 @@ export function App() {
               linking={linking !== null} activeStory={activeId} selectedId={selected?.page === i ? selected.id : null}
               chainLabel={(b) => { const ch = chainOf(b.story); return ch.length > 1 ? `${ch.findIndex((c) => c.page === i && c.id === b.id) + 1}/${ch.length}` : '' }}
               setDragging={setDragging} editPage={editPage} drawBox={drawBox} afterDraw={afterDraw} startText={startText} removeBox={removeBox} removePage={drawn.length > 1 && i < drawn.length ? () => removePage(i) : undefined} select={(id) => setSelected({ page: i, id })}
-              unlink={(b) => unlink(i, b)} touch={coarse} armed={drawArm} disarm={() => setDrawArm(false)}
+              unlink={(b) => unlink(i, b)} touch={coarse} armed={drawArm} disarm={() => setDrawArm(false)} count={pages.length}
+              save={savingPage === i ? <span className="hint">Making page {i + 1}…</span>
+                : readyPage?.index === i ? (
+                  <>
+                    <button className="link" onClick={() => download(readyPage.file, readyPage.file.name)}>Save</button>
+                    <button className="link" onClick={() => shareOut([readyPage.file])}>Share…</button>
+                    <button className="link" onClick={() => setReadyPage(null)}>Done</button>
+                  </>
+                ) : <button className="link" disabled={savingPage !== null || !!busy} onClick={() => void savePage(i)}>Save page {i + 1} as PNG</button>}
               startLink={(b) => { setSelected({ page: i, id: b.id }); setActiveId(b.story); setLinking(linking === null ? b.story : null) }} />
           )
         })}
@@ -1075,8 +1127,8 @@ function AlignIcon({ align }: { align: Align }) {
 
 // You can clear a field and type: the page follows whenever what's there is a usable number, and
 // leaving the field puts back the nearest one. A whole-number field unless it has a step.
-function NumberField({ label, value, min, max, step, onChange }: {
-  label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void
+function NumberField({ label, value, min, max, step, unit, onChange }: {
+  label: string; value: number; min: number; max: number; step?: number; unit?: string; onChange: (v: number) => void
 }) {
   const [draft, setDraft] = useState<string | null>(null)
   const usable = (t: string) => {
@@ -1085,6 +1137,8 @@ function NumberField({ label, value, min, max, step, onChange }: {
   }
   return (
     <label>{label}
+      <span className="num">
+      {unit === '×' && <span className="unit">×</span>}
       <input type="number" min={min} max={max} step={step} value={draft ?? value}
         onChange={(e) => {
           setDraft(e.target.value)
@@ -1098,11 +1152,13 @@ function NumberField({ label, value, min, max, step, onChange }: {
           }
           setDraft(null)
         }} />
+      {unit && unit !== '×' && <span className="unit">{unit}</span>}
+      </span>
     </label>
   )
 }
 
-function LinesOf({ lines, style }: { lines: Line[]; style: TextStyle }) {
+const LinesOf = memo(function LinesOf({ lines, style }: { lines: Line[]; style: TextStyle }) {
   return (
     <g fontFamily={style.family} fill={style.color} style={{ pointerEvents: 'none' }}>
       {lines.flatMap((l, i) => l.runs.map((r, j) => (
@@ -1110,9 +1166,9 @@ function LinesOf({ lines, style }: { lines: Line[]; style: TextStyle }) {
       )))}
     </g>
   )
-}
+})
 
-function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink, unlink, touch, armed, disarm }: {
+function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink, unlink, touch, armed, disarm, count, save }: {
   index: number; page: FlowPage; W: number; H: number; zoom: number; margins: Margins; style: TextStyle; gym?: string; growing: boolean
   svgRef: (el: SVGSVGElement | null) => void; caretRef: React.RefObject<SVGLineElement | null>
   caret?: Caret; composition: string | null; rects: { x: number; y: number; w: number; h: number }[]
@@ -1121,7 +1177,7 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
   drawBox: (page: number, x: number, y: number) => number; afterDraw: (page: number, id: number, ok: boolean) => void
   startText: (e: React.PointerEvent | React.MouseEvent, page: number, box: Box, drag?: boolean) => void; removeBox: (page: number, box: Box) => void
   removePage?: () => void; select: (id: number) => void; startLink: (b: Box) => void; unlink: (b: Box) => void
-  touch: boolean; armed: boolean; disarm: () => void
+  touch: boolean; armed: boolean; disarm: () => void; count: number; save: React.ReactNode
 }) {
   const ref = useRef<SVGSVGElement | null>(null)
   const drag = useRef<Drag | null>(null)
@@ -1141,6 +1197,9 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
   undoDrag.current = () => {
     const d = drag.current
     if (!d) return
+    frame.current.fn = null
+    clearTimeout(reflow.current)
+    setGhost(null)
     drag.current = null
     if (d.kind === 'draw') afterDraw(d.page, d.id, false)
     else if (d.orig) { const o = d.orig; editPage(d.page, (bs) => bs.map((b) => (b.id === o.id ? o : b))) }
@@ -1151,6 +1210,19 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
     window.addEventListener('touchstart', f, { capture: true, passive: true })
     return () => window.removeEventListener('touchstart', f, { capture: true })
   }, [])
+  // a box being moved or resized is drawn from here, so a drag redraws this page alone; the work's layout (and the
+  // text's flow) catches up when the finger lifts, and every so often while resizing
+  const [ghost, setGhostState] = useState<Box | null>(null)
+  const ghostNow = useRef<Box | null>(null)
+  const setGhost = (b: Box | null) => { ghostNow.current = b; setGhostState(b) }
+  const frame = useRef<{ raf: number; fn: (() => void) | null }>({ raf: 0, fn: null })
+  const perFrame = (fn: () => void) => {          // the latest of a frame's moves, once
+    frame.current.fn = fn
+    if (!frame.current.raf) frame.current.raf = requestAnimationFrame(() => { const f = frame.current.fn; frame.current = { raf: 0, fn: null }; f?.() })
+  }
+  const flushFrame = () => { const f = frame.current.fn; cancelAnimationFrame(frame.current.raf); frame.current = { raf: 0, fn: null }; f?.() }
+  const reflow = useRef(0)
+  const commitGhost = () => { const g = ghostNow.current; const d = drag.current; if (g && d) editPage(d.page, (bs) => bs.map((b) => (b.id === g.id ? g : b))) }
   const kind = useRef('mouse')             // the last pointer's kind: a mouse types on pointerdown, a finger on click
   const downOn = useRef<number | null>(null)
   const scale = PAGE_PX * zoom / W
@@ -1187,26 +1259,38 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
     if (!d || (d.pid !== undefined && e.pointerId !== d.pid)) return     // a second finger
     const p = at(e)
     const clampX = (v: number) => Math.max(0, Math.min(W, v)), clampY = (v: number) => Math.max(0, Math.min(H, v))
-    editPage(d.page, (bs) => bs.map((b) => {
-      if (b.id !== d.id) return b
-      if (d.kind === 'draw') {
+    if (d.kind === 'draw') {
+      // a new box: the text flows into it as it grows, once a frame
+      perFrame(() => editPage(d.page, (bs) => bs.map((b) => {
+        if (b.id !== d.id) return b
         const x = snap(clampX(p.x), left, right), y = snap(clampY(p.y), top, bottom)
         return { ...b, x: Math.min(d.x0, x), y: Math.min(d.y0, y), w: Math.abs(x - d.x0), h: Math.abs(y - d.y0) }
-      }
-      if (d.kind === 'move') {
-        const x = clampX(p.x - d.dx), y = clampY(p.y - d.dy)
-        return {
-          ...b,
-          x: Math.abs(x + b.w - right) < pull ? right - b.w : snap(x, left),
-          y: Math.abs(y + b.h - bottom) < pull ? bottom - b.h : snap(y, top),
-        }
-      }
-      return { ...b, w: Math.max(30, snap(clampX(p.x), right) - b.x), h: Math.max(20, snap(clampY(p.y), bottom) - b.y) }
-    }))
+      })))
+      return
+    }
+    const b = d.orig
+    if (!b) return
+    if (d.kind === 'move') {
+      const x = clampX(p.x - d.dx), y = clampY(p.y - d.dy)
+      perFrame(() => setGhost({
+        ...b,
+        x: Math.abs(x + b.w - right) < pull ? right - b.w : snap(x, left),
+        y: Math.abs(y + b.h - bottom) < pull ? bottom - b.h : snap(y, top),
+      }))
+      return
+    }
+    perFrame(() => setGhost({ ...b, w: Math.max(30, snap(clampX(p.x), right) - b.x), h: Math.max(20, snap(clampY(p.y), bottom) - b.y) }))
+    // resizing: the text reflows now and then while the box changes, not on every move
+    if (!reflow.current) reflow.current = window.setTimeout(() => { reflow.current = 0; commitGhost() }, 150)
   }
   const onUp = (e: React.PointerEvent) => {
     const d = drag.current
     if (!d || (d.pid !== undefined && e.pointerId !== d.pid)) return
+    flushFrame()
+    clearTimeout(reflow.current)
+    reflow.current = 0
+    commitGhost()
+    setGhost(null)
     drag.current = null
     if (d.kind === 'draw') {
       const b = page.boxes.find((x) => x.id === d.id)
@@ -1215,21 +1299,37 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
     }
     setDragging(false)
   }
+  // the page's text, split into what stays and what rides along with a box being moved (stable arrays, so the
+  // memoized lines don't redraw while a box moves)
+  const ghostId = ghost && drag.current?.kind === 'move' ? ghost.id : null
+  const split = (layer: (l: Line) => boolean) => {
+    const all = page.lines.filter(layer)
+    return ghostId === null ? { still: all, moving: [] as Line[] } : { still: all.filter((l) => l.box !== ghostId), moving: all.filter((l) => l.box === ghostId) }
+  }
+  const behind = useMemo(() => split((l) => l.layer === 'behind'), [page.lines, ghostId])    // eslint-disable-line react-hooks/exhaustive-deps
+  const front = useMemo(() => split((l) => l.layer !== 'behind'), [page.lines, ghostId])     // eslint-disable-line react-hooks/exhaustive-deps
+  const orig = ghostId !== null ? page.boxes.find((b) => b.id === ghostId) : undefined
+  const moved = ghost && orig ? { x: ghost.x - orig.x, y: ghost.y - orig.y } : { x: 0, y: 0 }
   return (
     <div className="pagewrap">
-      <div className="pagelabel"><span>Page {index + 1}{page.auto ? ' (text ran on)' : ''}</span>
+      <div className="pagelabel"><span>Page {index + 1} of {count}{page.auto ? ' (text ran on)' : ''}</span>
         {removePage && <button className="link" onClick={removePage}>Delete page</button>}
       </div>
       <div ref={stageRef} className={'stage' + (growing ? ' growing' : '') + (touch ? ' touch' : '') + (armed ? ' armed' : '')} data-page={index} style={{ width: W * scale, height: H * scale }}
         onContextMenu={touch ? (e) => e.preventDefault() : undefined}>
-        <svg className="under" viewBox={`0 0 ${W} ${H}`} aria-hidden="true"><LinesOf lines={page.lines.filter((l) => l.layer === 'behind')} style={style} /></svg>
+        <svg className="under" viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
+          <LinesOf lines={behind.still} style={style} />
+          {ghost && <g transform={`translate(${moved.x} ${moved.y})`}><LinesOf lines={behind.moving} style={style} /></g>}
+        </svg>
         {url && <img src={url} alt="" />}
         <svg ref={(el) => { ref.current = el; svgRef(el) }} className={'ink' + (linking ? ' linking' : '')} viewBox={`0 0 ${W} ${H}`} role="application" aria-label={`Page ${index + 1}`}
           onPointerDownCapture={(e) => { kind.current = e.pointerType }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           <rect className="guide" x={left} y={top} width={right - left} height={bottom - top} />
           {rects.map((r, i) => <rect key={i} className="selection" x={r.x} y={r.y} width={r.w} height={r.h} />)}
-          <LinesOf lines={page.lines.filter((l) => l.layer !== 'behind')} style={style} />
-          {page.boxes.map((b) => {
+          <LinesOf lines={front.still} style={style} />
+          {ghost && <g transform={`translate(${moved.x} ${moved.y})`}><LinesOf lines={front.moving} style={style} /></g>}
+          {page.boxes.map((b0) => {
+            const b = ghost?.id === b0.id ? ghost : b0
             const handle = (touch ? 18 : 10) / scale, dr = (touch ? 12 : 9) / scale, hit = 22 / scale
             const controls = !touch || b.id === selectedId           // a finger gets a box's controls once it's chosen
             const label = chainLabel(b)
@@ -1284,6 +1384,7 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
           {caret && <line ref={caretRef} className="caret" x1={caret.x} x2={caret.x} y1={caret.y0} y2={caret.y1} />}
         </svg>
       </div>
+      <div className="pagesave">{save}</div>
     </div>
   )
 }
