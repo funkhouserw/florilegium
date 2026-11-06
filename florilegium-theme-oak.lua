@@ -804,6 +804,16 @@ function M.skeleton(rng, o)
     local th_ = min(1.0 + tw * tm.range(1.0, 1.3), over - o.base[2] - tw * 0.6)
     steps = max(4, floor(th_ / D))
   end
+  -- A short space under the text (a text over the top of the page, the tree squeezed under it): the tree
+  -- is mostly bole, an ancient pollard. The trunk rises straight through about nine tenths of the height
+  -- under the text and is cut there at its full width; two or three scaffolds leave the top of the bole,
+  -- rising before they spread into the space beside the text. A tall page is as it was (`short` is nil).
+  local short = over and over - o.base[2] < 15 and over - o.base[2] > tw * 1.2
+  if short then
+    mode = "cut"
+    steps = max(4, floor(((over - o.base[2]) * 0.9 - 0.35) / D))
+    tilt, bend = tilt * 0.3, bend * 0.3
+  end
   for k = 1, steps do
     local t = k / steps
     prev = add(prev.x + D * (tilt + bend * sin(t * 3.4)), prev.y + D, rng.sym(0.05), prev)
@@ -811,6 +821,7 @@ function M.skeleton(rng, o)
   end
   local cut_top = nil
   if mode == "cut" then
+    for _, n in ipairs(nodes) do if n.trunk then n.bole = true end end   -- a bole keeps its girth up to the cut
     prev.cuttop, prev.closed, cut_top = true, true, prev
     if prev.parent then prev.parent.closed = true if prev.parent.parent then prev.parent.parent.closed = true end end
   end
@@ -915,7 +926,7 @@ function M.skeleton(rng, o)
         placed = placed + 1
         if t > 0.15 then feed(x, y, 2.4, 2.0) end
         -- now and then a sprout off the top of a level stretch
-        if abs(th) < 0.3 and t > 0.15 and t < 0.85 and k - lastsp > 7 and column == 0 and sw.chance(low and 0.06 or 0.04) then
+        if abs(th) < 0.3 and t > 0.15 and t < 0.85 and k - lastsp > 7 and column == 0 and sw.chance(low and 0.06 or 0.04) and not short then
           local up = sprout(nn, sw.range(1.6, 3.4) * (1 - 0.4 * t))
           if up > 2 then lastsp = k end
         end
@@ -931,17 +942,27 @@ function M.skeleton(rng, o)
     end
     local count = o.fill and sw.int(2, 4) or (sw.chance(0.5) and 2 or 4)   -- a free-standing tree: as many each side
     local d0 = sw.chance(0.5) and 1 or -1
+    if short then count = min(count, 3) end
+    local rested_one = false                         -- a short page: one limb at most comes down to the ground
     for i_ = 1, count do
       local dir = (i_ % 2 == 1) and d0 or -d0
       if i_ == 3 and o.fill and sw.chance(0.5) then dir = d0 end   -- two on one side: they cross over and under
       local f = count > 1 and (i_ - 1) / (count - 1) or 0.5
       f = max(0, min(1, f + sw.sym(0.14)))             -- v2: each limb leaves at a height of its own, not in levels
-      local from = trunk_nodes[max(2, floor(#trunk_nodes * (cut_top and lerp(0.4, 0.8, f) or lerp(0.5, 1, f)) + 0.5))]
+      local from = trunk_nodes[max(2, floor(#trunk_nodes * (short and lerp(0.48, 0.8, f) or cut_top and lerp(0.4, 0.8, f) or lerp(0.5, 1, f)) + 0.5))]
       local room = dir > 0 and (PW - from.x) or from.x
       local L = room * sw.range(1.0, 1.35) + sw.range(1, 3)
       local low = f < 0.5
       local e0 = low and sw.range(0.1, 0.4) or sw.range(0.35, 0.75)
       local elbow = low and sw.chance(0.5)
+      if short then
+        -- off the top of the bole: up first, then out; one limb at most comes down to the ground, and
+        -- only where there is real room beside the trunk
+        e0 = e0 + 0.3
+        elbow = elbow and not rested_one and room > tw * 2.2
+        if elbow then rested_one, e0 = true, e0 - 0.35 end
+        low = false
+      end
       scaffold(from, dir, e0, L, elbow, low)
     end
   end
@@ -1479,6 +1500,7 @@ M.stump = (function()
 
   local function stump(rng, x, y, ang, w, o)
     o = o or {}
+    if not (w and w > 0.02) then return end              -- an end with no width has nothing to cut (0 / 0 in the sprouts)
     ink.push() ink.translate(x, y) ink.rotate(ang)
     local D = w * ink.unit()                              -- the end's width on the page, cm
     local fine = D > 0.45 and ink.get_lift() < 0.3
@@ -2088,7 +2110,10 @@ function M.tree(rng, o)
   -- Where a big limb or the trunk would pinch (every child of a fork under 0.7 of it), it does not narrow:
   -- it goes on a little at its full width and ends there in a cut, its children leaving below the cut.
   local WW = {}
-  local function floor_of(n) return n.sweep and trunkw * (0.05 + 0.25 * (1 - n.sweep)) or 0 end
+  local function floor_of(n)
+    if n.bole then return trunkw * 0.82 end            -- a planned cut: the bole is full width to its top, never a cone
+    return n.sweep and trunkw * (0.05 + 0.25 * (1 - n.sweep)) or 0
+  end
   local function widths(fl)
     for i = #nodes, 1, -1 do
       local n = nodes[i]
@@ -2108,6 +2133,7 @@ function M.tree(rng, o)
         if second > 0.3 * big then w = max(w, big / 0.8) end
       end
       if fl then w = max(w, floor_of(n) * fl) end
+      if n.pinch_w then w = max(w, n.pinch_w) end
       WW[n] = w
     end
     for _, n in ipairs(nodes) do if n.stub then WW[n] = WW[n.parent] end end
@@ -2169,10 +2195,43 @@ function M.tree(rng, o)
       return a.y < b.y
     end)
     local trunk_done = false
+    -- the stem's own pinch, at one fork (see below)
+    local function stem_pinch(n)
+      local cont, nbig = nil, 0
+      for _, k in ipairs(n.kids) do
+        if WW[k] >= 0.55 * WW[n] then nbig = nbig + 1 end
+        if (k.trunk or k.leader) and (not cont or WW[k] > WW[cont]) then cont = k end
+      end
+      return (cont and WW[cont] < 0.7 * WW[n] or not cont) and nbig < 2
+    end
+    -- A stem with no such fork can still thin away gradually, fork by small fork, into a cone (the trunk
+    -- short, the crown's branch going on up from it). Then the main stem (the thickest child, up from the
+    -- root) is a bole of full girth for at least two trunk widths, and is cut where it thins after that.
+    -- Only for a tree whose trunk has no pinch of its own, so a page that had one is as it was.
+    local gradual = true
+    for _, n in ipairs(nodes) do
+      if (n.trunk or n.leader) and WW[n] * sc_ >= 1.0 and n.parent and not n.stub and not n.cuttop and #n.kids >= 1 and stem_pinch(n) then gradual = false break end
+    end
+    local mainstem = {}
+    if gradual then
+      local m, coned = nodes[1], false
+      while m do
+        mainstem[m] = true
+        local up = nil
+        for _, k in ipairs(m.kids) do if not k.stub and (not up or WW[k] > WW[up]) then up = k end end
+        if up and m.y - nodes[1].y < 2 * trunkw and WW[up] < 0.75 * WW[nodes[1]] then coned = true end
+        m = up
+      end
+      if coned then
+        for n in pairs(mainstem) do if n.y - nodes[1].y < 2 * trunkw then n.bole = true end end   -- only flags: the order feeds no draw
+        widths(1 / s0)
+        sc_ = trunkw / WW[nodes[1]]
+      else mainstem = {} end
+    end
     for _, n in ipairs(order) do
       if cuts >= 3 then break end
       local wn = WW[n] * sc_
-      local onstem = n.trunk or n.leader
+      local onstem = n.trunk or n.leader or mainstem[n]
       if wn >= 1.0 and #n.kids >= 1 and not n.stub and not n.cuttop and n.parent and not (onstem and trunk_done) then
         local big, side, cont, nbig = 0, 0, nil, 0
         for _, k in ipairs(n.kids) do
@@ -2183,13 +2242,14 @@ function M.tree(rng, o)
         -- the trunk pinches where the stem going on is under 0.7 of it (unless it forks into a Y of two
         -- big arms); a limb, where every child is under 0.7 of it
         local pinch = big < 0.7 * WW[n]
-        if onstem then pinch = (cont and WW[cont] < 0.7 * WW[n] or not cont) and nbig < 2 end
+        if onstem then pinch = stem_pinch(n) end
         if pinch then
           if onstem then trunk_done = true end
           local dx, dy = n.x - n.parent.x, n.y - n.parent.y
           local dl = sqrt(dx * dx + dy * dy) + 1e-9
           dx, dy = dx / dl, dy / dl
-          turnout(n, dx, dy)
+          n.pinch_w = WW[n]                            -- it carries on at the width it had: what turned out or went
+          turnout(n, dx, dy)                           -- below must not thin the stub above it
           local L = max(side * 1.0, wn * 0.5) + 0.5
           local prev_, d = n, 0
           local stubs = {}
