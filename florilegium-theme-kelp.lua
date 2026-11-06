@@ -2626,13 +2626,15 @@ function M.forest(rng, o)
         local axis = math.atan(q[1] - p[1], q[2] - p[2]) / rad
         -- out to its side, drooping: further down on the upstream side, the current pushes both a bit downstream
         local ang = axis + side * brng.range(55, 105) + cur * brng.range(5, 25) + 10 * turb(p[1], p[2])
-        local L = brng.range(0.6, 1.5) * (1 - 0.35 * (p[2] / H)) * (lift_ and 0.85 or 1)
+        local v = (p[2] - pts[1][2]) / max(0.5, pts[#pts][2] - pts[1][2])
+        -- the blades lengthen up the stipe, the top ones long and broad, as in the canopy
+        local L = brng.range(0.6, 1.4) * lerp(0.75, 1.35, v * v) * (lift_ and 0.85 or 1)
+        local Wb = brng.range(0.1, 0.16) * lerp(0.9, 1.3, v * v)
         local ex, ey = p[1] + L * sin(ang * rad), p[2] + L * cos(ang * rad)
         if not blocked(ex, ey, 0.25) and not blocked(lerp(p[1], ex, 0.5), lerp(p[2], ey, 0.5), 0.25) then
-          plan[#plan + 1] = { brng.fork(), p[1], p[2], ang, L, brng.range(0.1, 0.16), t0 + brng.range(-0.06, 0.1) }
+          plan[#plan + 1] = { brng.fork(), p[1], p[2], ang, L, Wb, t0 + brng.range(-0.06, 0.1) }
         end
         side = -side
-        local v = (p[2] - pts[1][2]) / max(0.5, pts[#pts][2] - pts[1][2])
         i = i + max(1, floor(lerp(5, 1, v) + brng.sym(0.8) + 0.5))   -- thin near the foot, thick near the top
       end
     end
