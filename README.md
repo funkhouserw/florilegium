@@ -27,6 +27,9 @@ what grows around your words:
 - **A cat gym**, **one huge oak** (lush or open crown, any season, Spanish moss if you like),
   or **Kevin's flowers** (spring, summer or autumn).
 - Every page grows a drawing of its own, or pages laid out alike can share the same one.
+- Works on a phone: the pages fill the screen, the settings open as sheets from a bottom bar,
+  formatting rides above the keyboard, one finger scrolls and two zoom, and PNGs (2160 px by
+  default) can go straight to the share sheet. Each page can be saved on its own.
 - Text flows from box to box and onto new pages as you type. A new box carries on the text
   you're in; "Unlink" on its label gives it text of its own.
 - Headings, bold, italic, lists and alignment, with Markdown shortcuts as you type

@@ -968,7 +968,7 @@ export function App() {
         )}
         <div className="row">
           {grows !== 'flowers' && <NumberField label="Cats a page" min={0} max={6} value={cats} onChange={setCats} />}
-          <NumberField label={grows === 'flowers' ? 'Flower size' : grows === 'oak' ? 'Tree size' : 'Piece size'} unit="×" min={0.8} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
+          <NumberField label={grows === 'flowers' ? 'Flower size' : grows === 'oak' ? 'Tree size' : 'Cat gym size'} unit="×" min={0.8} max={2.5} step={0.1} value={pieces} onChange={setPieces} />
           <NumberField label="Seed" min={1} max={1e9} value={seed} onChange={setSeed} />
         </div>
         </section>
