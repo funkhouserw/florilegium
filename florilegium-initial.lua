@@ -144,7 +144,7 @@ function M.draw(rng, S, letter, o)
   -- a theme may decorate the tile itself (o.decorate, e.g. theme-cattree's cat):
   -- then there is no vine, only the letter and what the theme draws around it
   local deco = o.decorate
-  local pts, width = {}, nil
+  local pts, width = {}
   if not deco then
   -- the vine: from the lower-left corner up across the letter to the upper right
   local f = ink.fbm1(rng, 2)
