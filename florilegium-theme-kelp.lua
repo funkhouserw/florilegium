@@ -419,18 +419,42 @@ function M.anemone(rng, h)
   if fine() then for k = 1, 4 do local y = h * k * 0.12 ink.moveto(-h * 0.2, y) ink.lineto(h * 0.2, y) end ink.stroke(tone(0.22), 0.3, 0.6) end
 end
 
--- a whelk shell on the sand, side on, spire up and to the left; s = length
+-- a whelk shell lying on the sand, its axis tilted: a pointed spire of whorls stacked toward the apex, the
+-- big body whorl, the aperture with its pale lip and the siphon canal at the other end; s = length
 function M.whelk(rng, s)
-  fill(ellipse(0, 0, s * 0.32, s * 0.22, 16, 0.5), tone(0.55))
-  for k = 1, 4 do                                      -- the spire's whorls, each smaller
-    local f = 0.75 ^ k
-    local w = ellipse(-s * 0.2 * (1 - f) * 1.6, s * 0.18 * (1 - f) * 1.6, s * 0.3 * f, s * 0.2 * f, 14, 0.5)
-    fill(w, tone(0.55 - 0.04 * k))
-    if fine() then ink.smooth(w, true) ink.stroke(tone(0.3), 0.3, 0.7) end
+  local tilt = rng.range(0.35, 0.6)                      -- the axis, from the canal (lower right) to the apex
+  local ax, ay = cos(pi - tilt), sin(pi - tilt)          -- toward the apex
+  local nx, ny = -ay, ax                                 -- across the shell
+  local P = function(u, v) return u * ax + v * nx, u * ay + v * ny end   -- u along the axis, v across
+  -- the outline: canal tip, the body whorl's swell, the spire narrowing in steps to the apex
+  local out = {}
+  local prof = { { -0.5, 0.02 }, { -0.36, 0.1 }, { -0.2, 0.26 }, { 0.0, 0.3 }, { 0.14, 0.24 }, { 0.2, 0.17 }, { 0.28, 0.15 }, { 0.33, 0.1 }, { 0.4, 0.08 }, { 0.45, 0.05 }, { 0.5, 0.0 } }
+  for _, q in ipairs(prof) do out[#out + 1] = { P(q[1] * s, q[2] * s) } end
+  for i = #prof - 1, 1, -1 do local q = prof[i] out[#out + 1] = { P(q[1] * s, -q[2] * s * 0.95) } end
+  fill(out, tone(0.5))
+  if fine() then
+    -- the lit upper flank
+    local lit = {}
+    for i = 2, #prof - 1 do lit[#lit + 1] = { P(prof[i][1] * s, prof[i][2] * s * 0.95) } end
+    for i = #prof - 1, 2, -1 do lit[#lit + 1] = { P(prof[i][1] * s, prof[i][2] * s * 0.35) } end
+    fill(lit, tone(0.66), 0.8)
+    -- sutures between the whorls: arcs across the spire
+    for _, u in ipairs({ 0.16, 0.27, 0.355, 0.43 }) do
+      local w = 0.0
+      for _, q in ipairs(prof) do if q[1] <= u then w = q[2] end end
+      ink.smooth({ { P((u - 0.02) * s, -w * s * 0.9) }, { P((u + 0.015) * s, 0) }, { P((u - 0.02) * s, w * s * 0.9) } }, false)
+      ink.stroke(tone(0.3), 0.4, 0.8)
+    end
+    -- spiral ridges on the body whorl
+    for k = 1, 4 do
+      local v = lerp(-0.2, 0.22, k / 5)
+      ink.smooth({ { P(-0.34 * s, v * s * 0.4) }, { P(-0.12 * s, v * s) }, { P(0.1 * s, v * s * 0.85) } }, false)
+    end
+    ink.stroke(tone(0.38), 0.3, 0.6)
+    -- the aperture and its lip, on the body whorl's lower side
+    fill({ { P(-0.32 * s, -0.04 * s) }, { P(-0.12 * s, -0.2 * s) }, { P(0.05 * s, -0.17 * s) }, { P(0.02 * s, -0.06 * s) }, { P(-0.2 * s, 0.0) } }, tone(0.15))
+    ink.smooth({ { P(-0.36 * s, -0.03 * s) }, { P(-0.12 * s, -0.23 * s) }, { P(0.08 * s, -0.19 * s) } }, false) ink.stroke(tone(0.85), 0.7, 0.9)
   end
-  fill(ellipse(s * 0.1, -s * 0.05, s * 0.12, s * 0.08, 12, 0.5), tone(0.82))   -- the aperture
-  fill({ { s * 0.22, -s * 0.12 }, { s * 0.38, -s * 0.2 }, { s * 0.3, -s * 0.08 } }, tone(0.5))   -- the siphon canal
-  if fine() then for k = 1, 5 do local a = 0.5 + k * 0.4 ink.moveto(s * 0.05 * cos(a), s * 0.05 * sin(a)) ink.lineto(s * 0.3 * cos(a), s * 0.2 * sin(a)) end ink.stroke(tone(0.4), 0.3, 0.6) end
 end
 
 -- a skate's egg case (a mermaid's purse): a pillow with four curling horns; s = length
@@ -600,6 +624,17 @@ function M.forest(rng, o)
   }
   local n1, n2 = ink.noise1(rng.fork()), ink.noise1(rng.fork())
   local function turb(x, y) return 0.6 * n1(x * 0.45 + y * 0.21) + 0.4 * n2(y * 0.38 - x * 0.17 + 40) end   -- about -1..1
+  -- an eddy or two: small places where the water turns, and blades there swing hard against the current
+  local eddies = {}
+  for _ = 1, rng.int(1, 2) do eddies[#eddies + 1] = { rng.range(W * 0.15, W * 0.85), rng.range(H * 0.2, H * 0.7), rng.range(1.2, 2.2), rng.chance(0.5) and 1 or -1 } end
+  local function eddy(x, y)
+    local a = 0
+    for _, e in ipairs(eddies) do
+      local d = math.sqrt((x - e[1]) ^ 2 + (y - e[2]) ^ 2)
+      if d < e[3] then a = a + e[4] * 70 * (1 - d / e[3]) ^ 1.5 end
+    end
+    return a
+  end
   -- the wave's sideways offset at (x0, y): it travels across the page, so a stipe further downstream is a
   -- little behind its neighbor
   local function wave(x0, y) return FL.amp * sin(y / FL.lam - x0 / FL.across * cur + FL.ph) end
@@ -688,7 +723,7 @@ function M.forest(rng, o)
         local canopy = p[2] > surface - 2.6 or (i > 3 and abs(pts[i][2] - pts[i - 1][2]) < 0.1)
         -- downstream, at the field's angle here, give or take its turbulence; the upstream side's blades
         -- swing round with the rest, a little higher
-        local ang = (canopy and cur * 98 or FL.blade) + 16 * turb(p[1], p[2]) + brng.sym(7) + ((side > 0) == (cur > 0) and 0 or -cur * 18)
+        local ang = (canopy and cur * 98 or FL.blade) + 16 * turb(p[1], p[2]) + eddy(p[1], p[2]) + brng.sym(7) + ((side > 0) == (cur > 0) and 0 or -cur * 18)
         local L = (canopy and brng.range(2.0, 3.4) or brng.range(1.5, 3.0)) * (far and 0.8 or 1)
         local ex, ey = p[1] + L * sin(ang * rad), p[2] + L * cos(ang * rad)
         local mx, my = lerp(p[1], ex, 0.5), lerp(p[2], ey, 0.5)
