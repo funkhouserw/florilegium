@@ -1538,12 +1538,14 @@ function M.compose(C, ink, seed, col, o)
   end
   if n >= 2 then spot(xs[1] + (xs[2] - xs[1]) / 2, top, { "sit", "loaf" }) end
   local kinds = { "banded", "sisal", "banded", "plush" }
-  for i = 1, n do
-    local h = lv[i] * step
+  local posth, postbox = {}, {}                       -- each post's height and its box: a post ending alone may
+  for i = 1, n do                                     -- still stop a third of a level off its level (the tops, below)
+    posth[i] = lv[i] * step
     local kind = kinds[rng.int(1, #kinds)]
     if kind == "sisal" or kind == "banded" then claws[#claws + 1] = xs[i] end
-    draw(2, at(xs[i], top, function(r) C.post(r, { kind = kind, bands = rng.int(1, 3), h = h }) end))
-    reg(xs[i] - pr, top, xs[i] + pr, top + h, "post")
+    draw(2, at(xs[i], top, function(r) C.post(r, { kind = kind, bands = rng.int(1, 3), h = posth[i] }) end))
+    reg(xs[i] - pr, top, xs[i] + pr, top + posth[i], "post")
+    postbox[i] = boxes[#boxes]
   end
   -- more platforms between neighbors, at levels below their shared top, where they
   -- clear the platforms already there (the posts run through them)
@@ -1671,11 +1673,232 @@ function M.compose(C, ink, seed, col, o)
     end
   end
 
+  -- the tops of the posts that do not end at a platform
+  local rings_, nrings = false, 0
+  local cluster_ = false
+  local R_sit = real(3.5)
+  local tops = {}
+  local function shuffle(t) for k = #t, 2, -1 do local j = rng.int(1, k) t[k], t[j] = t[j], t[k] end end
+  for i = 1, n do
+    local before = #tops
+    if not ptop[i] and not (Udone and i == n) then
+      local y = top + lv[i] * step
+      -- three hexagons sharing edges, on a post, before the routes take the room: one stack and a
+      -- third beside it (either way), or on a wide page a row with one up
+      local clustered = false
+      if not cluster_ and DD >= 0.5 and lv[i] >= 2 and rng.chance(0.7) then
+        local Rh = real(C.DIM.hex_w) / 2
+        local h_ = 0.866 * Rh
+        local SH = {}
+        for _, sd in ipairs(rng.chance(0.5) and { 1, -1 } or { -1, 1 }) do
+          if bound[3] - bound[1] > 9 then SH[#SH + 1] = { { 0, 0 }, { sd * 1.5 * Rh, h_ }, { sd * 3 * Rh, 0 } } end
+          SH[#SH + 1] = { { 0, 0 }, { 0, 2 * h_ }, { sd * 1.5 * Rh, h_ } }
+        end
+        for _, sh in ipairs(SH) do
+          if clustered then break end
+          local xa, xb, ya = math.huge, -math.huge, -math.huge
+          for _, c_ in ipairs(sh) do xa, xb, ya = min(xa, c_[1] - Rh), max(xb, c_[1] + Rh), max(ya, c_[2] + h_) end
+          local yb = y + st
+          if free(xs[i] + xa, y, xs[i] + xb, yb + h_ + ya, 0.02) then
+            draw(4, at(xs[i], y, function(r) C.shelf(r, { kind = "bracket", w = 1.3 * Rh }) end))
+            for ci_, c_ in ipairs(sh) do
+              local doors_, exits_ = C.hex_ways(sh, ci_, Rh)
+              draw(4, at(xs[i] + c_[1], yb + h_ + c_[2], function(r) C.hex(r, { doors = doors_, exits = exits_ }) end))
+              spot(xs[i] + c_[1], yb + c_[2] + R_sit, { "sit" }, true)
+            end
+            reg(xs[i] + xa, y, xs[i] + xb, yb + h_ + ya, "hex")
+            tops[#tops + 1] = { xs[i], yb + h_ + ya }
+            clustered, cluster_ = true, true
+          end
+        end
+      end
+      -- one topper at height y; true if it fitted. A house w wide shifts in from the page's edge as far as the
+      -- post stays under it (an end post stands half a centimeter from the edge)
+      local function inward(w)
+        local cx = min(bound[3] - w / 2 - 0.02, max(x0 + w / 2 + 0.02, xs[i]))
+        return abs(cx - xs[i]) <= w / 2 - pr - 0.05 and cx or nil
+      end
+      local function topper(c, y)
+        if c == "pompoms" then
+          if free(xs[i] - 0.8, y, xs[i] + 0.8, y + 1.3) then
+            draw(4, at(xs[i], y, function(r) C.pompoms(r, {}) end))
+            reg(xs[i] - 0.8, y, xs[i] + 0.8, y + 1.3, "toy")
+            tops[#tops + 1] = { xs[i], y + 0.05, noroute = true } return true
+          end
+        elseif c == "hex" then
+          -- a hexagon resting on the post's top, on a short bracket shelf
+          local R = real(C.DIM.hex_w) / 2
+          local cx = inward(2 * R)
+          if cx and free(cx - R, y, cx + R, y + st + 1.732 * R) then
+            draw(4, at(cx, y, function(r) C.shelf(r, { kind = "bracket", w = 1.3 * R }) end))
+            draw(4, at(cx, y + st + 0.866 * R, function(r) C.hex(r, {}) end))
+            reg(cx - R, y, cx + R, y + st + 1.732 * R, "hex")
+            spot(cx, y + st + real(3.5) + 0.05, { "sit" }, true)
+            tops[#tops + 1] = { cx, y + st + 1.732 * R } return true
+          end
+        elseif c == "ring" then
+          local d = real(42)
+          if nrings < 2 and free(xs[i] - d / 2, y, xs[i] + d / 2, y + d) then
+            rings_, nrings = true, nrings + 1
+            draw(4, at(xs[i], y, function(r) C.ring(r, { d = d }) end))
+            reg(xs[i] - d / 2, y, xs[i] + d / 2, y + d, "ring")
+            spot(xs[i], y + real(3), { "curl" }, true)
+            tops[#tops + 1] = { xs[i], y + d } return true
+          end
+        elseif c == "bowl" then
+          -- a basket or a plush bowl on the post's top: low, so it fits under what's above
+          local cx = inward(1.8)
+          if cx and free(cx - 0.9, y, cx + 0.9, y + 0.9) then
+            draw(4, at(cx, y, function(r) C.bowl(r, { kind = rng.pick({ "basket", "plush" }), scallop = rng.chance(0.5), r = real(17) }) end))
+            reg(cx - 0.9, y, cx + 0.9, y + 0.85, "bowl")
+            spot(cx, y + real(9), { "curl" }, true)
+            tops[#tops + 1] = { cx, y + 0.85 } return true
+          end
+        elseif c == "condo" then
+          local cw, ch = real(C.DIM.condo_w), real(C.DIM.condo_h) + 0.2
+          local cx = inward(cw)
+          if cx and free(cx - cw / 2, y, cx + cw / 2, y + ch) then
+            local holes = ({ { "round" }, { "arch" }, { "oval" } })[rng.int(1, 3)]
+            draw(4, at(cx, y, function(r) C.condo(r, { holes = holes }) end))
+            reg(cx - cw / 2, y, cx + cw / 2, y + ch, "condo")
+            spot(cx, y + ch, { "loaf", "sit", "meow" })
+            spot(cx, y + ch * 0.5, { "peek" }, true)
+            tops[#tops + 1] = { cx, y + ch } return true
+          end
+        elseif c == "tube" then
+          local w = real(30)
+          if free(xs[i] - w / 2 - 0.15, y, xs[i] + w / 2 + 0.15, y + real(22)) then
+            draw(4, at(xs[i], y, function(r) C.tube(r, { w = w }) end))
+            reg(xs[i] - w / 2 - 0.15, y, xs[i] + w / 2 + 0.15, y + real(22), "tube")
+            spot(xs[i], y + real(22), { "sit", "loaf", "meow" })
+            tops[#tops + 1] = { xs[i], y + real(22) } return true
+          end
+        else
+          local w = real(c == "pad" and 34 or 42)
+          local cx = min(bound[3] - w / 2, max(x0 + w / 2, xs[i] + rng.sym(0.3)))
+          if free(cx - w / 2, y, cx + w / 2, y + 0.45) then
+            if c == "pad" then draw(4, at(cx, y, function(r) C.pad(r, { w = w }) end))
+            else draw(4, at(cx, y, function(r) C.shelf(r, { kind = "cushion", w = w }) end)) end
+            reg(cx - w / 2, y, cx + w / 2, y + 0.45, c)
+            spot(cx, y + (c == "pad" and real(4) or real(10)), { "loaf", "curl", "sit" })
+            tops[#tops + 1] = { cx, y + 0.45 } return true
+          end
+        end
+        return false
+      end
+      -- the post may stop up to two thirds of a level lower (never below what it already carries) or higher
+      -- (where the length it gains is clear), so a house fits between its neighbors and what is above
+      local pb = postbox[i]
+      local low = top + step / 3
+      for _, q in ipairs(boxes) do
+        if q ~= pb and q[5] ~= "base" and q[1] < xs[i] + pr + 0.06 and q[3] > xs[i] - pr - 0.06 and q[4] <= y + 0.01 and q[4] > top + 0.01 then low = max(low, q[4] + 0.1) end
+      end
+      local function at_height(f)
+        local y2 = y + f * step
+        if y2 < low then return nil end
+        if f > 0 and not free(xs[i] - pr, y, xs[i] + pr, y2, 0.02) then return nil end
+        pb[4] = y2
+        return y2
+      end
+      local houses = { "hex", "hex", "ring", "condo", "bowl", "bowl", "tube" }
+      shuffle(houses)
+      if not rings_ then for k, c in ipairs(houses) do if c == "ring" then table.remove(houses, k) table.insert(houses, 1, "ring") break end end end
+      -- each house in turn, at the height nearest the post's level where it fits: so a ring or a hexagon
+      -- gets its chance a level's fraction down before a small tube takes the top as it stands
+      local fitted = clustered
+      for _, c in ipairs(clustered and {} or houses) do
+        for _, f in ipairs({ 0, -1 / 3, 1 / 3, -2 / 3, 2 / 3 }) do
+          local y2 = at_height(f)
+          if y2 and topper(c, y2) then posth[i], fitted = y2 - top, true break end
+        end
+        if fitted then break end
+      end
+      pb[4] = top + posth[i]
+      if not fitted then                              -- no house anywhere: something flat, at its level
+        local flats = { "pad", "cushion", "pompoms", "tube" }
+        shuffle(flats)
+        for _, c in ipairs(flats) do if topper(c, y) then break end end
+      end
+      if #tops == before then                         -- nothing fitted: a small pad, if that fits
+        local y = top + lv[i] * step
+        local w = real(26)
+        if free(xs[i] - w / 2, y, xs[i] + w / 2, y + 0.4) then
+          draw(4, at(xs[i], y, function(r) C.pad(r, { w = w }) end))
+          reg(xs[i] - w / 2, y, xs[i] + w / 2, y + 0.4, "pad")
+        end
+      end
+    end
+  end
+  -- stubby posts: a third or half a level, standing on a platform or the base where it has room, each with
+  -- a house on top (a hexagon, a condo, a basket or a tube), so open stretches get somewhere more to sit
+  do
+    local nstub, maxstub = 0, wide and 3 or 1
+    local floors = { { y = top, xa = bxa, xb = bxb, base = true } }
+    for _, p in ipairs(plats) do floors[#floors + 1] = { y = p.y + st, xa = p.xa, xb = p.xb } end
+    for _, p in ipairs(more) do floors[#floors + 1] = { y = p.y + st, xa = p.xa, xb = p.xb } end
+    local order = {}
+    for k = 1, #floors do order[k] = k end
+    shuffle(order)
+    local R = real(C.DIM.hex_w) / 2
+    local HOUSE = {                                   -- width, height of each house on a stub
+      hex = { 2 * R, st + 1.732 * R }, condo = { real(C.DIM.condo_w), real(C.DIM.condo_h) + 0.2 },
+      bowl = { 1.8, 0.9 }, tube = { real(30) + 0.3, real(22) },
+    }
+    for _, k in ipairs(order) do
+      if nstub >= maxstub or DD < 0.4 then break end
+      local f_ = floors[k]
+      -- the free stretches of this floor, between the posts standing on it or running through it
+      local cuts = { f_.xa }
+      for i = 1, n do if xs[i] > f_.xa and xs[i] < f_.xb then cuts[#cuts + 1] = xs[i] - pr cuts[#cuts + 1] = xs[i] + pr end end
+      cuts[#cuts + 1] = f_.xb
+      local done = false
+      for c = 1, #cuts - 1, 2 do
+        if done then break end
+        local a_, b_ = cuts[c], cuts[c + 1]
+        local kinds_ = { "hex", "condo", "bowl", "tube" }
+        shuffle(kinds_)
+        for _, kind in ipairs(kinds_) do
+          local w, hh = HOUSE[kind][1], HOUSE[kind][2]
+          if b_ - a_ >= w + 0.2 and rng.chance(0.7) then
+            local x = a_ + 0.1 + w / 2 + rng.range(0, b_ - a_ - w - 0.2)
+            local h = step * (rng.chance(0.5) and 1 / 3 or 1 / 2)
+            if free(x - w / 2, f_.y, x + w / 2, f_.y + h + hh, 0.05) then
+              local y = f_.y + h
+              draw(2, at(x, f_.y, function(r) C.post(r, { kind = "banded", bands = 1, h = h }) end))
+              reg(x - pr, f_.y, x + pr, y, "post")
+              if kind == "hex" then
+                draw(4, at(x, y, function(r) C.shelf(r, { kind = "bracket", w = 1.3 * R }) end))
+                draw(4, at(x, y + st + 0.866 * R, function(r) C.hex(r, {}) end))
+                spot(x, y + st + real(3.5) + 0.05, { "sit" }, true)
+              elseif kind == "condo" then
+                local holes = ({ { "round" }, { "arch" }, { "oval" } })[rng.int(1, 3)]
+                draw(4, at(x, y, function(r) C.condo(r, { holes = holes }) end))
+                spot(x, y + hh, { "loaf", "sit", "meow" })
+                spot(x, y + hh * 0.5, { "peek" }, true)
+              elseif kind == "bowl" then
+                draw(4, at(x, y, function(r) C.bowl(r, { kind = rng.pick({ "basket", "plush" }), r = real(17) }) end))
+                spot(x, y + real(9), { "curl" }, true)
+              else
+                draw(4, at(x, y, function(r) C.tube(r, { w = real(30) }) end))
+                spot(x, y + hh, { "sit", "loaf", "meow" })
+              end
+              reg(x - w / 2, y, x + w / 2, y + hh, kind)
+              tops[#tops + 1] = { x, y + hh }
+              nstub, done = nstub + 1, true
+              break
+            end
+          end
+        end
+      end
+    end
+  end
   -- side perches on the posts at the in-between levels: a short shelf, a basket on
-  -- an arm or a round pad, reaching out on whichever side has room
+  -- an arm or a round pad, reaching out on whichever side has room (after the tops and stubs, so a house
+  -- on a post's top gets the room first), below each post's top
   for i = 1, n do
     for k = 1, lv[i] * 2 - 1 do
       local y = top + k * step / 2 + rng.sym(0.15)
+      if y > top + posth[i] - 0.3 then break end      -- a post stopped short of its level
       if rng.chance(0.75 * min(1, DD * 1.5)) then
         local sides = rng.chance(0.5) and { 1, -1 } or { -1, 1 }
         for _, sd in ipairs(sides) do
@@ -1710,103 +1933,6 @@ function M.compose(C, ink, seed, col, o)
     end
   end
 
-  -- the tops of the posts that do not end at a platform
-  local rings_ = false
-  local cluster_ = false
-  local R_sit = real(3.5)
-  local tops = {}
-  for i = 1, n do
-    local before = #tops
-    if not ptop[i] and not (Udone and i == n) then
-      local y = top + lv[i] * step
-      -- three hexagons sharing edges, on a post, before the routes take the room: one stack and a
-      -- third beside it (either way), or on a wide page a row with one up
-      local clustered = false
-      if not cluster_ and DD >= 0.5 and lv[i] >= 2 and rng.chance(0.7) then
-        local Rh = real(C.DIM.hex_w) / 2
-        local h_ = 0.866 * Rh
-        local SH = {}
-        for _, sd in ipairs(rng.chance(0.5) and { 1, -1 } or { -1, 1 }) do
-          if bound[3] - bound[1] > 9 then SH[#SH + 1] = { { 0, 0 }, { sd * 1.5 * Rh, h_ }, { sd * 3 * Rh, 0 } } end
-          SH[#SH + 1] = { { 0, 0 }, { 0, 2 * h_ }, { sd * 1.5 * Rh, h_ } }
-        end
-        for _, sh in ipairs(SH) do
-          if clustered then break end
-          local xa, xb, ya = math.huge, -math.huge, -math.huge
-          for _, c_ in ipairs(sh) do xa, xb, ya = min(xa, c_[1] - Rh), max(xb, c_[1] + Rh), max(ya, c_[2] + h_) end
-          local yb = y + st
-          if free(xs[i] + xa, y, xs[i] + xb, yb + h_ + ya, 0.02) then
-            draw(4, at(xs[i], y, function(r) C.shelf(r, { kind = "bracket", w = 1.3 * Rh }) end))
-            for ci_, c_ in ipairs(sh) do
-              local doors_, exits_ = C.hex_ways(sh, ci_, Rh)
-              draw(4, at(xs[i] + c_[1], yb + h_ + c_[2], function(r) C.hex(r, { doors = doors_, exits = exits_ }) end))
-              spot(xs[i] + c_[1], yb + c_[2] + R_sit, { "sit" }, true)
-            end
-            reg(xs[i] + xa, y, xs[i] + xb, yb + h_ + ya, "hex")
-            tops[#tops + 1] = { xs[i], yb + h_ + ya }
-            clustered, cluster_ = true, true
-          end
-        end
-      end
-      local choices = { "ring", "ring", "ring", "tube", "pad", "cushion", "hex", "hex", "pompoms" }
-      for try_ = 1, clustered and 0 or 9 do
-        local c = table.remove(choices, rng.int(1, #choices))
-        if try_ == 1 and not rings_ then c = "ring" end
-        if c == "pompoms" then
-          if free(xs[i] - 0.8, y, xs[i] + 0.8, y + 1.3) then
-            draw(4, at(xs[i], y, function(r) C.pompoms(r, {}) end))
-            reg(xs[i] - 0.8, y, xs[i] + 0.8, y + 1.3, "toy")
-            tops[#tops + 1] = { xs[i], y + 0.05, noroute = true } break
-          end
-        elseif c == "hex" then
-          -- a hexagon resting on the post's top, on a short bracket shelf
-          local R = real(C.DIM.hex_w) / 2
-          if free(xs[i] - R, y, xs[i] + R, y + st + 1.732 * R) then
-            draw(4, at(xs[i], y, function(r) C.shelf(r, { kind = "bracket", w = 1.3 * R }) end))
-            draw(4, at(xs[i], y + st + 0.866 * R, function(r) C.hex(r, {}) end))
-            reg(xs[i] - R, y, xs[i] + R, y + st + 1.732 * R, "hex")
-            spot(xs[i], y + st + real(3.5) + 0.05, { "sit" }, true)
-            tops[#tops + 1] = { xs[i], y + st + 1.732 * R } break
-          end
-        elseif c == "ring" then
-          local d = real(42)
-          if free(xs[i] - d / 2, y, xs[i] + d / 2, y + d) then
-            rings_ = true
-            draw(4, at(xs[i], y, function(r) C.ring(r, { d = d }) end))
-            reg(xs[i] - d / 2, y, xs[i] + d / 2, y + d, "ring")
-            spot(xs[i], y + real(3), { "curl" }, true)
-            tops[#tops + 1] = { xs[i], y + d } break
-          end
-        elseif c == "tube" then
-          local w = real(30)
-          if free(xs[i] - w / 2 - 0.15, y, xs[i] + w / 2 + 0.15, y + real(22)) then
-            draw(4, at(xs[i], y, function(r) C.tube(r, { w = w }) end))
-            reg(xs[i] - w / 2 - 0.15, y, xs[i] + w / 2 + 0.15, y + real(22), "tube")
-            spot(xs[i], y + real(22), { "sit", "loaf", "meow" })
-            tops[#tops + 1] = { xs[i], y + real(22) } break
-          end
-        else
-          local w = real(c == "pad" and 34 or 42)
-          local cx = min(bound[3] - w / 2, max(x0 + w / 2, xs[i] + rng.sym(0.3)))
-          if free(cx - w / 2, y, cx + w / 2, y + 0.45) then
-            if c == "pad" then draw(4, at(cx, y, function(r) C.pad(r, { w = w }) end))
-            else draw(4, at(cx, y, function(r) C.shelf(r, { kind = "cushion", w = w }) end)) end
-            reg(cx - w / 2, y, cx + w / 2, y + 0.45, c)
-            spot(cx, y + (c == "pad" and real(4) or real(10)), { "loaf", "curl", "sit" })
-            tops[#tops + 1] = { cx, y + 0.45 } break
-          end
-        end
-      end
-      if #tops == before then                         -- nothing fitted: a small pad, if that fits
-        local y = top + lv[i] * step
-        local w = real(26)
-        if free(xs[i] - w / 2, y, xs[i] + w / 2, y + 0.4) then
-          draw(4, at(xs[i], y, function(r) C.pad(r, { w = w }) end))
-          reg(xs[i] - w / 2, y, xs[i] + w / 2, y + 0.4, "pad")
-        end
-      end
-    end
-  end
   bound = { x0, -1e9, Lmode and SP[3] or x1, 1e9 }
   local T = top
   for _, q in ipairs(boxes) do if q[5] ~= "head" and q[1] < x1 then T = max(T, q[4]) end end
