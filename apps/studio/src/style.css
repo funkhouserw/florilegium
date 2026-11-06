@@ -4,13 +4,16 @@
 @font-face { font-family: "Florilegium Roman"; font-style: italic; src: url("/fonts/lmroman-italic.woff2") format("woff2"); font-display: swap; }
 @font-face { font-family: "Florilegium Roman"; font-weight: 700; src: url("/fonts/lmroman-bold.woff2") format("woff2"); font-display: swap; }
 * { box-sizing: border-box; }
-html, body, #root { height: 100%; margin: 0; }
+html, body, #root { height: 100%; margin: 0; overscroll-behavior: none; }   /* no pull-to-refresh in an editor */
 body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1b2a6b; background: #eceef4; }
 .shell { display: grid; grid-template-rows: auto 1fr auto; height: 100%; }
 .top { display: flex; align-items: baseline; gap: 14px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #d5d9e6; font-size: 12px; color: #6a7396; }
 .top h1 { font: bold 20px Georgia, serif; margin: 0; color: #1b2a6b; }
 .bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; padding: 6px 16px; background: #fff; border-top: 1px solid #d5d9e6; font-size: 11px; color: #6a7396; }
 .top a, .bottom a { color: inherit; }
+.top .regen { padding: 3px 10px; border: 1px solid #2456c4; border-radius: 4px; background: #fff; color: #2456c4; font: 13px -apple-system, Helvetica, Arial, sans-serif; cursor: pointer; }
+.top .regen.stale { background: #c8591b; border-color: #c8591b; color: #fff; }
+.top .regen:disabled { opacity: .6; cursor: default; }
 .top .repo { margin-left: auto; color: #2456c4; font-size: 13px; }
 .app { display: grid; grid-template-columns: 320px 1fr; min-height: 0; }
 .canvas { position: relative; display: grid; grid-template-rows: auto 1fr; min-height: 0; min-width: 0; }
@@ -31,7 +34,7 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
 .panel button:disabled { opacity: .5; cursor: default; }
 .hint { font-size: 12px; color: #6a7396; margin: 0; }
 .error { font-size: 12px; color: #a3262e; margin: 0; }
-.pages { overflow: auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 24px; align-content: flex-start; }
+.pages { overscroll-behavior: contain; overflow: auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 24px; align-content: flex-start; }
 .pagewrap { display: flex; flex-direction: column; gap: 6px; }
 .pagelabel { font-size: 12px; color: #6a7396; display: flex; justify-content: space-between; gap: 8px; }
 .stage { user-select: none; -webkit-user-select: none; position: relative; background: #fefdfb; box-shadow: 0 1px 6px rgba(27, 42, 107, .25); touch-action: none; cursor: crosshair; }
@@ -133,3 +136,6 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
   .panel button.share { background: #c8591b; border-color: #c8591b; }
 }
 @media (prefers-reduced-motion: reduce) { .caret { animation: none; } }
+
+.grip rect { fill: #fff; stroke: #2456c4; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.grip .hand { fill: none; stroke: #2456c4; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }

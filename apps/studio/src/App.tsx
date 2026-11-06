@@ -251,6 +251,21 @@ export function App() {
     return () => { el.removeEventListener('touchstart', down); el.removeEventListener('touchmove', move); el.removeEventListener('touchend', up); el.removeEventListener('touchcancel', up) }
   }, [])
   useEffect(() => {
+    if (!tab || !narrow) return
+    const away = (e: PointerEvent) => {
+      const t = e.target as Element
+      if (t.closest?.('#sheet, .tabs')) return
+      setTab(null)
+      if (!t.closest?.('.pages')) return                       // a button elsewhere still does its job
+      e.stopPropagation()
+      const eat = (c: Event) => { c.stopPropagation(); c.preventDefault() }
+      window.addEventListener('click', eat, { capture: true, once: true })
+      setTimeout(() => window.removeEventListener('click', eat, { capture: true }), 600)
+    }
+    window.addEventListener('pointerdown', away, { capture: true })
+    return () => window.removeEventListener('pointerdown', away, { capture: true })
+  }, [tab, narrow])
+  useEffect(() => {
     if (!tab) return
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setTab(null) }
     window.addEventListener('keydown', esc)
@@ -809,6 +824,7 @@ export function App() {
     <div className={'shell' + (narrow ? ' narrow' : '')}>
     <header className="top">
       <h1>Felilegium</h1>
+      <button className={'regen' + (stale ? ' stale' : '')} onClick={() => setGrown(requests)} disabled={growing}>{growing ? 'Generating…' : 'Regenerate'}</button>
       <a className="repo" href="https://github.com/funkhouserw/florilegium" target="_blank" rel="noreferrer"><span className="long">funkhouserw/florilegium on </span>GitHub</a>
     </header>
     <div className="app">
@@ -982,7 +998,7 @@ export function App() {
         }}>Fit a page</button>
         <span className="hint">⌘ and + or −, ⌘ and scroll, or pinch</span>
       </div>
-      <main className="pages" ref={pagesEl} onPointerDown={() => { if (narrow && tab) setTab(null) }}>
+      <main className="pages" ref={pagesEl}>
         {drawArm && (
           <div className="banner" role="status">
             <span>Drag on a page to draw a box.</span>
@@ -1228,6 +1244,20 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
                 {controls && <>
                 <rect className="edge ctl" x={b.x - (touch ? 13 : 3) / scale} y={b.y - (touch ? 13 : 3) / scale} width={b.w + (touch ? 26 : 6) / scale} height={b.h + (touch ? 26 : 6) / scale}
                   onPointerDown={(e) => { const p = at(e); select(b.id); begin(e, { kind: 'move', page: index, id: b.id, dx: p.x - b.x, dy: p.y - b.y }) }} />
+                {touch && (
+                  // a finger moves a box by its grip, a pill above the top edge (inside, a drag scrolls)
+                  <g className="ctl grip" role="button" aria-label="Move this box"
+                    onPointerDown={(e) => { const p = at(e); select(b.id); begin(e, { kind: 'move', page: index, id: b.id, dx: p.x - b.x, dy: p.y - b.y }) }}>
+                    <circle className="hit" cx={b.x + b.w / 2} cy={b.y - 18 / scale} r={hit} />
+                    <rect x={b.x + b.w / 2 - 22 / scale} y={b.y - 32 / scale} width={44 / scale} height={28 / scale} rx={14 / scale} />
+                    <path className="hand" d={(() => {             // an open hand: grab here and drag
+                      const X = (x: number) => b.x + b.w / 2 + x / scale, Y = (y: number) => b.y + (y - 18) / scale
+                      return `M${X(-4.5)} ${Y(1)}V${Y(-4)}M${X(-1.5)} ${Y(-1)}V${Y(-7)}M${X(1.5)} ${Y(-1)}V${Y(-7)}M${X(4.5)} ${Y(0)}V${Y(-5)}` +   // fingers
+                        `M${X(-4.5)} ${Y(1)}V${Y(3)}Q${X(-4.5)} ${Y(8)} ${X(0)} ${Y(8)}Q${X(5)} ${Y(8)} ${X(5.5)} ${Y(3)}L${X(4.5)} ${Y(0)}` +   // palm
+                        `M${X(-4.5)} ${Y(3)}L${X(-7.5)} ${Y(-0.5)}`                                                                   // thumb
+                    })()} />
+                  </g>
+                )}
                 <g className="ctl" onPointerDown={(e) => { select(b.id); begin(e, { kind: 'size', page: index, id: b.id, dx: 0, dy: 0 }) }}>
                   {touch && <circle className="hit" cx={b.x + b.w} cy={b.y + b.h} r={hit} />}
                   <rect className="handle" x={b.x + b.w - handle / 2} y={b.y + b.h - handle / 2} width={handle} height={handle} />
