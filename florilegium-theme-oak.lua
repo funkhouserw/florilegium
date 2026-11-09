@@ -2223,6 +2223,11 @@ function M.tree(rng, o)
       -- a stem going on up into the crown (it carries a fifth of the tree or more, routing round the text)
       -- is the tree, not a pinch
       if cont and (size_[cont] or 0) > 0.2 * #nodes then return false end
+      -- nor where any child goes on at nearly the stem's width, or carries a fifth of the tree, flagged
+      -- leader or not (a scaffold that takes the trunk on up): the trunk bends into it, it is not cut
+      for _, k in ipairs(n.kids) do
+        if not k.stub and (WW[k] >= 0.7 * WW[n] or (size_[k] or 0) > 0.2 * #nodes) then return false end
+      end
       return (cont and WW[cont] < 0.7 * WW[n] or not cont) and nbig < 2
     end
     -- A stem with no such fork can still thin away gradually, fork by small fork, into a cone (the trunk
@@ -2804,7 +2809,7 @@ function M.tree(rng, o)
   -- crown: "lush" (default) closes over the limbs; "open" thins the leaves so they read through
   local open = o.crown == "open"
   for _, n in ipairs(nodes) do
-    if not n.stump and not n.sprout and (#n.kids == 0 or W_of(n) < trunkw * (open and 0.05 or 0.11)) then
+    if not n.stump and not n.sprout and (#n.kids == 0 or W_of(n) < trunkw * (open and 0.05 or 0.17)) then
       local k = floor(n.x / cell) * 1000 + floor(n.y / cell)
       local b = seen[k]
       if not b then b = { x = 0, y = 0, z = 0, n = 0 } seen[k] = b tips[#tips + 1] = b end
@@ -2881,11 +2886,13 @@ function M.tree(rng, o)
   for _, b in ipairs(tips) do topy_ = max(topy_, b.y) end
   for _, b in ipairs(tips) do
     local hf = max(0, min(1, (b.y - forky) / max(1, topy_ - forky)))
-    local g = lerp(0.82, 1.1, hf)
-    if layout.chance(0.3 + 0.7 * hf) then clump_at(1, "back", b.x + layout.sym(1.2), b.y + layout.range(0.3, 1.6), layout.range(1.5, 2.2) * g, 0.3) end
+    -- a lush crown is full low down too (only a little less than at the top); an open one thins below
+    local lo = open and 0 or 0.55
+    local g = lerp(open and 0.82 or 0.95, 1.1, hf)
+    if layout.chance(lerp(0.3 + 0.7 * hf, 1, lo)) then clump_at(1, "back", b.x + layout.sym(1.2), b.y + layout.range(0.3, 1.6), layout.range(1.5, 2.2) * g, 0.3) end
     b.shown = clump_at(3, "mid", b.x + layout.sym(0.7), b.y + layout.sym(0.5), layout.range(1.2, 1.75) * g, 0.42)
     -- bright masses only part-way round, so limbs and what sits on them show between them
-    if layout.chance((open and 0.55 or 0.78) * lerp(0.55, 1.2, hf)) then
+    if layout.chance(open and 0.55 * lerp(0.55, 1.2, hf) or lerp(0.75, 1, hf)) then
       b.shown = clump_at(5, "front", b.x + layout.sym(0.6), b.y + layout.range(0, 0.7), layout.range(1, 1.5) * g, 0.8) or b.shown
     end
     if hf > 0.7 and layout.chance(0.5) then           -- a dome over the top
