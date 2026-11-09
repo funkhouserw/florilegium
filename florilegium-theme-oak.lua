@@ -2362,7 +2362,34 @@ function M.tree(rng, o)
     local lo_w = S.snap and 0.35 or 0.45
     for _, n in ipairs(nodes) do
       local w = W_of(n)
-      if n.parent and not n.sweep and not n.trunk and not n.leader and w > lo_w and w < 1.3 and size[n] > (S.snap and 6 or 18) and size[n] < #nodes * (S.snap and 0.2 or 0.1)
+      -- the cut must stand clear of the limb its branch leaves, or only a patch of splinters shows on that
+      -- limb's bark: up the branch to where it forks off something wider than itself
+      local clear = true
+      do
+        local c, f = n, n.parent
+        while f and f.parent do
+          local widest = true
+          for _, k in ipairs(f.kids) do if k ~= c and (WW[k] or 0) > (WW[c] or 0) then widest = false end end
+          if not widest then break end
+          c, f = f, f.parent
+        end
+        if f then
+          local d = sqrt((n.x - f.x) ^ 2 + (n.y - f.y) ^ 2)
+          if d < 0.6 * W_of(f) + 0.5 * w + 0.3 then clear = false end
+        end
+        -- nor lie on another limb that runs past it, in front or behind
+        if clear and w > lo_w then
+          local mine = {}
+          local a = n while a do mine[a] = true a = a.parent end
+          for _, m in ipairs(nodes) do
+            if not mine[m] and m.parent ~= n and WW[m] and WW[m] > w then
+              local dd = sqrt((n.x - m.x) ^ 2 + (n.y - m.y) ^ 2)
+              if dd < 0.5 * W_of(m) + 0.5 * w then clear = false break end
+            end
+          end
+        end
+      end
+      if clear and n.parent and not n.sweep and not n.trunk and not n.leader and w > lo_w and w < 1.3 and size[n] > (S.snap and 6 or 18) and size[n] < #nodes * (S.snap and 0.2 or 0.1)
         and (n.x - top_.x) ^ 2 + (n.y - top_.y) ^ 2 > 9 then
         cand[#cand + 1] = n
       end
@@ -2394,6 +2421,12 @@ function M.tree(rng, o)
         stumps[#stumps + 1] = n
         n.stump_i = #stumps
       end
+    end
+    -- a cut chosen on a limb that a cut lower down then took away is not there to draw
+    do
+      local kept = {}
+      for _, n in ipairs(stumps) do if not n.gone then kept[#kept + 1] = n n.stump_i = #kept end end
+      stumps = kept
     end
     local out = {}
     for _, n in ipairs(nodes) do if not n.gone then out[#out + 1] = n end end
@@ -2686,14 +2719,15 @@ function M.tree(rng, o)
   for _, n in ipairs(stumps) do
     local up = n.parent.parent or n.parent
     local ang = math.atan(n.y - up.y, n.x - up.x) / rad - 90
-    local w = S.snap and n.stump_w or W_of(n)
     for _, sprout in ipairs(n.shoots or {}) do
       local sp, ws = {}, {}
       for _, q in ipairs(sprout) do sp[#sp + 1] = { q.x, q.y } ws[#ws + 1] = W_of(q) end
       stretch(sp, ws, false, true, true)
     end
     -- v2: every cut in every season is the coordinator's stump; where leafy sprouts of ours grow, none of its own
-    M.stump(rng.fork(), n.x, n.y, ang, WW[n] or w, { snap = S.snap, live = not S.snap, sprouts = (#(n.shoots or {}) == 0) and ((leafless and not S.snap) and true or nil) or false })
+    -- as wide as the limb is drawn there: one narrowed by a text box ends in a cut its own size
+    local wd = W_of(n)
+    M.stump(rng.fork(), n.x, n.y, ang, min(WW[n] or wd, wd), { snap = S.snap, live = not S.snap, sprouts = (#(n.shoots or {}) == 0) and ((leafless and not S.snap) and true or nil) or false })
   end
   -- bare branches end in fine twigs
   if S.twigs then
