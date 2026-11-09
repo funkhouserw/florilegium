@@ -1168,7 +1168,7 @@ end
 -- The chains: from the root follow the thickest child; every other child starts a chain of its own,
 
 -- v2: copied from the theme so its widths, flare, trunk end and ground props can change
-local function chains(nodes)
+local function chains(nodes, width)
   local out = {}
   local function walk(start, parent_prev)
     local chain = { parent_prev = parent_prev, start = start }
@@ -1180,12 +1180,23 @@ local function chains(nodes)
       local ax, ay = n.x - up.x, n.y - up.y
       if up == n then ax, ay = 0, 1 end
       local aL = sqrt(ax * ax + ay * ay) + 1e-9
+      -- the stem goes on only into a child of about its width: a thin leader beside a thick limb is a side
+      -- shoot, or a full-width trunk would dwindle to a twig in one step (where only a sweep limb is that
+      -- wide, the trunk bends into it)
+      local wmax = 0
+      if width then
+        for _, k in ipairs(n.kids) do
+          if not k.stub then wmax = max(wmax, width(k) or 0) end
+        end
+      end
       local function score(k)
         local dx, dy = k.x - n.x, k.y - n.y
         local d = sqrt(dx * dx + dy * dy) + 1e-9
         local v = k.r * (1 + 0.9 * (dx * ax + dy * ay) / (d * aL))
-        if k.sweep and not n.sweep then v = v * 0.01 end   -- a sweep limb leaves the trunk from behind it
-        if (n.trunk or n.leader) and (k.trunk or k.leader) then v = v * 100 end
+        if k.sweep and not n.sweep and not (wmax > 0 and (width(k) or 0) >= 0.7 * wmax) then v = v * 0.01 end   -- a sweep limb leaves the trunk from behind it
+        local thin = not k.stub and wmax > 0 and (width(k) or 0) < 0.7 * wmax
+        if thin then v = v * 0.001
+        elseif (n.trunk or n.leader) and (k.trunk or k.leader) then v = v * 100 end
         if k.stub then v = v * 1000 end   -- v2: the trunk goes on up, painted over what leaves it
         return v
       end
@@ -2441,7 +2452,7 @@ function M.tree(rng, o)
       end
     end
   end
-  local chs = chains(nodes)
+  local chs = chains(nodes, function(k) return WW[k] end)
   M.last_stumps = stumps
   local stats = { nodes = #nodes, chains = #chs }
   -- nothing below the ground, nothing in the text: every layer is clipped, keep-outs as holes
