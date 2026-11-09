@@ -23,7 +23,10 @@ local function dist(ax, ay, bx, by) local dx, dy = ax - bx, ay - by return sqrt(
 -- luaotfload's reader returns each glyph as segments in font units:
 -- {x, y, "m"}, {x, y, "l"}, {x1, y1, x2, y2, x3, y3, "c"}, {x1, y1, x2, y2, "q"}
 local cache = {}
+-- file may also be the outlines themselves, { units, byuni = { [codepoint] = { boundingbox, segments } } }
+-- (florilegium-scene.lua: a browser reads them from its own font file)
 local function font_glyphs(file)
+  if type(file) == "table" then return file end
   if cache[file] then return cache[file] end
   local path = kpse.find_file(file, "opentype fonts") or kpse.find_file(file, "truetype fonts")
   if not path then return nil end

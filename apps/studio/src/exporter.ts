@@ -2,11 +2,24 @@
 // text in embedded fonts, so it can be selected and printed; and one self-contained HTML file.
 import fontkit from '@pdf-lib/fontkit'
 import { PDFDocument, PDFName, popGraphicsState, pushGraphicsState, rgb, setLineWidth, setStrokingColor, setTextRenderingMode, TextRenderingMode, type PDFFont, type PDFImage } from 'pdf-lib'
-import { fontOf, measure, type FlowPage, type Line, type Run, type TextStyle } from './flow'
+import { fontOf, measure, type Cap, type FlowPage, type Line, type Run, type TextStyle } from './flow'
 import { faceOf, type Family } from './fonts'
 
+// a page's initials: each its tile as an SVG (or, for the PDF, as PDF operators in its own bp, y up)
+export type CapArt = { cap: Cap; svg?: string }
+async function svgImage(svg: string, width: number, height: number): Promise<HTMLImageElement> {
+  const sized = svg.replace(/<svg\b[^>]*>/, (tag) => tag.replace(/\swidth="[^"]*"/, ` width="${width}"`).replace(/\sheight="[^"]*"/, ` height="${height}"`))
+  const url = URL.createObjectURL(new Blob([sized], { type: 'image/svg+xml' }))
+  try {
+    const img = new Image(width, height)
+    img.src = url
+    await img.decode()
+    return img
+  } finally { URL.revokeObjectURL(url) }
+}
+
 // The gym as an image, the text on the canvas: an SVG in an <img> can't see the page's web fonts.
-export async function pagePng(gym: string, page: FlowPage, style: TextStyle, pixelWidth: number, W: number, H: number, paper: string): Promise<Blob> {
+export async function pagePng(gym: string, page: FlowPage, style: TextStyle, pixelWidth: number, W: number, H: number, paper: string, caps: CapArt[] = []): Promise<Blob> {
   const width = pixelWidth, height = Math.round(pixelWidth * H / W)
   // the drawing's own size set to the canvas's: Safari rasterizes an SVG image at its stated size, then scales it
   const sized = gym.replace(/<svg\b[^>]*>/, (tag) => tag.replace(/\swidth="[^"]*"/, ` width="${width}"`).replace(/\sheight="[^"]*"/, ` height="${height}"`))
@@ -33,6 +46,12 @@ export async function pagePng(gym: string, page: FlowPage, style: TextStyle, pix
     }
     write(page.lines.filter((l) => l.layer === 'behind'))
     c.drawImage(img, 0, 0, canvas.width, canvas.height)
+    const k = canvas.width / W
+    for (const { cap, svg } of caps) {
+      if (!svg) continue
+      const side = Math.max(1, Math.round(cap.side * k))
+      c.drawImage(await svgImage(svg, side, side), cap.x * k, cap.y * k, side, side)
+    }
     write(page.lines.filter((l) => l.layer !== 'behind'))
     return await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('no PNG'))), 'image/png'))
   } finally { URL.revokeObjectURL(url) }
@@ -70,7 +89,7 @@ const hexColor = (h: string) => rgb(parseInt(h.slice(1, 3), 16) / 255, parseInt(
 
 // ops: one page's drawing from florilegium-ink.lua, which names its opacity and multiply states
 // /floaNN and /flomNN (NN percent); TeX declares them for LuaLaTeX, this does here.
-export async function pagesToPdf(pages: FlowPage[], ops: string[], style: TextStyle, family: Family, W: number, H: number, title: string): Promise<{ pdf: Blob; missing: string[] }> {
+export async function pagesToPdf(pages: FlowPage[], ops: string[], style: TextStyle, family: Family, W: number, H: number, title: string, caps: CapArt[][] = []): Promise<{ pdf: Blob; missing: string[] }> {
   if (!family.files) throw new Error(`${family.label} can't be embedded`)
   const files = family.files
   const pdf = await PDFDocument.create()
@@ -92,8 +111,11 @@ export async function pagesToPdf(pages: FlowPage[], ops: string[], style: TextSt
   const color = hexColor(style.color)
   pages.forEach((p, i) => {
     const page = pdf.addPage([W, H])
+    // the initials, each a tile `side` bp square, its operators moved to where the tile's foot is
+    const drawing = [ops[i], ...(caps[i] ?? []).filter((c) => c.svg).map(({ cap, svg }) =>
+      `q 1 0 0 1 ${cap.x.toFixed(2)} ${(H - cap.y - cap.side).toFixed(2)} cm\n${svg}\nQ`)].join('\n')
     const states: Record<string, unknown> = {}
-    for (const m of ops[i].matchAll(/\/flo([am])(\d+) gs/g)) {
+    for (const m of drawing.matchAll(/\/flo([am])(\d+) gs/g)) {
       const op = +m[2] / 100
       states[`flo${m[1]}${m[2]}`] = { Type: 'ExtGState', ca: op, CA: op, ...(m[1] === 'm' ? { BM: 'Multiply' } : {}) }
     }
@@ -119,7 +141,7 @@ export async function pagesToPdf(pages: FlowPage[], ops: string[], style: TextSt
       }
     }
     write(p.lines.filter((l) => l.layer === 'behind'))
-    page.node.addContentStream(pdf.context.register(pdf.context.flateStream(ops[i])))
+    page.node.addContentStream(pdf.context.register(pdf.context.flateStream(drawing)))
     // pdf-lib writes into the stream it last made: without this the rest would land under the drawing
     ;(page as unknown as { contentStream?: unknown }).contentStream = undefined
     write(p.lines.filter((l) => l.layer !== 'behind'))
@@ -149,7 +171,7 @@ function baselineOf(family: string): number {
 // headings and paragraphs a reader can select, search, translate or hear. Each line stays where the
 // studio broke it, in units of the page's width, so a page keeps its layout at any size; it prints a
 // page to a sheet.
-export async function pagesToHtml(pages: FlowPage[], gyms: string[], style: TextStyle, family: Family, W: number, H: number, title: string, paper: string): Promise<Blob> {
+export async function pagesToHtml(pages: FlowPage[], gyms: string[], style: TextStyle, family: Family, W: number, H: number, title: string, paper: string, caps: CapArt[][] = []): Promise<Blob> {
   const cq = (v: number) => `${+(v / W * 100).toFixed(3)}cqw`
   const top = baselineOf(style.family)
   const faces = new Map<string, ReturnType<typeof faceOf>>()
@@ -205,7 +227,13 @@ export async function pagesToHtml(pages: FlowPage[], gyms: string[], style: Text
     // later in the file paints on top: text behind the drawing comes before its image
     const under = blocksOf(pages[i].lines.filter((l) => l.layer === 'behind'))
     const above = blocksOf(pages[i].lines.filter((l) => l.layer !== 'behind'))
-    body.push(`<section class="page" aria-label="Page ${i + 1}">\n${under}\n<img src="${image}" alt="" decoding="async">\n${above}\n</section>`)
+    const initials: string[] = []
+    for (const { cap, svg } of caps[i] ?? []) {
+      if (!svg) continue
+      const src = await dataUrl(new Blob([svg], { type: 'image/svg+xml' }))
+      initials.push(`<img class="initial" src="${src}" alt="${esc(cap.letter)}" style="left:${cq(cap.x)};top:${cq(cap.y)};width:${cq(cap.side)};height:${cq(cap.side)}">`)
+    }
+    body.push(`<section class="page" aria-label="Page ${i + 1}">\n${under}\n<img src="${image}" alt="" decoding="async">\n${initials.join('\n')}\n${above}\n</section>`)
   }
   const html = `<!doctype html>
 <html lang="en">
@@ -219,6 +247,7 @@ ${fontCss.join('\n')}
 body{margin:0;padding:1rem;background:#eceef4}
 .page{position:relative;container-type:inline-size;width:min(100%,${+(W * 4 / 3).toFixed(1)}px);aspect-ratio:${+W.toFixed(2)}/${+H.toFixed(2)};margin:0 auto 1.5rem;overflow:hidden;background:${paper};box-shadow:0 1px 6px rgba(27,42,107,.25);font-family:${style.family};color:${style.color}}
 .page img{position:absolute;inset:0;width:100%;height:100%}
+.page img.initial{inset:auto}
 .page h1,.page h2,.page h3,.page p,.page ul,.page ol,.page li{margin:0;padding:0;font:inherit;list-style:none}
 .page i.m{position:absolute;font-style:normal;white-space:pre}
 .page span{position:absolute;white-space:pre;line-height:1}

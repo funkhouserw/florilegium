@@ -113,4 +113,49 @@ function M.page(o)
   return table.concat(out, "\n")
 end
 
+-- A decorated initial, a tile of side o.size cm (florilegium-initial.lua's), in the hand of what grows:
+-- oak the letter made a tree in o.season, gym a cat on the letter, otherwise the vine. o.letter one
+-- character, o.glyph its outline { units, boundingbox = { x0, y0, x1, y1 }, segments = { ... } } in
+-- font units (luaotfload's form). Returns the SVG; M.last_streams holds it as PDF operators in cm.
+function M.initial(o)
+  local S = o.size or 2
+  local streams = {}
+  local saved = { tex = tex, node = node, luatexbase = luatexbase }
+  tex = { sprint = function() end }
+  luatexbase = { registernumber = function() return 0 end }
+  node = { new = function() return {} end, write = function(n) streams[#streams + 1] = n.data end }
+  local ok, err = pcall(function()
+    local ink = require("florilegium-ink")
+    local INK = { green = { 0x2F, 0x6B, 0x4F }, blue = { 0x24, 0x56, 0xC4 } }
+    local c_ = INK[o.ink or "blue"] or INK.blue
+    ink.set_ink(c_[1] / 255, c_[2] / 255, c_[3] / 255)
+    ink.set_transform(ink.page_transform())
+    ink.layer(5)
+    local deco
+    if o.grows == "oak" then
+      local O = require("florilegium-theme-oak")
+      local blue = o.ink == "blue"
+      if not blue then O.season_ink(o.season) end
+      deco = O.initial_for(o.season or "summer", { blue = blue })
+    elseif o.grows == "gym" then
+      deco = require("florilegium-theme-cattree").initial
+    end
+    local cp = utf8.codepoint(o.letter)
+    local font = { units = o.glyph.units or 1000, byuni = { [cp] = o.glyph } }
+    local drew, why = require("florilegium-initial").draw(ink.rng((o.seed or 1) * 7919 + 17), S, o.letter, { font = font, decorate = deco })
+    if not drew then error(why, 0) end
+    ink.flush()
+  end)
+  tex, node, luatexbase = saved.tex, saved.node, saved.luatexbase
+  if not ok then error(err, 0) end
+  M.last_streams = streams
+  local svg = require("florilegium-svg")
+  local CM = 72 / 2.54
+  local out = { string.format('<svg xmlns="http://www.w3.org/2000/svg" width="%.2f" height="%.2f" viewBox="0 0 %.2f %.2f">', S * CM, S * CM, S * CM, S * CM) }
+  out[#out + 1] = string.format('<g transform="matrix(1 0 0 -1 0 %.2f)" stroke-linecap="round" stroke-linejoin="round">', S * CM)
+  for i, st in ipairs(streams) do svg.translate(st, out, (o.id or "i-") .. i) end
+  out[#out + 1] = "</g></svg>"
+  return table.concat(out, "\n")
+end
+
 return M

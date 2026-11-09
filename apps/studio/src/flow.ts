@@ -16,8 +16,12 @@ export type Run = Look & { text: string; x: number; w: number; gap: boolean; fro
 export type Line = {
   x: number; y: number; top: number; lh: number; size: number; tag: Tag; block: number; runs: Run[]
   story: number; box: number; page: number; layer: Layer; list: ListKind; from: number; to: number; originX: number; wordSpacing: number; lastOfBlock: boolean
+  first: boolean                                       // the first line of its block
 }
-export type FlowPage = { boxes: Box[]; lines: Line[]; used: Map<number, number>; auto: boolean; over: Set<number> }
+// a decorated initial: a square tile of side `side` (bp) at x, y (its top left, y down), in place of the
+// first letter of a paragraph, which the lines beside it leave room for
+export type Cap = { key: string; story: number; block: number; page: number; box: number; layer: Layer; x: number; y: number; side: number; letter: string }
+export type FlowPage = { boxes: Box[]; lines: Line[]; used: Map<number, number>; auto: boolean; over: Set<number>; caps: Cap[] }
 export type TextStyle = { family: string; size: number; leading: number; color: string; headingBold: boolean }
 export type StoryText = { id: number; doc: Node; auto: boolean }
 export type Flowed = { pages: FlowPage[]; overflow: boolean; byStory: Map<number, Line[]> }
@@ -40,6 +44,27 @@ let cache = new WeakMap<Node, Map<string, Prepared>>()
 export function remeasure() {                          // the web fonts have arrived
   clearCache()
   cache = new WeakMap()
+}
+// a paragraph's first letter, if it can be an initial (a letter or a digit), and how long it is in the text
+const graphemeSeg = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+export function capLetter(text: string): string | null {
+  const g = graphemeSeg.segment(text)[Symbol.iterator]().next().value?.segment
+  return g && /^[\p{L}\p{N}]$/u.test(g) ? g : null
+}
+export const capKey = (story: number, block: number) => `${story}:${block}`
+// the paragraph without its first letter, which the initial draws; `text` stays the whole, so runs keep their places
+function capPrepared(b: Node, style: TextStyle, cut: number): Prepared {
+  const full = prepared(b, style)
+  const items = full.items.map((it) => ({ ...it }))
+  let left = cut
+  while (left > 0 && items.length) {
+    const n = Math.min(left, items[0].text.length)
+    items[0].text = items[0].text.slice(n)
+    left -= n
+    if (!items[0].text) items.shift()
+  }
+  const size = style.size * SCALE[tagOf(b)]
+  return { items, text: full.text, prep: items.length ? prepareRichInline(items.map((s) => ({ text: s.text, font: fontOf(s, size, style.family) })), { whiteSpace: 'pre-wrap' }) : null }
 }
 const tagOf = (b: Node): Tag => (b.type === schema.nodes.heading ? (`h${b.attrs.level}` as Tag) : 'p')
 function prepared(b: Node, style: TextStyle): Prepared {
@@ -64,10 +89,11 @@ function prepared(b: Node, style: TextStyle): Prepared {
 // a chain's boxes on the pages that follow, so a long post keeps going
 const cloneId = (page: number, id: number) => -(page * 100000 + Math.abs(id) % 100000)
 
-export function flow(stories: StoryText[], drawn: Box[][], style: TextStyle): Flowed {
-  const pages: FlowPage[] = drawn.map((boxes) => ({ boxes, lines: [], used: new Map(), auto: false, over: new Set() }))
+// caps: the paragraphs (capKey) that open with a decorated initial
+export function flow(stories: StoryText[], drawn: Box[][], style: TextStyle, caps?: Set<string>): Flowed {
+  const pages: FlowPage[] = drawn.map((boxes) => ({ boxes, lines: [], used: new Map(), auto: false, over: new Set(), caps: [] }))
   const pageAt = (i: number) => {
-    while (pages.length <= i) pages.push({ boxes: [], lines: [], used: new Map(), auto: true, over: new Set() })
+    while (pages.length <= i) pages.push({ boxes: [], lines: [], used: new Map(), auto: true, over: new Set(), caps: [] })
     return pages[i]
   }
   const bodyLh = style.size * style.leading
@@ -91,6 +117,7 @@ export function flow(stories: StoryText[], drawn: Box[][], style: TextStyle): Fl
     let off = 0                                        // how far into the block's text
     const lhOf = (b: Node) => style.size * SCALE[tagOf(b)] * style.leading
     let extra = drawn.length
+    let capP: Prepared | null = null                   // the block now being set opens with an initial
     for (let c = 0; c < chain.length && at < blocks.length; c++) {
       const { page, box: b } = chain[c]
       let last = c === chain.length - 1
@@ -99,6 +126,7 @@ export function flow(stories: StoryText[], drawn: Box[][], style: TextStyle): Fl
       if (addsPages) last = false
       const fp = pageAt(page)
       let y = 0
+      let capBottom = -Infinity, capInset = 0          // the initial in this box: lines above capBottom leave room
       while (at < blocks.length) {
         const { node, start, number: num } = blocks[at]
         const tag = tagOf(node)
@@ -114,7 +142,7 @@ export function flow(stories: StoryText[], drawn: Box[][], style: TextStyle): Fl
           : tagOf(before) !== 'p' ? 0.15 * bodyLh
           : list && before.attrs.list ? 0.1 * bodyLh
           : 0.5 * bodyLh
-        const P = prepared(node, style)
+        let P: Prepared = capP ?? prepared(node, style)
         if (!last && fresh && tag !== 'p' && y > 0 && P.prep) {
           // a heading stays with the line after it
           let count = 0
@@ -124,13 +152,24 @@ export function flow(stories: StoryText[], drawn: Box[][], style: TextStyle): Fl
         }
         if (!last && y + gap + lh > b.h + 0.01 && !(addsPages && y === 0)) break
         y += gap
-        const line = placeLine(P, node, start, cursor, width, b, page, y, size, lh, tag, list, num, indent, at, story.id, style, off)
+        const letter = fresh && tag === 'p' && !list && caps?.has(capKey(story.id, at)) ? capLetter(P.text) : null
+        if (letter) {
+          const side = 2 * lh + 0.72 * size
+          capInset = side + 0.3 * size
+          capBottom = y + size + 2 * lh - 0.2 * size
+          fp.caps.push({ key: capKey(story.id, at), story: story.id, block: at, page, box: b.id, layer: b.layer, x: b.x + indent, y: b.y + y + size * 0.28, side, letter })
+          capP = P = capPrepared(node, style, letter.length)
+          off = letter.length
+        }
+        const inset = y < capBottom ? capInset : 0
+        const line = placeLine(P, node, start, cursor, Math.max(width - inset, size), { ...b, x: b.x + inset }, page, y, size, lh, tag, list, num, indent, at, story.id, style, off)
+        line.line.first = fresh
         lines.push(line.line)
         fp.lines.push(line.line)
         off = line.off
         cursor = line.end
         y += lh
-        if (line.done) { at++; cursor = undefined; off = 0 }
+        if (line.done) { at++; cursor = undefined; off = 0; capP = null }
       }
       fp.used.set(b.id, y)
       if (y > b.h + 0.01 && at >= blocks.length) { fp.over.add(b.id); overflow = true }
@@ -148,7 +187,7 @@ export function flow(stories: StoryText[], drawn: Box[][], style: TextStyle): Fl
 function placeLine(P: Prepared, node: Node, start: number, cursor: RichInlineCursor | undefined, width: number, b: Box, page: number, y: number, size: number, lh: number, tag: Tag, list: ListKind, num: number, indent: number, block: number, story: number, style: TextStyle, off0: number) {
   const align = node.attrs.align as Align
   const left = b.x + indent
-  const base = { top: b.y + y, lh, size, tag, block, story, box: b.id, page, layer: b.layer, list, x: b.x, y: b.y + y + size }
+  const base = { top: b.y + y, lh, size, tag, block, story, box: b.id, page, layer: b.layer, list, x: b.x, y: b.y + y + size, first: false }
   const marker = (): Run[] => {
     if (!list || cursor !== undefined) return []    // only a list item's first line
     const text = list === 'bullet' ? '•' : `${num}.`

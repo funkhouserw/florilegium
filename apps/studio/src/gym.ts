@@ -18,7 +18,20 @@ worker.onmessage = (e: MessageEvent<{ id: number; svg?: string; error?: string }
   else p.resolve(e.data.svg)
 }
 
+// a decorated initial: a tile `size` cm square in the hand of what grows, its letter's outline in font units
+export type Segment = (number | string)[]
+export type InitialRequest = {
+  grows: GymRequest['grows']; ink: 'green' | 'blue'; season: string; seed: number; size: number; index: number; codepoint: number
+  glyph: { units: number; bbox: number[]; segments: Segment[] }
+}
+export function growInitial(initial: InitialRequest, ops = false): Promise<string> {
+  return send({ initial, ops })
+}
+
 export function growGym(options: GymRequest): Promise<string> {
+  return send(options)
+}
+function send(options: object): Promise<string> {
   const key = JSON.stringify(options)
   let hit = cache.get(key)
   if (!hit) {

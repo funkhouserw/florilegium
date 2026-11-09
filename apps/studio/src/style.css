@@ -44,6 +44,7 @@ body { font: 14px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-se
 /* Chrome's own stylesheet sets text to nowrap, so white-space on a parent g isn't enough */
 .stage svg text { white-space: pre; }
 .guide { fill: none; stroke: #b5532a; stroke-opacity: .5; stroke-width: 1; stroke-dasharray: 1 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.initial { pointer-events: none; }
 .margins { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #4a5688; }
 .stage.growing img { opacity: .45; }
 .box { fill: rgba(36, 86, 196, .03); stroke: #2456c4; stroke-width: 1; stroke-dasharray: 5 4; stroke-opacity: .55; cursor: text; vector-effect: non-scaling-stroke; }

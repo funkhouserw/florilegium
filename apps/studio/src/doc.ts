@@ -22,11 +22,13 @@ export type Grows = 'gym' | 'oak' | 'flowers' | 'kelp'
 // each page grows its own drawing, or pages laid out alike (where their text ends included) get the same one
 export type PerPage = 'new' | 'match'
 export type Heart = 'sometimes' | 'never' | 'always'    // the oak's carved I + C
+// a decorated first letter: none, the work's first paragraph, or the first paragraph that starts on each page
+export type Initials = 'none' | 'work' | 'page'
 export const TEXT_COLOR = '#1b2a6b'
 export type SavedStory = { id: number; doc: Node; auto: boolean }
 export type Doc = {
   stories: SavedStory[]; sizeKey: SizeKey; family: string; fontSize: number; seed: number; cats: number; pieces: number
-  grows: Grows; inkName: 'green' | 'blue'; crown: 'lush' | 'open'; season: Season; spanishmoss: boolean; heart: Heart; perPage: PerPage; textColor: string; margins: Margins; drawn: Box[][]
+  grows: Grows; inkName: 'green' | 'blue'; crown: 'lush' | 'open'; season: Season; spanishmoss: boolean; heart: Heart; initials: Initials; perPage: PerPage; textColor: string; margins: Margins; drawn: Box[][]
 }
 
 const SAMPLE = `# Why my cat needs a gym
@@ -106,7 +108,7 @@ export const newDoc = (): Doc => {
   const id = newStoryId()
   return {
     stories: [{ id, doc: fromMarkdown(SAMPLE), auto: true }], sizeKey: 'insta', family: FAMILIES[0].css, fontSize: 26, seed: 3, cats: 2, pieces: 1.4,
-    grows: 'gym', inkName: 'blue', crown: 'lush', season: 'summer', spanishmoss: false, heart: 'sometimes', perPage: 'new', textColor: TEXT_COLOR, margins: { ...MARGINS }, drawn: [[startBox('insta', id)]],
+    grows: 'gym', inkName: 'blue', crown: 'lush', season: 'summer', spanishmoss: false, heart: 'sometimes', initials: 'none', perPage: 'new', textColor: TEXT_COLOR, margins: { ...MARGINS }, drawn: [[startBox('insta', id)]],
   }
 }
 
@@ -175,6 +177,7 @@ export function checkDoc(raw: unknown): Doc {
     spanishmoss: o.spanishmoss === true,
     perPage: oneOf(o.perPage, ['new', 'match'] as const, d.perPage),
     heart: oneOf(o.heart, ['sometimes', 'never', 'always'] as const, d.heart),
+    initials: oneOf(o.initials, ['none', 'work', 'page'] as const, d.initials),
     textColor: typeof o.textColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.textColor) ? o.textColor : d.textColor,
     margins,
     drawn: anyBox ? drawn : d.drawn,

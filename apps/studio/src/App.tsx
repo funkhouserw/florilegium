@@ -4,15 +4,44 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { EditorState, type Transaction } from 'prosemirror-state'
 import { blockAt, deleteBack, deleteForward, enter, marksHere, newState, redo, replaceBefore, replaceDoc, run, selectAll, selectRange, selectTo, setAlign, setBlock, step, toggle, toggleList, undo, wordAt } from './editor'
-import { flow, fontOf, lineOfPos, posOfX, remeasure, xOfPos, type Box, type FlowPage, type Layer, type Line, type TextStyle } from './flow'
-import { growGym } from './gym'
+import { capKey, capLetter, flow, fontOf, lineOfPos, posOfX, remeasure, xOfPos, type Box, type Cap, type FlowPage, type Layer, type Line, type TextStyle } from './flow'
+import { growGym, growInitial, type InitialRequest } from './gym'
+import fontkit from '@pdf-lib/fontkit'
 import { download, pagePng, pagesToHtml, pagesToPdf } from './exporter'
-import { blankDoc, CM, docFile, fitMargins, followMargins, loadDoc, marginLimit, newBoxId, newDoc, newStoryDoc, newStoryId, readDocFile, resizeBoxes, saveDoc, SEASONS, SIZES, type Doc, type Grows, type Heart, type Margins, type PerPage, type Season, type SizeKey } from './doc'
+import { blankDoc, CM, docFile, fitMargins, followMargins, loadDoc, marginLimit, newBoxId, newDoc, newStoryDoc, newStoryId, readDocFile, resizeBoxes, saveDoc, SEASONS, SIZES, type Doc, type Grows, type Heart, type Initials, type Margins, type PerPage, type Season, type SizeKey } from './doc'
 import { familyOf, FAMILIES } from './fonts'
 import { fromMarkdown, sliceFromHtml, sliceFromMarkdown, sliceToHtml, sliceToText, toMarkdown, type Align } from './schema'
 
 const PAPER = '#fefdfb'
 const FLOWER_SEASONS: Season[] = ['spring', 'summer', 'autumn']   // the flowers have no winter: it shows as autumn
+type CapArt = { cap: Cap; svg?: string }
+// a letter's outline as the Lua reads it (luaotfload's segments, in font units)
+const outlines = new Map<string, InitialRequest['glyph']>()
+function outlineOf(file: string, font: ReturnType<typeof fontkit.create>, cp: number): InitialRequest['glyph'] {
+  const k = `${file}:${cp}`
+  let o = outlines.get(k)
+  if (!o) {
+    const g = font.glyphForCodePoint(cp)
+    const r = (v: number) => Math.round(v * 100) / 100
+    const commands = (g.path as unknown as { commands: { command: string; args: number[] }[] }).commands
+    const segments = commands.flatMap((c): (number | string)[][] =>
+      c.command === 'moveTo' ? [[...c.args.map(r), 'm']] : c.command === 'lineTo' ? [[...c.args.map(r), 'l']]
+        : c.command === 'quadraticCurveTo' ? [[...c.args.map(r), 'q']] : c.command === 'bezierCurveTo' ? [[...c.args.map(r), 'c']] : [])
+    o = { units: font.unitsPerEm, bbox: [g.bbox.minX, g.bbox.minY, g.bbox.maxX, g.bbox.maxY], segments }
+    outlines.set(k, o)
+  }
+  return o
+}
+const svgUrls = new Map<string, string>()
+function svgUrl(svg: string): string {
+  let u = svgUrls.get(svg)
+  if (!u) {
+    if (svgUrls.size > 60) { svgUrls.forEach((v) => URL.revokeObjectURL(v)); svgUrls.clear() }
+    u = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
+    svgUrls.set(svg, u)
+  }
+  return u
+}
 type Story = { id: number; state: EditorState; auto: boolean }
 const storiesOf = (d: Doc): Story[] => d.stories.map((s) => ({ id: s.id, state: newState(s.doc), auto: s.auto }))
 const initial = loadDoc()
@@ -57,6 +86,7 @@ export function App() {
   const [spanishmoss, setSpanishmoss] = useState(initial.spanishmoss)
   const [perPage, setPerPage] = useState<PerPage>(initial.perPage)
   const [heart, setHeart] = useState<Heart>(initial.heart)
+  const [initials, setInitials] = useState<Initials>(initial.initials)
   // phones: the panel is a sheet over the pages, one tab at a time (null: closed)
   const narrow = useMedia(NARROW)
   const coarse = useMedia('(pointer: coarse)')          // a finger: taps type, a drag scrolls, a box is drawn in draw mode
@@ -169,7 +199,49 @@ export function App() {
     return () => { live = false }
   }, [family])
   const texts = useMemo(() => stories.map((s) => ({ id: s.id, doc: s.state.doc, auto: s.auto })), [stories])
-  const { pages, overflow, byStory } = useMemo(() => flow(texts, drawn, style), [texts, drawn, style, fontsReady])
+  // the initials' letters come from the typeface's own file (IM Fell's, else Latin Modern's bold), as outlines
+  const [capFont, setCapFont] = useState<{ file: string; font: ReturnType<typeof fontkit.create> } | null>(null)
+  const capFile = face.files && !face.files.bold ? face.files.regular : 'lmroman-bold'
+  useEffect(() => {
+    if (initials === 'none' || capFont?.file === capFile) return
+    let live = true
+    fetch(`fonts/${capFile}.ttf`).then((r) => r.arrayBuffer()).then((b) => { if (live) setCapFont({ file: capFile, font: fontkit.create(new Uint8Array(b)) }) }).catch(() => {})
+    return () => { live = false }
+  }, [initials, capFile, capFont])
+  const { pages, overflow, byStory } = useMemo(() => {
+    const plain = flow(texts, drawn, style)
+    if (initials === 'none' || !capFont || capFont.file !== capFile) return plain
+    // where they go: the first paragraph in page order (on the first page with one), or on every page. An
+    // initial pushes text on, so a page can gain a paragraph's start: choose again until nothing changes
+    const candidates = (f: typeof plain) => {
+      const found: { page: number; top: number; x: number; key: string }[] = []
+      f.pages.forEach((p, page) => {
+        for (const l of p.lines) {
+          if (!l.first || l.tag !== 'p' || l.list) continue
+          const run = l.runs.find((r) => r.from >= 0)
+          const letter = run && capLetter(run.text)
+          if (letter && capFont.font.hasGlyphForCodePoint(letter.codePointAt(0)!)) found.push({ page, top: l.top, x: l.x, key: capKey(l.story, l.block) })
+        }
+      })
+      return found.sort((a, b) => a.page - b.page || a.top - b.top || a.x - b.x)
+    }
+    const keys = new Set<string>()
+    let cur = plain
+    for (let round = 0; round < 6; round++) {
+      let added = false
+      for (const f of candidates(cur)) {
+        if (initials === 'work' && keys.size) break
+        if (cur.pages[f.page].caps.length || [...keys].some((k) => cur.pages[f.page].lines.some((l) => l.first && capKey(l.story, l.block) === k))) continue
+        keys.add(f.key)
+        added = true
+        if (initials === 'work') break
+        cur = { ...cur, pages: cur.pages.map((p, i) => (i === f.page ? { ...p, caps: [...p.caps, { key: f.key } as Cap] } : p)) }   // this page has one now
+      }
+      if (!added) break
+      cur = flow(texts, drawn, style, keys)
+    }
+    return cur
+  }, [texts, drawn, style, fontsReady, initials, capFont, capFile])
   const active = stories.find((s) => s.id === activeId) ?? null
   const activeLines = (activeId !== null && byStory.get(activeId)) || []
   const titleBlock = texts.flatMap((t) => { const out: string[] = []; t.doc.forEach((b) => { if (b.textContent.trim()) out.push(b.textContent) }); return out })[0] ?? ''
@@ -205,8 +277,8 @@ export function App() {
   const boxCount = (story: number) => drawn.reduce((n, p) => n + p.filter((b) => b.story === story).length, 0)
 
   // kept in this browser as you work; a full disk must not stop the work
-  const doc: Doc = useMemo(() => ({ stories: texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, heart, perPage, textColor, margins, drawn }),
-    [texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, heart, perPage, textColor, margins, drawn])
+  const doc: Doc = useMemo(() => ({ stories: texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, heart, initials, perPage, textColor, margins, drawn }),
+    [texts, sizeKey, family, fontSize, seed, cats, pieces, grows, inkName, crown, season, spanishmoss, heart, initials, perPage, textColor, margins, drawn])
   // PNGs made ready to save or share are of the work as it was: a change puts them away
   useEffect(() => { setShareFiles(null); setReadyPage(null) }, [doc, scale2x])
   docNow.current = doc
@@ -220,7 +292,7 @@ export function App() {
   }, [doc])
   function applyDoc(d: Doc) {
     setStories(storiesOf(d)); setSizeKey(d.sizeKey); setFamily(d.family); setFontSize(d.fontSize); setSeed(d.seed); setCats(d.cats); setPieces(d.pieces)
-    setGrows(d.grows); setInkName(d.inkName); setCrown(d.crown); setSeason(d.season); setSpanishmoss(d.spanishmoss); setPerPage(d.perPage); setHeart(d.heart); setTextColor(d.textColor); setMargins(d.margins); setDrawn(d.drawn)
+    setGrows(d.grows); setInkName(d.inkName); setCrown(d.crown); setSeason(d.season); setSpanishmoss(d.spanishmoss); setPerPage(d.perPage); setHeart(d.heart); setInitials(d.initials); setTextColor(d.textColor); setMargins(d.margins); setDrawn(d.drawn)
     setError(''); setNote(''); setActiveId(null); setSelected(null); setLinking(null); setPlain(null)
     setGrowTick((t) => t + 1)
     growOnFonts.current = d.family !== family
@@ -759,6 +831,29 @@ export function App() {
   })), [pages, S, seed, cats, pieces, H, texts, fontSize, grows, inkName, crown, season, spanishmoss, heart, perPage])
   const [grown, setGrown] = useState(requests)
   const [growTick, setGrowTick] = useState(0)
+  // the initials: one tile each, grown as soon as the text puts one somewhere (they are small)
+  const capRequests = useMemo(() => pages.flatMap((p, index) => p.caps.map((cap) => {
+    const codepoint = cap.letter.codePointAt(0)!
+    // in the hand of the drawing as last grown, so tile and page agree until the next Generate
+    const look = grown[0] ?? requests[0] ?? { grows, ink: inkName, season }
+    const req: InitialRequest = {
+      grows: look.grows, ink: look.ink, season: look.grows === 'flowers' && !FLOWER_SEASONS.includes(look.season as Season) ? 'autumn' : look.season,
+      seed: seed + index * 101 + cap.block, size: +(cap.side / CM).toFixed(3), index, codepoint,
+      glyph: capFont ? outlineOf(capFont.file, capFont.font, codepoint) : { units: 1000, bbox: [0, 0, 1, 1], segments: [] },
+    }
+    return { cap, req, key: JSON.stringify({ ...req, glyph: capFont?.file }) }
+  })), [pages, grown, requests, grows, inkName, season, seed, capFont])
+  const [capSvgs, setCapSvgs] = useState<Record<string, string>>({})
+  useEffect(() => {
+    let live = true
+    for (const c of capRequests) {
+      if (capSvgs[c.key]) continue
+      growInitial(c.req).then((svg) => { if (live) setCapSvgs((m) => ({ ...m, [c.key]: svg })) }).catch((e) => { if (live) setError('The initial did not grow: ' + String(e)) })
+    }
+    return () => { live = false }
+  }, [capRequests])   // eslint-disable-line react-hooks/exhaustive-deps
+  const capsOn = (i: number) => capRequests.filter((c) => c.cap.page === i)
+  const capArt = async (i: number, ops = false) => Promise.all(capsOn(i).map(async (c) => ({ cap: c.cap, svg: await growInitial(c.req, ops) })))
   // the first drawing, or an opened file's, waits for its fonts, since they decide where the text ends
   const growOnFonts = useRef(true)
   useEffect(() => { if (fontsReady && growOnFonts.current) { growOnFonts.current = false; setGrown(requests) } }, [fontsReady])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -797,7 +892,7 @@ export function App() {
     catchUp()
     setSavingPage(i)
     try {
-      const png = await pagePng(await growGym(requests[i]), pages[i], style, pngWidth, W, H, PAPER)
+      const png = await pagePng(await growGym(requests[i]), pages[i], style, pngWidth, W, H, PAPER, await capArt(i))
       const file = new File([png], `${fileBase}-${i + 1}.png`, { type: 'image/png' })
       if (coarse && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) setReadyPage({ index: i, file })
       else download(file, file.name)
@@ -811,7 +906,7 @@ export function App() {
       const sharing = coarse && typeof navigator.canShare === 'function'
       for (let i = 0; i < pages.length; i++) {
         setBusy(`Page ${i + 1} of ${pages.length}`)
-        const png = await pagePng(await growGym(requests[i]), pages[i], style, pngWidth, W, H, PAPER)
+        const png = await pagePng(await growGym(requests[i]), pages[i], style, pngWidth, W, H, PAPER, await capArt(i))
         if (sharing) files.push(new File([png], `${fileBase}-${i + 1}.png`, { type: 'image/png' }))
         else download(png, `${fileBase}-${i + 1}.png`)
       }
@@ -833,8 +928,9 @@ export function App() {
     catchUp()
     try {
       const ops = await grownPages(true)
+      const caps = await Promise.all(pages.map((_, i) => capArt(i, true)))
       setBusy('Writing the PDF')
-      const { pdf, missing } = await pagesToPdf(pages, ops, style, face, W, H, title)
+      const { pdf, missing } = await pagesToPdf(pages, ops, style, face, W, H, title, caps)
       if (missing.length) setError(`This typeface has no ${missing.slice(0, 12).join(' ')}: those characters will be missing from the PDF.`)
       download(pdf, `${fileBase}.pdf`)
       told(pdf)
@@ -845,8 +941,9 @@ export function App() {
     catchUp()
     try {
       const svgs = await grownPages(false)
+      const caps = await Promise.all(pages.map((_, i) => capArt(i)))
       setBusy('Writing the HTML')
-      const html = await pagesToHtml(pages, svgs, style, face, W, H, title, PAPER)
+      const html = await pagesToHtml(pages, svgs, style, face, W, H, title, PAPER, caps)
       download(html, `${fileBase}.html`)
       told(html)
     } catch (e) { setError('Export failed: ' + String(e)) } finally { setBusy('') }
@@ -972,6 +1069,13 @@ export function App() {
           <select value={perPage} onChange={(e) => setPerPage(e.target.value as PerPage)}>
             <option value="new">A new one on every page</option>
             <option value="match">The same one wherever the pages match</option>
+          </select>
+        </label>
+        <label>Fancy first letter
+          <select value={initials} onChange={(e) => setInitials(e.target.value as Initials)}>
+            <option value="none">None</option>
+            <option value="work">The first of the work</option>
+            <option value="page">The first on every page</option>
           </select>
         </label>
         {grows === 'oak' && (
@@ -1107,7 +1211,7 @@ export function App() {
         {pages.map((p, i) => {
           const m = marks.get(i)
           return (
-            <PageView key={i} index={i} page={p} W={W} H={H} zoom={zoom} margins={margins} style={style} gym={gyms[i]} growing={growing}
+            <PageView key={i} index={i} page={p} W={W} H={H} zoom={zoom} margins={margins} style={style} gym={gyms[i]} caps={capsOn(i).map((c) => ({ cap: c.cap, svg: capSvgs[c.key] }))} growing={growing}
               svgRef={(el) => { svgs.current[i] = el }} caretRef={caretEl} caret={focused ? m?.caret : undefined} composition={coarse ? null : composition} rects={m?.rects ?? []}
               linking={linking !== null} activeStory={activeId} selectedId={selected?.page === i ? selected.id : null}
               chainLabel={(b) => { const ch = chainOf(b.story); return ch.length > 1 ? `${ch.findIndex((c) => c.page === i && c.id === b.id) + 1}/${ch.length}` : '' }}
@@ -1245,8 +1349,8 @@ const LinesOf = memo(function LinesOf({ lines, style }: { lines: Line[]; style: 
   )
 })
 
-function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink, unlink, touch, armed, disarm, count, save }: {
-  index: number; page: FlowPage; W: number; H: number; zoom: number; margins: Margins; style: TextStyle; gym?: string; growing: boolean
+function PageView({ index, page, W, H, zoom, margins, style, gym, caps, growing, svgRef, caretRef, caret, composition, rects, linking, activeStory, selectedId, chainLabel, setDragging, editPage, drawBox, afterDraw, startText, removeBox, removePage, select, startLink, unlink, touch, armed, disarm, count, save }: {
+  index: number; page: FlowPage; W: number; H: number; zoom: number; margins: Margins; style: TextStyle; gym?: string; caps: CapArt[]; growing: boolean
   svgRef: (el: SVGSVGElement | null) => void; caretRef: React.RefObject<SVGLineElement | null>
   caret?: Caret; composition: string | null; rects: { x: number; y: number; w: number; h: number }[]
   linking: boolean; activeStory: number | null; selectedId: number | null; chainLabel: (b: Box) => string
@@ -1403,6 +1507,7 @@ function PageView({ index, page, W, H, zoom, margins, style, gym, growing, svgRe
           onPointerDownCapture={(e) => { kind.current = e.pointerType }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           <rect className="guide" x={left} y={top} width={right - left} height={bottom - top} />
           {rects.map((r, i) => <rect key={i} className="selection" x={r.x} y={r.y} width={r.w} height={r.h} />)}
+          {caps.map(({ cap, svg }) => svg && <image key={cap.key} className="initial" href={svgUrl(svg)} x={cap.x + (cap.box === ghostId ? moved.x : 0)} y={cap.y + (cap.box === ghostId ? moved.y : 0)} width={cap.side} height={cap.side} />)}
           <LinesOf lines={front.still} style={style} />
           {ghost && <g transform={`translate(${moved.x} ${moved.y})`}><LinesOf lines={front.moving} style={style} /></g>}
           {page.boxes.map((b0) => {
